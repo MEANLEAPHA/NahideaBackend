@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/package",
+  "name": "node",
+  "version": "1.0.0",
+  "main": "server.js",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.887.0",
+    "@aws-sdk/lib-storage": "^3.887.0",
+    "@socket.io/admin-ui": "^0.5.1",
+    "aws-sdk": "^2.1692.0",
+    "basic-ftp": "^5.2.0",
+    "bcrypt": "^6.0.0",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "dayjs": "^1.11.18",
+    "dotenv": "^16.5.0",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "luxon": "^3.6.1",
+    "moment": "^2.30.1",
+    "multer": "^2.1.1",
+    "multer-s3": "^3.0.1",
+    "mysql2": "^3.20.0",
+    "node-fetch": "^2.7.0",
+    "node-schedule": "^2.1.1",
+    "node-telegram-bot-api": "^0.66.0",
+    "nodemailer": "^7.0.3",
+    "sequelize": "^6.37.7",
+    "sharp": "^0.34.5",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}
