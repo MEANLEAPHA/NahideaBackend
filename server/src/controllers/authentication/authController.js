@@ -202,7 +202,7 @@ const verifyEmail = async (req, res) => {
     if (users.pin_code !== pin.trim()) {
       await pool.query(
         "UPDATE users SET pin_attempts = pin_attempts + 1 WHERE id = ?",
-        [user.id]
+        [users.id]
       );
 
       return res.status(400).json({ message: "Invalid PIN" });
