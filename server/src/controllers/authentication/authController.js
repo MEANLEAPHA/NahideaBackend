@@ -176,8 +176,8 @@ const register = async (req, res) => {
 // verifyEmail + send code for fist register
 const verifyEmail = async (req, res) => {
   try {
-    const { pin } = req.body;
-    const email = req.user.email;
+    const { pin, email } = req.body;
+
 
     if (!pin || pin.trim().length !== 6) {
       return res.status(400).json({ message: "Invalid PIN format" });

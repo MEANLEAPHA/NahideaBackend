@@ -18,7 +18,7 @@ const Errors = async ({
 
     await pool.query(
       `INSERT INTO error (message, code, location, stack, error_at)
-       VALUES (?, ?, ?, ?, ?, NOW())`,
+       VALUES (?, ?, ?, ?, NOW())`,
       [
         message,
         code,
