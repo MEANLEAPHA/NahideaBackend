@@ -193,22 +193,24 @@ const verifyEmail = async (req, res) => {
     if (!users.length) {
       return res.status(400).json({ message: "Invalid PIN code 1" });
     }
-    if (users.pin_attempts >= 5) {
+    const user = users[0];
+
+    if (user.pin_attempts >= 5) {
       return res.status(429).json({
         message: "Too many attempts. Request new PIN",
       });
     }
 
-    if (users.pin_code !== pinTrimmed) {
+    if (user.pin_code !== pinTrimmed) {
       await pool.query(
         "UPDATE users SET pin_attempts = pin_attempts + 1 WHERE id = ?",
-        [users.id]
+        [user.id]
       );
 
       return res.status(400).json({ message: "Invalid PIN2" });
     }
 
-    const user = users[0];
+    
 
     const pinAgeMinutes =
       (Date.now() - new Date(user.pin_created_at).getTime()) / 60000;
