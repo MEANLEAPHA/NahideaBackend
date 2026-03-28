@@ -15,7 +15,7 @@ const authRoutes = require("./src/routes/authentication/authRoutes");
 const postRoutes = require("./src/routes/upload/postRoutes");
 
 
-app.use("/api/auth", authRoutes);
+app.use("/api", authRoutes);
 app.use("/api/posts", postRoutes);
 
 app.get("/", (req, res) => {
