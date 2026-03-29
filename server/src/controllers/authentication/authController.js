@@ -471,7 +471,7 @@ const setNewPassword = async (req, res) => {
 
     await pool.query(
       `UPDATE users 
-       SET password = ?, reset_verified = 0 
+       SET password_hash = ?, reset_verified = 0 
        WHERE id = ?`,
       [hashedPassword, user.id]
     );
