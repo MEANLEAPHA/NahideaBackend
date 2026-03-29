@@ -301,10 +301,13 @@ const forgetPassword = async (req, res) => {
       [trimmedEmail]
     );
 
-    if(user.length === 0 || !user){
-      return res.json({ message: "This email does not exist" });
-
+    // ✅ ALWAYS respond same (no enumeration)
+    if (!user) {
+      return res.json({
+        message: "If this email exists, a PIN has been sent",
+      });
     }
+    
     // ✅ prevent spam (60s cooldown)
     if (user?.pin_created_at) {
       const diff =
@@ -317,12 +320,7 @@ const forgetPassword = async (req, res) => {
       }
     }
 
-    // ✅ ALWAYS respond same (no enumeration)
-    if (!user) {
-      return res.json({
-        message: "If this email exists, a PIN has been sent",
-      });
-    }
+    
 
     const pinCode = Math.floor(100000 + Math.random() * 900000).toString();
 
