@@ -197,7 +197,7 @@ const verifyEmail = async (req, res) => {
 
     if (user.pin_attempts >= 5) {
       return res.status(429).json({
-        message: "Too many attempts. Request new PIN",
+        message: "Too many attempts. Please Request a new PIN",
       });
     }
 
@@ -254,7 +254,7 @@ const resendverifyEmailPin = async (req, res) => {
 
       if (diff < 300) {
         return res.status(429).json({
-          message: "Please wait before requesting again",
+          message: "Please wait 5 minutes before requesting new PIN",
         });
       }
     }
@@ -307,7 +307,7 @@ const forgetPassword = async (req, res) => {
         message: "If this email exists, a PIN has been sent",
       });
     }
-    
+
     // ✅ prevent spam (60s cooldown)
     if (user?.pin_created_at) {
       const diff =
