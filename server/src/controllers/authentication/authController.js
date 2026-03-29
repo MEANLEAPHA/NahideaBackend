@@ -422,7 +422,7 @@ const resendForgetPasswordPin = async (req, res) => {
 
       if (diff < 300) {
         return res.status(429).json({
-          message: "Wait before requesting again",
+          message: "Please wait 5 minutes before requesting new PIN",
         });
       }
     }
@@ -436,7 +436,7 @@ const resendForgetPasswordPin = async (req, res) => {
 
     await sendVerifyCodeForgetPasswordEmail(email, pinCode);
 
-    return res.json({ message: "If email exists, PIN sent" });
+    return res.json({ message: "New PIN sent" });
 
   } catch (error) {
     console.error(error);
