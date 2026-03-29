@@ -384,7 +384,7 @@ const verifyforgetPasswordPin = async (req, res) => {
 
     // ✅ SUCCESS → clear PIN + attempts
     await pool.query(
-      "UPDATE users SET pin_code = NULL, pin_attempts = 0 WHERE id = ?",
+      "UPDATE users SET pin_code = NULL, pin_attempts = 0, reset_verified = 1 WHERE id = ?",
       [user.id]
     );
 
