@@ -240,11 +240,11 @@ const verifyEmail = async (req, res) => {
 
 const resendverifyEmailPin = async (req, res) => {
   try {
-    const userId = req.user.userId;
-
+    
+    const {email} = req.body;
     const [[user]] = await pool.query(
-      "SELECT email, pin_created_at FROM users WHERE id = ?",
-      [userId]
+      "SELECT pin_created_at FROM users WHERE email = ?",
+      [email]
     );
 
     // 🚨 prevent spam (5 min cooldown)
@@ -262,11 +262,11 @@ const resendverifyEmailPin = async (req, res) => {
     const pinCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     await pool.query(
-      "UPDATE users SET pin_code = ?, pin_created_at = NOW(), pin_attempts = 0 WHERE id = ?",
-      [pinCode, userId]
+      "UPDATE users SET pin_code = ?, pin_created_at = NOW(), pin_attempts = 0 WHERE email = ?",
+      [pinCode, email]
     );
 
-    await sendResendPinEmail(user.email, pinCode);
+    await sendResendPinEmail(email, pinCode);
 
     res.json({ message: "New PIN sent" });
 
@@ -438,7 +438,7 @@ const resendForgetPasswordPin = async (req, res) => {
 
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: error.message });
   }
 };
 
