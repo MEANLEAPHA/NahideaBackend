@@ -16,7 +16,7 @@ const postRoutes = require("./src/routes/upload/postRoutes");
 
 
 app.use("/api", authRoutes);
-app.use("/api/posts", postRoutes);
+app.use("/api", postRoutes);
 
 app.get("/", (req, res) => {
   res.send("API Server Running");

@@ -3,11 +3,29 @@ const { Errors } = require("../../util/error/error");
 const { uploadToHostinger } = require("../../service/hostinger/ftp")
 const multer = require("multer");
 const upload = multer({ dest: "temp/" });
+require("dotenv").config();
+
+const ftpuRL = process.env.FTP_HOST;
 // Type of post are : questiion, content, confession
 const createPost = async (req, res) => {
   try{
-      const { post_type, title, type, isAnonymous, tags = []} = req.body;
+      const { post_type, tags = [], isAnonymous,
+
+               // content
+               content_title, content_type,
+
+               // confession
+               confession_title, confession_type,
+
+               // question 
+               question_type, question_title, question_related_to
+
+              } = req.body;
       const {userId} = req.user.userId;
+
+      if(!post_type){
+        return res.status(400).json({ message: "Missing post type." });
+      }
 
       const [result] = await pool.query(
         "INSERT INTO posts (user_id, type, is_anonymous) VALUES (?, ?, ?, ?, ?)",
@@ -15,6 +33,7 @@ const createPost = async (req, res) => {
       );
 
       const postId = result.insertId;
+
 
       // Nomalize and storing Tags
       if(tags && tags.length > 0){
@@ -52,85 +71,176 @@ const createPost = async (req, res) => {
       // Storing posts by post_type
       if(post_type === "content"){
         try{
+
           let mediaUrl = [];
           let mediaType = [];
 
-        if (req.files && req.files.length > 0) {
-            const uploadPromises = req.files.map(async (file) => {
-                const fileName = Date.now() + "-" + file.originalname;
-                await uploadToHostinger(file.path, fileName);
+          if (req.files && req.files.length > 0) {
 
-                const fileUrl = `https://picocolor.site/img/${fileName}`;
-                const type = file.mimetype.startsWith("image")
-                    ? "image"
-                    : file.mimetype.startsWith("video")
-                    ? "video"
-                    : "other";
+              const uploadPromises = req.files.map(async (file) => {
+                  const fileName = Date.now() + "-" + file.originalname;
+                  await uploadToHostinger(file.path, fileName);
 
-                return { url: fileUrl, type };
-            });
+                  const fileUrl = `${ftpuRL}/img/content/${fileName}`;
+                  const type = file.mimetype.startsWith("image")
+                      ? "image"
+                      : file.mimetype.startsWith("video")
+                      ? "video"
+                      : "other";
 
-            const results = await Promise.all(uploadPromises);
-            mediaUrl = results.map(r => r.url);
-            mediaType = results.map(r => r.type);
-        }
+                  return { url: fileUrl, type };
+              });
+
+              const results = await Promise.all(uploadPromises);
+              mediaUrl = results.map(r => r.url);
+              mediaType = results.map(r => r.type);
+          };
+
             await pool.query(
               `INSERT INTO content(user_id, post_id, type, title, media_type, media_url, is_anonymous)
                     VALUES(?, ?, ?, ?, ?, ?)`,
-                    [userId, postId, type, title, JSON.stringify(mediaType), JSON.stringify(mediaUrl), isAnonymous]
-            )
+                    [userId, postId, content_type, content_title, JSON.stringify(mediaType), JSON.stringify(mediaUrl), isAnonymous]
+            );
+
         }
         catch(error){
           console.error(error.message);
           await Errors(error.message, error.code, "contentController(content post)", error.stack);
           return res.status(500).json({
             message: "Sorry, something's wrong",
-            success: false,
-            error: error.message,
-            stack: error.stack,
-            code: error.code || "UNKNOWN"
-        });
+          });
         }
       };
 
+       if(post_type === "confession"){
+          try{
+            //single media
+            let mediaUrl;
+            let mediaType;
+
+            if (req.files && req.files.length > 0) {
+                const file = req.files[0];
+                const fileName = Date.now() + "-" + file.originalname;
+                await uploadToHostinger(file.path, fileName);
+
+                mediaUrl = `${ftpuRL}/img/confession/${fileName}`;
+                mediaType = file.mimetype.startsWith("image")
+                    ? "image"
+                    : file.mimetype.startsWith("video")
+                    ? "video"
+                    : "other";
+            };
+            const media_url = mediaUrl || null;
+            const media_type = mediaType || null;
+
+            await pool.query(
+                `INSERT INTO confession(user_id, post_id, type, title, media_type, media_url, is_anonymous) 
+                VALUE(?, ?, ?, ?, ?, ?)`,
+                [userId, postId, confession_type, confession_title, media_type, media_url, isAnonymous]
+              );
+          }
+          catch(error){
+            console.error(error.message);
+            await Errors(error.message, error.code, "contentController(confession post)", error.stack);
+            return res.status(500).json({
+              message: "Sorry, something's wrong",
+            });
+        }
+        };
+
       if(post_type === "question"){
           try{
-             //   for (let opt of options) {
-            //     await pool.query(
-            //       "INSERT INTO decision_options (post_id, option_text) VALUES (?, ?)",
-            //       [postId, opt]
-            //     );
-            //   }
-            // }
+              const [questionResult] = await db.query(
+                  "INSERT INTO question (post_id, question_type, title, question_related_to) VALUES (?, ?, ?, ?)",
+                  [postId, question_type, question_title, question_related_to]
+              );
+              const questionId = questionResult.insertId;
+
+              switch (question_type) {
+                case "openend":
+                  await db.query(
+                    "INSERT INTO question_openend (question_id, media) VALUES (?, ?)",
+                    [questionId, req.body.media]
+                  );
+                  break;
+
+                case "closedend":
+                  await db.query(
+                    "INSERT INTO question_closedend (question_id, yes_title, no_title, yes_media, no_media) VALUES (?, ?, ?, ?, ?)",
+                    [questionId, req.body.yesTitle, req.body.noTitle, req.body.yesFile, req.body.noFile]
+                  );
+                  break;
+
+                case "range":
+                  await db.query(
+                    "INSERT INTO question_range (question_id, min, max, step, default_value, media) VALUES (?, ?, ?, ?, ?, ?)",
+                    [questionId, req.body.rangeMin, req.body.rangeMax, req.body.rangeStep, req.body.defaultRangeValue, req.body.media]
+                  );
+                  break;
+
+                case "singlechoice":
+                  const [sc] = await db.query(
+                    "INSERT INTO question_singlechoice (question_id, media) VALUES (?, ?)",
+                    [questionId, req.body.media]
+                  );
+                  const singleChoiceId = sc.insertId;
+                  (req.body["choices[]"] || []).forEach(async (choice) => {
+                    await db.query(
+                      "INSERT INTO singlechoice_option (singlechoice_id, choice_text) VALUES (?, ?)",
+                      [singleChoiceId, choice]
+                    );
+                  });
+                  break;
+
+                case "multiplechoice":
+                  const [mc] = await db.query(
+                    "INSERT INTO question_multiplechoice (question_id, include_all_above, media) VALUES (?, ?, ?)",
+                    [questionId, req.body.include_all_above, req.body.media]
+                  );
+                  const multipleChoiceId = mc.insertId;
+                  (req.body["choices[]"] || []).forEach(async (choice) => {
+                    await db.query(
+                      "INSERT INTO multiplechoice_option (multiplechoice_id, choice_text) VALUES (?, ?)",
+                      [multipleChoiceId, choice]
+                    );
+                  });
+                  break;
+
+                case "rankingorder":
+                  const [ro] = await db.query(
+                    "INSERT INTO question_rankingorder (question_id, media) VALUES (?, ?)",
+                    [questionId, req.body.media]
+                  );
+                  const rankingId = ro.insertId;
+                  Object.entries(req.body)
+                    .filter(([key]) => key.startsWith("ranking["))
+                    .forEach(async ([key, value]) => {
+                      const position = parseInt(key.match(/\[(\d+)\]/)[1], 10);
+                      await db.query(
+                        "INSERT INTO ranking_item (ranking_id, position, item_text) VALUES (?, ?, ?)",
+                        [rankingId, position, value]
+                      );
+                    });
+                  break;
+
+                case "rating":
+                  await db.query(
+                    "INSERT INTO question_rating (question_id, rating_icon_id, media) VALUES (?, ?, ?)",
+                    [questionId, req.body.rating_icon_id, req.body.media]
+                  );
+                  break;
+
+                default:
+                  return res.status(400).json({ error: "Invalid question type" });
+              }
+
           }
           catch(error){
             console.error(error.message);
             await Errors(error.message, error.code, "contentController(question post)", error.stack);
             return res.status(500).json({
-              message: "Sorry, something's wrong",
-              success: false,
-              error: error.message,
-              stack: error.stack,
-              code: error.code || "UNKNOWN"
-            });
+              message: "Sorry, something's wrong"});
           }
-        };
-
-        if(post_type === "confession"){
-          try{
-
-            }
-            catch(error){
-              console.error(error.message);
-              await Errors(error.message, error.code, "contentController(confession post)", error.stack);
-              return res.status(500).json({
-                message: "Sorry, something's wrong",
-                success: false,
-                error: error.message,
-                stack: error.stack,
-                code: error.code || "UNKNOWN"
-              });
-            }
         };
 
         res.json({ message: "Post created", postId });
@@ -141,10 +251,6 @@ const createPost = async (req, res) => {
           await Errors(error.message, error.code, "postController", error.stack);
           return res.status(500).json({
                 message: "Sorry, something's wrong",
-                success: false,
-                error: error.message,
-                stack: error.stack,
-                code: error.code || "UNKNOWN"
           });
       }
 };
