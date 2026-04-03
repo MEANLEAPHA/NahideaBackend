@@ -32,7 +32,7 @@ const createPost = async (req, res) => {
       };
 
       const [result] = await pool.query(
-        "INSERT INTO posts (user_id, type, is_anonymous) VALUES (?, ?, ?)",
+        "INSERT INTO posts (user_id, post_type, is_anonymous) VALUES (?, ?, ?)",
         [userId, post_type, isAnonymous]
       );
 
