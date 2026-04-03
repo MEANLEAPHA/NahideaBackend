@@ -11,7 +11,7 @@ const { register,
         newPassword
       } = require("../../controllers/authentication/authController");
 
-const {protect} = require("../../middleware/authMiddleware")
+// const {protect} = require("../../middleware/authMiddleware");
 
 router.post("/register", register);
 router.post("/verify-email", verifyEmail);

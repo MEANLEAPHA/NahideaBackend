@@ -10,6 +10,7 @@ const { createToken } = require('../../service/token/jwtHelp'); // adjust path i
 // login logical 
 const login = async (req, res) => {
   try {
+
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -27,7 +28,7 @@ const login = async (req, res) => {
     if (users.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "User not found"
+        message: "No user found with this Email"
       });
     }
 
@@ -38,7 +39,7 @@ const login = async (req, res) => {
     if (!passwordValid) {
       return res.status(401).json({
         success: false,
-        message: "Invalid email or password"
+        message: "Invalid Password"
       });
     }
 
@@ -78,7 +79,7 @@ const login = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: "Internal server error"
+      message: "Internal server error. Please try again later"
     });
   }
 };
@@ -86,6 +87,7 @@ const login = async (req, res) => {
 //Register Or Signup
 const register = async (req, res) => {
   try {
+
     const { username, email, password} = req.body;
 
     if (!username || !email || !password) {
@@ -103,7 +105,7 @@ const register = async (req, res) => {
     if (existingUser.length > 0) {
       return res.status(409).json({
         success: false,
-        message: "Email already registered"
+        message: "This Email is already registered"
       });
     }
 
@@ -135,15 +137,8 @@ const register = async (req, res) => {
         emailError.stack
       );
 
-      return res.status(500).json({ message: 'Sever Error at Send pin code' });
+      return res.status(506).json({ message: "Sever can't send email at this moment. Please try again later" });
     }
-
-    // const token = createToken({
-    //   userId: result.insertId,
-    //   username,
-    //   email,
-    //   // timezone: timezone || "UTC"
-    // });
 
     return res.status(201).json({
       success: true,
@@ -177,10 +172,12 @@ const register = async (req, res) => {
 const verifyEmail = async (req, res) => {
   try {
     const { pin, email } = req.body;
-
+    if(!email){
+      return res.status(401).json({ message: "Email is required" });
+    }
 
     if (!pin || pin.trim().length !== 6) {
-      return res.status(400).json({ message: "Invalid PIN format" });
+      return res.status(402).json({ message: "Invalid PIN format" });
     }
 
     const pinTrimmed = pin.trim();
@@ -191,7 +188,7 @@ const verifyEmail = async (req, res) => {
     );
 
     if (!users.length) {
-      return res.status(400).json({ message: "Invalid PIN code 1" });
+      return res.status(400).json({ message: "No Registrant found" });
     }
     const user = users[0];
 
