@@ -1,6 +1,6 @@
 const pool = require("../../config/db");
 const { Errors } = require("../../util/error/error");
-const { uploadToHostinger } = require("../../service/hostinger/ftp")
+const { uploadToHostinger, convertAndUpload } = require("../../service/hostinger/ftp")
 const multer = require("multer");
 const upload = multer({ dest: "temp/" });
 require("dotenv").config();
@@ -101,28 +101,10 @@ const createPost = async (req, res) => {
 
             let mediaUrl = [];
             let mediaType = [];
-            const contentFiles = req.files?.contentFile || [];
-            if (contentFiles && contentFiles.length > 0) {
-
-              const uploadPromises = contentFiles.map(async (contentFile) => {
-                  const fileName = Date.now() + "-" + contentFile.originalname;
-                  await uploadToHostinger(contentFile.path, fileName);
-
-                  const fileUrl = `${ftpuRL}/img/content/${fileName}`;
-                  const type = contentFile.mimetype.startsWith("image")
-                      ? "image"
-                      : contentFile.mimetype.startsWith("video")
-                      ? "video"
-                      : "other";
-
-                  return { url: fileUrl, type };
-              });
-
-              const results = await Promise.all(uploadPromises);
-              mediaUrl = results.map(r => r.url);
-              mediaType = results.map(r => r.type);
-            };
-
+            const uploadPromises = contentFiles.map(f => convertAndUpload(f, "content"));
+            const results = await Promise.all(uploadPromises);
+            mediaUrl = results.map(r => r.url);
+            mediaType = results.map(r => r.type);
             await pool.query(
               `INSERT INTO content(user_id, post_id, type, title, media_type, media_url, is_anonymous)
                     VALUES(?, ?, ?, ?, ?, ?, ?)`,
@@ -146,23 +128,15 @@ const createPost = async (req, res) => {
 
             const confessionFile = req.files?.confessionFile?.[0];
             if (confessionFile) {
-                const fileName = Date.now() + "-" + confessionFile.originalname;
-                await uploadToHostinger(confessionFile.path, fileName);
-
-                mediaUrl = `${ftpuRL}/img/confession/${fileName}`;
-                mediaType = confessionFile.mimetype.startsWith("image")
-                    ? "image"
-                    : confessionFile.mimetype.startsWith("video")
-                    ? "video" 
-                    : "other";
-            };
-            const media_url = mediaUrl || null;
-            const media_type = mediaType || null;
+                const result = await convertAndUpload(confessionFile, "confession");
+                mediaUrl = result.url || null;
+                mediaType = result.type || null;
+            }
 
             await pool.query(
                 `INSERT INTO confession(user_id, post_id, type, title, media_type, media_url, is_anonymous) 
-                VALUE(?, ?, ?, ?, ?, ?)`,
-                [userId, postId, confession_type, confession_title, media_type, media_url, isAnonymous]
+                VALUE(?, ?, ?, ?, ?, ?, ?)`,
+                [userId, postId, confession_type, confession_title, mediaType, mediaUrl, isAnonymous]
               );
           }
           catch(error){
