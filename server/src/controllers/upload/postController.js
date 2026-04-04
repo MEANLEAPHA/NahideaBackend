@@ -101,10 +101,12 @@ const createPost = async (req, res) => {
 
             let mediaUrl = [];
             let mediaType = [];
+            const contentFiles = req.files?.contentFile || [];
             const uploadPromises = contentFiles.map(f => convertAndUpload(f, "content"));
             const results = await Promise.all(uploadPromises);
             mediaUrl = results.map(r => r.url);
             mediaType = results.map(r => r.type);
+
             await pool.query(
               `INSERT INTO content(user_id, post_id, type, title, media_type, media_url, is_anonymous)
                     VALUES(?, ?, ?, ?, ?, ?, ?)`,
@@ -128,15 +130,17 @@ const createPost = async (req, res) => {
 
             const confessionFile = req.files?.confessionFile?.[0];
             if (confessionFile) {
-                const result = await convertAndUpload(confessionFile, "confession");
-                mediaUrl = result.url || null;
-                mediaType = result.type || null;
+            const result = await convertAndUpload(confessionFile, "confession");
+            mediaUrl = result.url;
+            mediaType = result.type;
             }
+            const media_url = mediaUrl || null;
+            const media_type = mediaType || null;
 
             await pool.query(
                 `INSERT INTO confession(user_id, post_id, type, title, media_type, media_url, is_anonymous) 
                 VALUE(?, ?, ?, ?, ?, ?, ?)`,
-                [userId, postId, confession_type, confession_title, mediaType, mediaUrl, isAnonymous]
+                [userId, postId, confession_type, confession_title, media_type, media_url, isAnonymous]
               );
           }
           catch(error){
