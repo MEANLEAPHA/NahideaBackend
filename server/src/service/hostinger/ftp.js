@@ -63,14 +63,14 @@ async function convertAndUpload(file, folder) {
             .toFile(tempPath);
 
         // Upload WebP
-        await uploadToHostinger(tempPath, `img/${folder}/${webpName}`);
+        await uploadToHostinger(tempPath, `${folder}/${webpName}`);
 
         fs.unlinkSync(tempPath);
 
         return { url: `${ftpuRL}/img/${folder}/${webpName}`, type: "image" };
     } else {
         // Non-image: upload original
-        await uploadToHostinger(file.path, `img/${folder}/${file.originalname}`);
+        await uploadToHostinger(file.path, `${folder}/${file.originalname}`);
         return {
             url: `${ftpuRL}/img/${folder}/${file.originalname}`,
             type: file.mimetype.startsWith("video") ? "video" : "other"
