@@ -125,7 +125,7 @@ const createPost = async (req, res) => {
 
             await pool.query(
               `INSERT INTO content(user_id, post_id, type, title, media_type, media_url, is_anonymous)
-                    VALUES(?, ?, ?, ?, ?, ?)`,
+                    VALUES(?, ?, ?, ?, ?, ?, ?)`,
                     [userId, postId, content_type, content_title, JSON.stringify(mediaType), JSON.stringify(mediaUrl), isAnonymous]
             );
           }
@@ -143,8 +143,9 @@ const createPost = async (req, res) => {
 
             let mediaUrl;
             let mediaType;
-            if (req.files && req.files.length > 0) {
-                const confessionFile = req.files?.confessionFile?.[0];
+
+            const confessionFile = req.files?.confessionFile?.[0];
+            if (confessionFile) {
                 const fileName = Date.now() + "-" + confessionFile.originalname;
                 await uploadToHostinger(confessionFile.path, fileName);
 
