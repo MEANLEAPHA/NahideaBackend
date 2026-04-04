@@ -27,10 +27,10 @@ const path = require("path");
 const fs = require("fs");
 const ftp = require("basic-ftp");
 require("dotenv").config();
-const ftpuRL = process.env.FTP_HOST;
+const ftpuRL = process.env.FTP_URL;
 async function uploadToHostinger(localFile, remoteFile) {
     const client = new ftp.Client(30000);
-    client.ftp.verbose = true;
+    client.ftp.verbose = false;
     try {
         await client.access({
             host: process.env.FTP_HOST,

@@ -5,7 +5,7 @@ const multer = require("multer");
 const upload = multer({ dest: "temp/" });
 require("dotenv").config();
 
-const ftpuRL = process.env.FTP_HOST;
+const ftpuRL = process.env.FTP_URL;
 
 const createPost = async (req, res) => {
   try{
