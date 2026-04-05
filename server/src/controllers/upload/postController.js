@@ -5,7 +5,6 @@ const multer = require("multer");
 const upload = multer({ dest: "temp/" });
 require("dotenv").config();
 
-const ftpuRL = process.env.FTP_URL;
 
 const createPost = async (req, res) => {
   try{
@@ -60,38 +59,6 @@ const createPost = async (req, res) => {
           await pool.query("INSERT INTO post_tags (post_id, tag_id) VALUES (?, ?)", [postId, tagId]);
         }));
       }
-
-      // if(tags && tags.length > 0){
-      //   for(const rawTags of tags){
-      //     const name = rawTags.trim().toLowerCase();
-      //     const label = rawTags.trim();
-
-      //     const [rows] = await pool.query(
-      //       "SELECT id FROM tags WHERE name = ?",
-      //       [name]
-      //     );
-
-      //     let tagId;
-      //     if(rows.length > 0){
-      //       tagId = rows[0].id;
-      //     }
-      //     else{
-      //       const [insertTags] = await pool.query(
-      //         "INSERT INTO tags (name, label) VALUES (?, ?)",
-      //         [name, label]
-      //       );
-      //       tagId = insertTags.insertId;
-      //     };
-
-      //     // Then use that tagId to insert into post
-
-      //     await pool.query(
-      //       "INSERT INTO post_tags (post_id, tag_id) VALUES (?, ?)",
-      //       [postId, tagId]
-      //     );
-      //   };
-      // };
-     
 
       // Storing posts by post_type
       switch(post_type){
@@ -154,89 +121,50 @@ const createPost = async (req, res) => {
         
         case "question":
           try{
-              const [questionResult] = await pool.query(
-                  "INSERT INTO question (post_id, question_type, title, question_related_to) VALUES (?, ?, ?, ?)",
-                  [postId, question_type, question_title, question_related_to]
-              );
+
+            let questionMediaUrl;
+            const questionFile = req.files?.questionFile?.[0];
+            if (questionFile) {
+            const result = await convertAndUpload(questionFile, "question");
+            questionMediaUrl = result.url || null;
+            }
+            
+            const [questionResult] = await pool.query(
+                "INSERT INTO question (post_id, question_type, title, media_url, question_related_to) VALUES (?, ?, ?, ?, ?)",
+                [postId, question_type, question_title, questionMediaUrl, question_related_to]
+            );
+
               const questionId = questionResult.insertId;
               switch (question_type) {
                 case "openend":
 
-                  let openendMediaUrl;
-                  if (req.files && req.files.length > 0) {
-                    const openEndFileValue = req.files?.openEndFile?.[0];
-                    const fileName = Date.now() + "-" + openEndFileValue.originalname;
-                    await uploadToHostinger(openEndFileValue.path, fileName);
-                  }
-
-                  openendMediaUrl = `${ftpuRL}/img/question/${question_type}/${fileName}`;
-
                   await db.query(
-                    "INSERT INTO question_openend (question_id, media_url) VALUES (?, ?)",
-                    [questionId, openendMediaUrl]
+                    "INSERT INTO question_openend (question_id) VALUES (?)",
+                    [questionId]
                   );
-
                   break;
 
                 case "closedend":
 
-                  let yesClosedendMediaUrl;
-                  let noClosedendMediaUrl;
-
-                  if (req.files && req.files.length > 0) {
-                    const yesFile = req.files?.yesFile?.[0];
-                    const noFile  = req.files?.noFile?.[0];
-
-                    const yesFileName = Date.now() + "-" + yesFile.originalname;
-                    const noFileName = Date.now() + "-" + noFile.originalname;
-
-                    await Promise.all([
-                        uploadToHostinger(yesFile.path, yesFileName),
-                        uploadToHostinger(noFile.path, noFileName)
-                    ]);
-                  
-                  }
-
-                  yesClosedendMediaUrl = `${ftpuRL}/img/question/${question_type}/${yesFileName}`;
-                  noClosedendMediaUrl = `${ftpuRL}/img/question/${question_type}/${noFileName}`;
-
                   await db.query(
-                    "INSERT INTO question_closedend (question_id, yes_title, no_title, yes_media_url, no_media_url) VALUES (?, ?, ?, ?, ?)",
-                    [questionId, req.body.yesTitle, req.body.noTitle, yesClosedendMediaUrl, noClosedendMediaUrl]
+                    "INSERT INTO question_closedend (question_id, yes_title, no_title) VALUES (?, ?, ?)",
+                    [questionId, req.body.yesTitle, req.body.noTitle]
                   );
-
                   break;
 
                 case "range":
-                  let rangeFileMediaUrl;
-                  if (req.files && req.files.length > 0) {
-                    const rangeFile = req.files?.rangeFile?.[0];
-                    const fileName = Date.now() + "-" + rangeFile.originalname;
-                    await uploadToHostinger(rangeFile.path, fileName);
-                  }
-
-                  rangeFileMediaUrl = `${ftpuRL}/img/question/${question_type}/${fileName}`;
                   
                   await db.query(
-                    "INSERT INTO question_range (question_id, range_min, range_max, step, default_range_value, media_url) VALUES (?, ?, ?, ?, ?, ?)",
-                    [questionId, req.body.min, req.body.max, req.body.step, req.body.rangeValue, rangeFileMediaUrl]
+                    "INSERT INTO question_range (question_id, range_min, range_max, step, default_range_value) VALUES (?, ?, ?, ?, ?)",
+                    [questionId, req.body.min, req.body.max, req.body.step, req.body.rangeValue]
                   );
                   break;
 
                 case "singlechoice":
 
-                  let singleChoiceFileMediaUrl;
-                  if (req.files && req.files.length > 0) {
-                    const singleChoiceFile = req.files?.singleChoiceFile?.[0];
-                    const fileName = Date.now() + "-" + singleChoiceFile.originalname;
-                    await uploadToHostinger(singleChoiceFile.path, fileName);
-                  }
-
-                  singleChoiceFileMediaUrl = `${ftpuRL}/img/question/${question_type}/${fileName}`;
-
                   const [sc] = await db.query(
-                    "INSERT INTO question_singlechoice (question_id, media_url) VALUES (?, ?)",
-                    [questionId, singleChoiceFileMediaUrl]
+                    "INSERT INTO question_singlechoice (question_id) VALUES (?)",
+                    [questionId]
                   );
                   const singleChoiceId = sc.insertId;
                   (req.body["choices[]"] || []).forEach(async (choice) => {
@@ -249,18 +177,9 @@ const createPost = async (req, res) => {
 
                 case "multiplechoice":
 
-                  let multipleChoiceFileMediaUrl;
-                  if (req.files && req.files.length > 0) {
-                    const multipleChoiceFile = req.files?.multipleChoiceFile?.[0];
-                    const fileName = Date.now() + "-" + multipleChoiceFile.originalname;
-                    await uploadToHostinger(multipleChoiceFile.path, fileName);
-                  }
-
-                  multipleChoiceFileMediaUrl = `${ftpuRL}/img/question/${question_type}/${fileName}`;
-
                   const [mc] = await db.query(
-                    "INSERT INTO question_multiplechoice (question_id, include_all_above, media_url) VALUES (?, ?, ?)",
-                    [questionId, req.body.include_all_above, multipleChoiceFileMediaUrl]
+                    "INSERT INTO question_multiplechoice (question_id, include_all_above) VALUES (?, ?)",
+                    [questionId, req.body.include_all_above]
                   );
                   const multipleChoiceId = mc.insertId;
                   (req.body["choices[]"] || []).forEach(async (choice) => {
@@ -273,18 +192,9 @@ const createPost = async (req, res) => {
 
                 case "rankingorder":
 
-                let rankingOrderFileMediaUrl;
-                  if (req.files && req.files.length > 0) {
-                    const multipleChoiceFile = req.files?.multipleChoiceFile?.[0];
-                    const fileName = Date.now() + "-" + multipleChoiceFile.originalname;
-                    await uploadToHostinger(multipleChoiceFile.path, fileName);
-                  }
-
-                  rankingOrderFileMediaUrl = `${ftpuRL}/img/question/${question_type}/${fileName}`;
-
                   const [ro] = await db.query(
-                    "INSERT INTO question_rankingorder (question_id, media_url) VALUES (?, ?)",
-                    [questionId, rankingOrderFileMediaUrl]
+                    "INSERT INTO question_rankingorder (question_id) VALUES (?)",
+                    [questionId]
                   );
                   const rankingId = ro.insertId;
                   Object.entries(req.body)
@@ -300,18 +210,9 @@ const createPost = async (req, res) => {
 
                 case "rating":
 
-                  let ratingFileMediaUrl;
-                  if (req.files && req.files.length > 0) {
-                    const ratingFile = req.files?.ratingFile?.[0];
-                    const fileName = Date.now() + "-" + ratingFile.originalname;
-                    await uploadToHostinger(ratingFile.path, fileName);
-                  }
-
-                  ratingFileMediaUrl = `${ftpuRL}/img/question/${question_type}/${fileName}`;
-
                   await db.query(
-                    "INSERT INTO question_rating (question_id, rating_icon_id, media_url) VALUES (?, ?, ?)",
-                    [questionId, req.body.rating_icon_id, ratingFileMediaUrl]
+                    "INSERT INTO question_rating (question_id, rating_icon_id) VALUES (?, ?)",
+                    [questionId, req.body.rating_icon_id]
                   );
                   break;
 

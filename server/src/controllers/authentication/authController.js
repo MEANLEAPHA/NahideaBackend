@@ -15,8 +15,7 @@ const login = async (req, res) => {
 
     if (!email || !password) {
       return res.status(400).json({
-        success: false,
-        message: "Email and password are required"
+        message: "Email and Password are required"
       });
     }
 
@@ -27,7 +26,6 @@ const login = async (req, res) => {
 
     if (users.length === 0) {
       return res.status(404).json({
-        success: false,
         message: "No user found with this Email"
       });
     }
@@ -38,14 +36,12 @@ const login = async (req, res) => {
 
     if (!passwordValid) {
       return res.status(401).json({
-        success: false,
         message: "Invalid Password"
       });
     }
 
     if (user.is_verified === 0) {
       return res.status(403).json({
-        success: false,
         message: "Please verify your email before logging in",
         needsVerification: true
       });
@@ -58,11 +54,8 @@ const login = async (req, res) => {
     });
 
     return res.status(200).json({
-      success: true,
-      message: "Login successful",
+      message: "Login Successfully",
       token,
-      userId: user.id,
-      username: user.username,
     //   timezone: user.timezone || "UTC"
     });
 
@@ -78,8 +71,7 @@ const login = async (req, res) => {
     );
 
     return res.status(500).json({
-      success: false,
-      message: "Internal server error. Please try again later"
+      message: "Server Error, Please try again later",
     });
   }
 };
@@ -92,8 +84,7 @@ const register = async (req, res) => {
 
     if (!username || !email || !password) {
       return res.status(400).json({
-        success: false,
-        message: "Username, email and password are required"
+        message: "Username, Email and Password are required"
       });
     }
 
@@ -104,8 +95,7 @@ const register = async (req, res) => {
 
     if (existingUser.length > 0) {
       return res.status(409).json({
-        success: false,
-        message: "This Email is already registered"
+        message: "Oups! This Email is already registered"
       });
     }
 
@@ -113,7 +103,7 @@ const register = async (req, res) => {
 
     const pinCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    const [result] = await pool.query(
+    await pool.query(
       `INSERT INTO users
       (username, email, password_hash, pin_code, pin_created_at)
       VALUES (?, ?, ?, ?, NOW())`,
@@ -130,22 +120,23 @@ const register = async (req, res) => {
 
       console.error("Email send failed:", emailError);
 
+      await pool.query("DELETE FROM users WHERE email = ?", [email]);
+
       await Errors(
         emailError.message,
         emailError.code || "EMAIL_ERROR",
         `sendPinCodeEmail | email:${email}`,
         emailError.stack
       );
-
-      return res.status(506).json({ message: "Sever can't send email at this moment. Please try again later" });
+      
+      return res.status(506).json({ message: "Sever can't send the PIN at this moment. Please try again later" });
     }
 
-    return res.status(201).json({
-      success: true,
+    return res.status(200).json({
       message: emailSent
         ? "Registration successful. Please check your email."
         : "Registration successful but email failed. Please resend verification.",
-      userId: result.insertId,
+      needsVerification: true,
       email
     });
 
@@ -188,7 +179,7 @@ const verifyEmail = async (req, res) => {
     );
 
     if (!users.length) {
-      return res.status(400).json({ message: "No Registrant found" });
+      return res.status(400).json({ message: "No Registrant found. Please register first" });
     }
     const user = users[0];
 
@@ -204,7 +195,7 @@ const verifyEmail = async (req, res) => {
         [user.id]
       );
 
-      return res.status(400).json({ message: "Invalid PIN2" });
+      return res.status(403).json({ message: "Invalid PIN" });
     }
 
     
@@ -213,7 +204,7 @@ const verifyEmail = async (req, res) => {
       (Date.now() - new Date(user.pin_created_at).getTime()) / 60000;
 
     if (pinAgeMinutes > 10) {
-      return res.status(400).json({ message: "PIN expired" });
+      return res.status(405).json({ message: "Your PIN has expired, please request a new one" });
     }
 
     await pool.query(
@@ -221,7 +212,7 @@ const verifyEmail = async (req, res) => {
       [email]
     );
 
-    return res.json({ message: "Email verified successfully" });
+    return res.status(200).json({ message: "Email verified Successfully" });
 
   } catch (error) {
     console.error(error);
@@ -239,11 +230,17 @@ const resendverifyEmailPin = async (req, res) => {
   try {
     
     const {email} = req.body;
+    if(!email){
+      return res.status(401).json({ message: "Email is required" });
+    }
     const [[user]] = await pool.query(
       "SELECT pin_created_at FROM users WHERE email = ?",
       [email]
     );
-
+ 
+    if(!user){
+      return res.status(404).json({ message: "No Registrant found. Please register first" });
+    }
     // 🚨 prevent spam (5 min cooldown)
     if (user.pin_created_at) {
       const diff =
@@ -262,10 +259,16 @@ const resendverifyEmailPin = async (req, res) => {
       "UPDATE users SET pin_code = ?, pin_created_at = NOW(), pin_attempts = 0 WHERE email = ?",
       [pinCode, email]
     );
+   
+    try{
+      await sendResendPinEmail(email, pinCode);
+    }
+    catch(EmailError){
+      console.error(EmailError);
+      return res.status(506).json({ message: "Sever can't send the PIN at this moment. Please try again later" });
+    }
 
-    await sendResendPinEmail(email, pinCode);
-
-    res.json({ message: "New PIN sent" });
+    res.status(200).json({ message: "New PIN sent" });
 
   } catch (error) {
     console.error(error);
@@ -288,7 +291,7 @@ const forgetPassword = async (req, res) => {
     const { email } = req.body;
 
     if (!email || !email.trim()) {
-      return res.status(400).json({ message: "Invalid email" });
+      return res.status(400).json({ message: "Email is required" });
     }
 
     const trimmedEmail = email.trim();
@@ -298,14 +301,14 @@ const forgetPassword = async (req, res) => {
       [trimmedEmail]
     );
 
-    // ✅ ALWAYS respond same (no enumeration)
+
     if (!user) {
-      return res.json({
-        message: "If this email exists, a PIN has been sent",
+      return res.status(404).json({
+        message: "No user found with this Email",
       });
     }
 
-    // ✅ prevent spam (60s cooldown)
+
     if (user?.pin_created_at) {
       const diff =
         (Date.now() - new Date(user.pin_created_at).getTime()) / 1000;
@@ -326,10 +329,16 @@ const forgetPassword = async (req, res) => {
       [pinCode, user.id]
     );
 
-    await sendVerifyCodeForgetPasswordEmail(trimmedEmail, pinCode);
+    try{
+      await sendVerifyCodeForgetPasswordEmail(trimmedEmail, pinCode);
+    }
+    catch(EmailError){
+      console.error(EmailError);
+      return res.status(506).json({ message: "Sever can't send the PIN at this moment. Please try again later" });
+    }
 
-    return res.json({
-      message: "If this email exists, a PIN has been sent",
+    return res.status(200).json({
+      message: "A verification code has been sent to your Email",
     });
 
   } catch (error) {
@@ -345,7 +354,7 @@ const verifyforgetPasswordPin = async (req, res) => {
     const { email, pin } = req.body;
 
     if (!email || !pin || pin.trim().length !== 6) {
-      return res.status(400).json({ message: "Invalid input" });
+      return res.status(400).json({ message: "Email and PIN are required" });
     }
 
     const [[user]] = await pool.query(
@@ -355,13 +364,13 @@ const verifyforgetPasswordPin = async (req, res) => {
 
   
     if (!user) {
-      return res.status(400).json({ message: "Invalid PIN" });
+      return res.status(404).json({ message: "No user found with this Email" });
     }
 
    
     if (user.pin_attempts >= 5) {
       return res.status(429).json({
-        message: "Too many attempts. Request new PIN",
+        message: "Too many attempts, please request a new PIN",
       });
     }
 
@@ -371,14 +380,14 @@ const verifyforgetPasswordPin = async (req, res) => {
         [user.id]
       );
 
-      return res.status(400).json({ message: "Invalid PIN" });
+      return res.status(421).json({ message: "Invalid PIN" });
     }
 
     const pinAgeMinutes =
       (Date.now() - new Date(user.pin_created_at).getTime()) / 60000;
 
     if (pinAgeMinutes > 10) {
-      return res.status(400).json({ message: "PIN expired" });
+      return res.status(422).json({ message: "Your PIN has expired, please request a new one" });
     }
 
     // ✅ SUCCESS → clear PIN + attempts
@@ -387,7 +396,7 @@ const verifyforgetPasswordPin = async (req, res) => {
       [user.id]
     );
 
-    return res.json({ message: "PIN verified" });
+    return res.status(200).json({ message: "PIN verified successfully" });
 
   } catch (error) {
     console.error(error);
@@ -396,10 +405,11 @@ const verifyforgetPasswordPin = async (req, res) => {
 };
 const resendForgetPasswordPin = async (req, res) => {
   try {
+
     const { email } = req.body;
 
     if (!email) {
-      return res.json({ message: "If email exists, PIN sent" });
+      return res.status(400).json({ message: "Email is required" });
     }
 
     const [[user]] = await pool.query(
@@ -407,9 +417,9 @@ const resendForgetPasswordPin = async (req, res) => {
       [email.trim()]
     );
 
-    // no leak
+    
     if (!user) {
-      return res.json({ message: "If email exists, PIN sent" });
+      return res.status(404).json({ message: "No user found with this Email" });
     }
 
     // ⏱ cooldown 5min
@@ -419,7 +429,7 @@ const resendForgetPasswordPin = async (req, res) => {
 
       if (diff < 300) {
         return res.status(429).json({
-          message: "Please wait 5 minutes before requesting new PIN",
+          message: "Please wait 5 minutes before requesting a new PIN",
         });
       }
     }
@@ -431,13 +441,19 @@ const resendForgetPasswordPin = async (req, res) => {
       [pinCode, user.id]
     );
 
-    await sendVerifyCodeForgetPasswordEmail(email, pinCode);
+    try{
+      await sendVerifyCodeForgetPasswordEmail(email, pinCode);
+    }
+    catch(EmailError){
+      console.error(EmailError);
+      return res.status(506).json({ message: "Sever can't send the PIN at this moment. Please try again later" });
+    }
 
-    return res.json({ message: "New PIN sent" });
+    return res.status(200).json({ message: "New PIN sent" });
 
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -446,7 +462,7 @@ const setNewPassword = async (req, res) => {
     const { email, newPassword } = req.body;
 
     if (!email || !newPassword) {
-      return res.status(400).json({ message: "Missing fields" });
+      return res.status(400).json({ message: "Email and new password are required" });
     }
 
     // 🔐 strong password check (same as frontend)
@@ -454,7 +470,7 @@ const setNewPassword = async (req, res) => {
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d])[^\s]{8,}$/;
 
     if (!passwordRegex.test(newPassword)) {
-      return res.status(400).json({ message: "Weak password" });
+      return res.status(401).json({ message: "Password is not strong enough" });
     }
 
     const [[user]] = await pool.query(
@@ -475,7 +491,7 @@ const setNewPassword = async (req, res) => {
       [hashedPassword, user.id]
     );
 
-    return res.json({ message: "Password reset successful" });
+    return res.status(200).json({ message: "Password reset successfully" });
 
   } catch (error) {
     console.error(error);
