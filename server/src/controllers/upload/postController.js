@@ -130,7 +130,7 @@ const createPost = async (req, res) => {
             const media_url = questionMediaUrl || null;
             
             const [questionResult] = await pool.query(
-                "INSERT INTO question (post_id, question_type, title, media_url, question_related_to) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO question(post_id, question_type, title, media_url, question_related_to) VALUES (?, ?, ?, ?, ?)",
                 [postId, question_type, question_title, media_url, question_related_to]
             );
 
@@ -138,7 +138,7 @@ const createPost = async (req, res) => {
               switch (question_type) {
                 case "openend":
 
-                  await db.query(
+                  await pool.query(
                     "INSERT INTO question_openend (question_id) VALUES (?)",
                     [questionId]
                   );
@@ -146,7 +146,7 @@ const createPost = async (req, res) => {
 
                 case "closedend":
 
-                  await db.query(
+                  await pool.query(
                     "INSERT INTO question_closedend (question_id, yes_title, no_title) VALUES (?, ?, ?)",
                     [questionId, req.body.yesTitle, req.body.noTitle]
                   );
@@ -154,7 +154,7 @@ const createPost = async (req, res) => {
 
                 case "range":
                   
-                  await db.query(
+                  await pool.query(
                     "INSERT INTO question_range (question_id, range_min, range_max, step, default_range_value) VALUES (?, ?, ?, ?, ?)",
                     [questionId, req.body.min, req.body.max, req.body.step, req.body.rangeValue]
                   );
@@ -162,13 +162,13 @@ const createPost = async (req, res) => {
 
                 case "singlechoice":
 
-                  const [sc] = await db.query(
+                  const [sc] = await pool.query(
                     "INSERT INTO question_singlechoice (question_id) VALUES (?)",
                     [questionId]
                   );
                   const singleChoiceId = sc.insertId;
                   (req.body["choices[]"] || []).forEach(async (choice) => {
-                    await db.query(
+                    await pool.query(
                       "INSERT INTO singlechoice_option (singlechoice_id, choice_text) VALUES (?, ?)",
                       [singleChoiceId, choice]
                     );
@@ -177,13 +177,13 @@ const createPost = async (req, res) => {
 
                 case "multiplechoice":
 
-                  const [mc] = await db.query(
+                  const [mc] = await pool.query(
                     "INSERT INTO question_multiplechoice (question_id, include_all_above) VALUES (?, ?)",
                     [questionId, req.body.include_all_above]
                   );
                   const multipleChoiceId = mc.insertId;
                   (req.body["choices[]"] || []).forEach(async (choice) => {
-                    await db.query(
+                    await pool.query(
                       "INSERT INTO multiplechoice_option (multiplechoice_id, choice_text) VALUES (?, ?)",
                       [multipleChoiceId, choice]
                     );
@@ -192,7 +192,7 @@ const createPost = async (req, res) => {
 
                 case "rankingorder":
 
-                  const [ro] = await db.query(
+                  const [ro] = await pool.query(
                     "INSERT INTO question_rankingorder (question_id) VALUES (?)",
                     [questionId]
                   );
@@ -201,7 +201,7 @@ const createPost = async (req, res) => {
                     .filter(([key]) => key.startsWith("ranking["))
                     .forEach(async ([key, value]) => {
                       const position = parseInt(key.match(/\[(\d+)\]/)[1], 10);
-                      await db.query(
+                      await pool.query(
                         "INSERT INTO ranking_item (ranking_id, position, item_text) VALUES (?, ?, ?)",
                         [rankingId, position, value]
                       );
@@ -210,7 +210,7 @@ const createPost = async (req, res) => {
 
                 case "rating":
 
-                  await db.query(
+                  await pool.query(
                     "INSERT INTO question_rating (question_id, rating_icon_id) VALUES (?, ?)",
                     [questionId, req.body.rating_icon_id]
                   );
