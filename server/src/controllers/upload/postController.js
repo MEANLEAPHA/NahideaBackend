@@ -125,12 +125,13 @@ const createPost = async (req, res) => {
             const questionFile = req.files?.questionFile?.[0];
             if (questionFile) {
             const result = await convertAndUpload(questionFile, "question");
-            questionMediaUrl = result.url || null;
+            questionMediaUrl = result.url;
             }
+            const media_url = questionMediaUrl || null;
             
             const [questionResult] = await pool.query(
                 "INSERT INTO question (post_id, question_type, title, media_url, question_related_to) VALUES (?, ?, ?, ?, ?)",
-                [postId, question_type, question_title, questionMediaUrl, question_related_to]
+                [postId, question_type, question_title, media_url, question_related_to]
             );
 
               const questionId = questionResult.insertId;
