@@ -5,7 +5,6 @@ const multer = require("multer");
 const upload = multer({ dest: "temp/" });
 require("dotenv").config();
 
-
 const createPost = async (req, res) => {
   try{
       const { post_type, tags = [], isAnonymous,
@@ -17,14 +16,14 @@ const createPost = async (req, res) => {
                confession_title, confession_type,
 
                // question 
-               question_type, question_title, question_related_to
+               question_type, question_title, question_related_to,
+
+               // repost 
+               repost_title
 
             } = req.body;
 
-
-
       const userId = req.user.userId;
-
 
       if(!post_type){
         return res.status(400).json({ message: "Missing post type." });
@@ -228,6 +227,21 @@ const createPost = async (req, res) => {
           }
           break;
 
+        case "repost" :
+          try{
+            await pool.query(
+              `INSERT INTO repost(post_id, title) VALUE(?,?)`,
+              [postId, repost_title]
+            )
+          }
+          catch(error){
+            console.error(error.message);
+            await Errors(error.message, error.code, "repostController(repost post)", error.stack);
+            return res.status(500).json({
+              message: "Sorry, something's wrong",
+            });
+          }
+          break;
         default :
          return res.status(400).json({error: "Invalid post type"});
 
