@@ -139,7 +139,7 @@ const createPost = async (req, res) => {
                 case "openend":
 
                   await pool.query(
-                    "INSERT INTO question_openend (question_id) VALUES (?)",
+                    "INSERT INTO openend (question_id) VALUES (?)",
                     [questionId]
                   );
                   break;
@@ -147,7 +147,7 @@ const createPost = async (req, res) => {
                 case "closedend":
 
                   await pool.query(
-                    "INSERT INTO question_closedend (question_id, yes_title, no_title) VALUES (?, ?, ?)",
+                    "INSERT INTO closedend (question_id, yes_title, no_title) VALUES (?, ?, ?)",
                     [questionId, req.body.yesTitle, req.body.noTitle]
                   );
                   break;
@@ -155,7 +155,7 @@ const createPost = async (req, res) => {
                 case "range":
                   
                   await pool.query(
-                    "INSERT INTO question_range (question_id, range_min, range_max, step, default_range_value) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO range (question_id, range_min, range_max, step, default_range_value) VALUES (?, ?, ?, ?, ?)",
                     [questionId, req.body.min, req.body.max, req.body.step, req.body.rangeValue]
                   );
                   break;
@@ -163,7 +163,7 @@ const createPost = async (req, res) => {
                 case "singlechoice":
 
                   const [sc] = await pool.query(
-                    "INSERT INTO question_singlechoice (question_id) VALUES (?)",
+                    "INSERT INTO singlechoice (question_id) VALUES (?)",
                     [questionId]
                   );
                   const singleChoiceId = sc.insertId;
@@ -178,7 +178,7 @@ const createPost = async (req, res) => {
                 case "multiplechoice":
 
                   const [mc] = await pool.query(
-                    "INSERT INTO question_multiplechoice (question_id, include_all_above) VALUES (?, ?)",
+                    "INSERT INTO multiplechoice (question_id, include_all_above) VALUES (?, ?)",
                     [questionId, req.body.include_all_above]
                   );
                   const multipleChoiceId = mc.insertId;
@@ -193,7 +193,7 @@ const createPost = async (req, res) => {
                 case "rankingorder":
 
                   const [ro] = await pool.query(
-                    "INSERT INTO question_rankingorder (question_id) VALUES (?)",
+                    "INSERT INTO rankingorder (question_id) VALUES (?)",
                     [questionId]
                   );
                   const rankingId = ro.insertId;
@@ -211,7 +211,7 @@ const createPost = async (req, res) => {
                 case "rating":
 
                   await pool.query(
-                    "INSERT INTO question_rating (question_id, rating_icon_id) VALUES (?, ?)",
+                    "INSERT INTO rating (question_id, rating_icon_id) VALUES (?, ?)",
                     [questionId, req.body.rating_icon_id]
                   );
                   break;
