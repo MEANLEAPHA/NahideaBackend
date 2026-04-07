@@ -218,10 +218,9 @@ case "rankingorder":
     rankingArray.map(async (value, index) => {
       if (value) {
         try {
-          console.log("Inserting ranking item:", { rankingId, position: index + 1, value });
           await pool.query(
             "INSERT INTO ranking_item (ranking_id, position, item_text) VALUES (?, ?, ?)",
-            [rankingId, index + 1, value]
+            [rankingId, index, value]
           );
         } catch (err) {
           console.error("Error inserting ranking item:", index + 1, value, err);
