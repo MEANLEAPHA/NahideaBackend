@@ -155,7 +155,7 @@ const createPost = async (req, res) => {
                 case "range":
                   
                   await pool.query(
-                    "INSERT INTO range (question_id, range_min, range_max, step, default_range_value) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO question_range (question_id, range_min, range_max, step, default_range_value) VALUES (?, ?, ?, ?, ?)",
                     [questionId, req.body.rangeMin, req.body.rangeMax, req.body.rangeStep, req.body.defaultRangeValue]
                   );
                   break;
@@ -211,13 +211,19 @@ case "rankingorder":
   );
   const rankingId = ro.insertId;
 
-  const rankingEntries = Object.entries(req.body).filter(([key]) =>/^ranking\[\d+\]$/.test(key)
-  );
+  // Log the entire body first
+  console.log("req.body received:", req.body);
+
+  const rankingEntries = Object.entries(req.body).filter(([key]) => /^ranking\[\d+\]$/.test(key));
+
+  console.log("Filtered rankingEntries:", rankingEntries);
 
   await Promise.all(
     rankingEntries.map(async ([key, value]) => {
       try {
         const position = parseInt(key.match(/\[(\d+)\]/)[1], 10);
+        console.log("Inserting ranking item:", { rankingId, position, value });
+
         await pool.query(
           "INSERT INTO ranking_item (ranking_id, position, item_text) VALUES (?, ?, ?)",
           [rankingId, position, value]
@@ -228,6 +234,7 @@ case "rankingorder":
     })
   );
   break;
+
 
 
                 case "rating":
