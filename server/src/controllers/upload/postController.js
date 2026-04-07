@@ -211,29 +211,27 @@ case "rankingorder":
   );
   const rankingId = ro.insertId;
 
-  // Log the entire body first
-  console.log("req.body received:", req.body);
-
-  const rankingEntries = Object.entries(req.body).filter(([key]) => /^ranking\[\d+\]$/.test(key));
-
-  console.log("Filtered rankingEntries:", rankingEntries);
+  const rankingArray = req.body.ranking || [];
+  console.log("Ranking array received:", rankingArray);
 
   await Promise.all(
-    rankingEntries.map(async ([key, value]) => {
-      try {
-        const position = parseInt(key.match(/\[(\d+)\]/)[1], 10);
-        console.log("Inserting ranking item:", { rankingId, position, value });
-
-        await pool.query(
-          "INSERT INTO ranking_item (ranking_id, position, item_text) VALUES (?, ?, ?)",
-          [rankingId, position, value]
-        );
-      } catch (err) {
-        console.error("Error inserting ranking item:", key, value, err);
+    rankingArray.map(async (value, index) => {
+      if (value) {
+        try {
+          console.log("Inserting ranking item:", { rankingId, position: index + 1, value });
+          await pool.query(
+            "INSERT INTO ranking_item (ranking_id, position, item_text) VALUES (?, ?, ?)",
+            [rankingId, index + 1, value]
+          );
+        } catch (err) {
+          console.error("Error inserting ranking item:", index + 1, value, err);
+        }
       }
     })
   );
   break;
+
+
 
 
 
