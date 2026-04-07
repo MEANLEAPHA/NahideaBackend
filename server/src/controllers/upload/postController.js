@@ -156,57 +156,79 @@ const createPost = async (req, res) => {
                   
                   await pool.query(
                     "INSERT INTO range (question_id, range_min, range_max, step, default_range_value) VALUES (?, ?, ?, ?, ?)",
-                    [questionId, req.body.min, req.body.max, req.body.step, req.body.rangeValue]
+                    [questionId, req.body.rangeMin, req.body.rangeMax, req.body.rangeStep, req.body.defaultRangeValue]
                   );
                   break;
 
-                case "singlechoice":
+               case "singlechoice":
+  const [sc] = await pool.query(
+    "INSERT INTO singlechoice (question_id) VALUES (?)",
+    [questionId]
+  );
+  const singleChoiceId = sc.insertId;
 
-                  const [sc] = await pool.query(
-                    "INSERT INTO singlechoice (question_id) VALUES (?)",
-                    [questionId]
-                  );
-                  const singleChoiceId = sc.insertId;
-                  (req.body["choices[]"] || []).forEach(async (choice) => {
-                    await pool.query(
-                      "INSERT INTO singlechoice_option (singlechoice_id, choice_text) VALUES (?, ?)",
-                      [singleChoiceId, choice]
-                    );
-                  });
-                  break;
+  const singleChoices = req.body.choices || req.body["choices[]"] || [];
+  await Promise.all(
+    singleChoices.map(async (choice) => {
+      try {
+        await pool.query(
+          "INSERT INTO singlechoice_option (singlechoice_id, choice_text) VALUES (?, ?)",
+          [singleChoiceId, choice]
+        );
+      } catch (err) {
+        console.error("Error inserting singlechoice option:", choice, err);
+      }
+    })
+  );
+  break;
 
-                case "multiplechoice":
+case "multiplechoice":
+  const [mc] = await pool.query(
+    "INSERT INTO multiplechoice (question_id, include_all_above) VALUES (?, ?)",
+    [questionId, req.body.include_all_above]
+  );
+  const multipleChoiceId = mc.insertId;
 
-                  const [mc] = await pool.query(
-                    "INSERT INTO multiplechoice (question_id, include_all_above) VALUES (?, ?)",
-                    [questionId, req.body.include_all_above]
-                  );
-                  const multipleChoiceId = mc.insertId;
-                  (req.body["choices[]"] || []).forEach(async (choice) => {
-                    await pool.query(
-                      "INSERT INTO multiplechoice_option (multiplechoice_id, choice_text) VALUES (?, ?)",
-                      [multipleChoiceId, choice]
-                    );
-                  });
-                  break;
+  const multipleChoices = req.body.choices || req.body["choices[]"] || [];
+  await Promise.all(
+    multipleChoices.map(async (choice) => {
+      try {
+        await pool.query(
+          "INSERT INTO multiplechoice_option (multiplechoice_id, choice_text) VALUES (?, ?)",
+          [multipleChoiceId, choice]
+        );
+      } catch (err) {
+        console.error("Error inserting multiplechoice option:", choice, err);
+      }
+    })
+  );
+  break;
 
-                case "rankingorder":
+case "rankingorder":
+  const [ro] = await pool.query(
+    "INSERT INTO rankingorder (question_id) VALUES (?)",
+    [questionId]
+  );
+  const rankingId = ro.insertId;
 
-                  const [ro] = await pool.query(
-                    "INSERT INTO rankingorder (question_id) VALUES (?)",
-                    [questionId]
-                  );
-                  const rankingId = ro.insertId;
-                  Object.entries(req.body)
-                    .filter(([key]) => key.startsWith("ranking["))
-                    .forEach(async ([key, value]) => {
-                      const position = parseInt(key.match(/\[(\d+)\]/)[1], 10);
-                      await pool.query(
-                        "INSERT INTO ranking_item (ranking_id, position, item_text) VALUES (?, ?, ?)",
-                        [rankingId, position, value]
-                      );
-                    });
-                  break;
+  const rankingEntries = Object.entries(req.body).filter(([key]) =>/^ranking\[\d+\]$/.test(key)
+  );
+
+  await Promise.all(
+    rankingEntries.map(async ([key, value]) => {
+      try {
+        const position = parseInt(key.match(/\[(\d+)\]/)[1], 10);
+        await pool.query(
+          "INSERT INTO ranking_item (ranking_id, position, item_text) VALUES (?, ?, ?)",
+          [rankingId, position, value]
+        );
+      } catch (err) {
+        console.error("Error inserting ranking item:", key, value, err);
+      }
+    })
+  );
+  break;
+
 
                 case "rating":
 
