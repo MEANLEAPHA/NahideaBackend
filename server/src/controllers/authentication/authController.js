@@ -241,14 +241,14 @@ const resendverifyEmailPin = async (req, res) => {
     if(!user){
       return res.status(404).json({ message: "No Registrant found. Please register first" });
     }
-    // 🚨 prevent spam (5 min cooldown)
+    // 🚨 prevent spam (1 min cooldown)
     if (user.pin_created_at) {
       const diff =
         (Date.now() - new Date(user.pin_created_at).getTime()) / 1000;
 
-      if (diff < 300) {
+      if (diff < 60) {
         return res.status(429).json({
-          message: "Please wait 5 minutes before requesting new PIN",
+          message: "Please wait 1 minutes before requesting new PIN",
         });
       }
     }
@@ -422,14 +422,14 @@ const resendForgetPasswordPin = async (req, res) => {
       return res.status(404).json({ message: "No user found with this Email" });
     }
 
-    // ⏱ cooldown 5min
+    // ⏱ cooldown 1min
     if (user.pin_created_at) {
       const diff =
         (Date.now() - new Date(user.pin_created_at).getTime()) / 1000;
 
-      if (diff < 300) {
+      if (diff < 60) {
         return res.status(429).json({
-          message: "Please wait 5 minutes before requesting a new PIN",
+          message: "Please wait 1 minutes before requesting a new PIN",
         });
       }
     }
