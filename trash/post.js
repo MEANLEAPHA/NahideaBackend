@@ -158,41 +158,6 @@ const createPost = async (req, res) => {
   }
 };
 
-const Joi = require("joi");
-
-const postSchema = Joi.object({
-  post_type: Joi.string().valid("content", "confession", "question", "repost").required(),
-  tags: Joi.array().items(Joi.string().trim()).default([]),
-  isAnonymous: Joi.number().valid(0, 1).default(0).optional(), 
-
-  content_title: Joi.string().optional(),
-  content_type: Joi.string().optional(),
- 
-  confession_title: Joi.string().optional(),
-  confession_type: Joi.string().optional(),
-
-  question_type: Joi.string().optional(),
-  question_title: Joi.string().optional(),
-  question_related_to: Joi.string().optional(),
-
-    yesTitle: Joi.string().optional(),
-    noTitle: Joi.string().optional(),
-    
-    rangeMin: Joi.number().optional(),
-    rangeMax: Joi.number().optional(),
-    rangeStep: Joi.number().optional(),
-    defaultRangeValue: Joi.number().optional(),
-
-    choices: Joi.array().items(Joi.string()).optional(),
-    include_all_above: Joi.number().valid(0, 1).default(0).optional(),
-    
-    ranking: Joi.array().items(Joi.string()).optional(),
-
-    rating_icon_id: Joi.number().optional(),
-
-  repost_title: Joi.string().optional()
-});
-
 const createPost = async (req, res) => {
   try{
 
