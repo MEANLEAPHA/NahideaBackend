@@ -15,7 +15,7 @@ const createPost = async (req, res) => {
               post_type, tags = [], isAnonymous,
 
                 // content
-                content_title, content_type,
+                content_title, content_type,text_body,
 
                 // confession
                 confession_title, confession_type,
@@ -77,9 +77,9 @@ const createPost = async (req, res) => {
             mediaType = results.map(r => r.type);
 
             await pool.query(
-              `INSERT INTO content(user_id, post_id, type, title, media_type, media_url, is_anonymous)
+              `INSERT INTO content(user_id, post_id, type, title, text_body, media_type, media_url, is_anonymous)
                     VALUES(?, ?, ?, ?, ?, ?, ?)`,
-                    [userId, postId, content_type, content_title, JSON.stringify(mediaType), JSON.stringify(mediaUrl), isAnonymous]
+                    [userId, postId, content_type, content_title, text_body,JSON.stringify(mediaType), JSON.stringify(mediaUrl), isAnonymous]
             );
         },
         confession: async() => {
