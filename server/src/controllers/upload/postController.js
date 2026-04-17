@@ -78,7 +78,7 @@ const createPost = async (req, res) => {
 
             await pool.query(
               `INSERT INTO content(user_id, post_id, type, title, text_body, media_type, media_url, is_anonymous)
-                    VALUES(?, ?, ?, ?, ?, ?, ?)`,
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
                     [userId, postId, content_type, content_title, text_body,JSON.stringify(mediaType), JSON.stringify(mediaUrl), isAnonymous]
             );
         },
