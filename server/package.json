@@ -26,6 +26,7 @@
     "node-schedule": "^2.1.1",
     "node-telegram-bot-api": "^0.66.0",
     "nodemailer": "^7.0.3",
+    "redis": "^5.12.1",
     "sequelize": "^6.37.7",
     "sharp": "^0.34.5",
     "socket.io": "^4.8.1",

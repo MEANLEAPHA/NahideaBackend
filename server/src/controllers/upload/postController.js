@@ -5,6 +5,9 @@ const multer = require("multer");
 const upload = multer({ dest: "temp/" });
 require("dotenv").config();
 
+// Redis Cache
+const {redisClient} = require("../../config/redisClient");
+
 
 
 const createPost = async (req, res) => {
@@ -236,6 +239,10 @@ const createPost = async (req, res) => {
     const postTypeRes = post_type.slice(0, 1).toUpperCase() + post_type.slice(1);
     res.status(200).json({ message: `${postTypeRes} uploaded successfully`, postId });
 
+
+    // clear old cache
+    await redisClient.del("posts:all");
+
       }
     catch(error){
       console.error(error.message);
@@ -247,7 +254,173 @@ const createPost = async (req, res) => {
 
 
 
+const getAllPosts = async (req, res) => {
+  try {
+    const CACHE_KEY = "posts:all";
+ 
+    const cached = await redisClient.get(CACHE_KEY);
 
+    if (cached) {
+      console.log("Cached HIT");
+      return res.json(JSON.parse(cached));
+    }
+
+    console.log("Cached MISS → querying DB");
+
+    // =========================
+    // YOUR EXISTING DB LOGIC
+    // =========================
+
+    const [posts] = await pool.query(`
+      SELECT p.*, u.username
+      FROM posts p
+      JOIN users u ON p.user_id = u.id
+      ORDER BY p.created_at DESC
+      LIMIT 50
+    `);
+
+    if (!posts.length) {
+      return res.json([]);
+    }
+
+    const contentIds = [];
+    const confessionIds = [];
+    const questionIds = [];
+
+    posts.forEach(p => {
+      if (p.post_type === "content") contentIds.push(p.id);
+      if (p.post_type === "confession") confessionIds.push(p.id);
+      if (p.post_type === "question") questionIds.push(p.id);
+    });
+
+    const [contents] = contentIds.length
+      ? await pool.query(`SELECT * FROM content WHERE post_id IN (?)`, [contentIds])
+      : [];
+
+    const [confessions] = confessionIds.length
+      ? await pool.query(`SELECT * FROM confession WHERE post_id IN (?)`, [confessionIds])
+      : [];
+
+    const [questions] = questionIds.length
+      ? await pool.query(`SELECT * FROM question WHERE post_id IN (?)`, [questionIds])
+      : [];
+
+    const questionIdsList = questions.map(q => q.id);
+
+    const [closed] = questionIdsList.length
+      ? await pool.query(`SELECT * FROM closedend WHERE question_id IN (?)`, [questionIdsList])
+      : [];
+
+    const [ranges] = questionIdsList.length
+      ? await pool.query(`SELECT * FROM question_range WHERE question_id IN (?)`, [questionIdsList])
+      : [];
+
+    const [ratings] = questionIdsList.length
+      ? await pool.query(`SELECT * FROM rating WHERE question_id IN (?)`, [questionIdsList])
+      : [];
+
+    const [singleOptions] = questionIdsList.length
+      ? await pool.query(`
+          SELECT sco.*, sc.question_id
+          FROM singlechoice_option sco
+          JOIN singlechoice sc ON sco.singlechoice_id = sc.id
+          WHERE sc.question_id IN (?)
+        `, [questionIdsList])
+      : [[]];
+
+    const [multipleOptions] = questionIdsList.length
+      ? await pool.query(`
+          SELECT mco.*, mc.question_id
+          FROM multiplechoice_option mco
+          JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
+          WHERE mc.question_id IN (?)
+        `, [questionIdsList])
+      : [[]];
+
+    const [rankingItems] = questionIdsList.length
+      ? await pool.query(`
+          SELECT ri.*, ro.question_id
+          FROM ranking_item ri
+          JOIN rankingorder ro ON ri.ranking_id = ro.id
+          WHERE ro.question_id IN (?)
+        `, [questionIdsList])
+      : [[]];
+
+    // maps
+    const closedMap = Object.fromEntries(closed.map(c => [c.question_id, c]));
+    const rangeMap = Object.fromEntries(ranges.map(r => [r.question_id, r]));
+    const ratingMap = Object.fromEntries(ratings.map(r => [r.question_id, r]));
+
+    const singleMap = {};
+    singleOptions.forEach(o => {
+      if (!singleMap[o.question_id]) singleMap[o.question_id] = [];
+      singleMap[o.question_id].push(o);
+    });
+
+    const multipleMap = {};
+    multipleOptions.forEach(o => {
+      if (!multipleMap[o.question_id]) multipleMap[o.question_id] = [];
+      multipleMap[o.question_id].push(o);
+    });
+
+    const rankingMap = {};
+    rankingItems.forEach(o => {
+      if (!rankingMap[o.question_id]) rankingMap[o.question_id] = [];
+      rankingMap[o.question_id].push(o);
+    });
+
+    const final = posts.map(p => {
+      let data = null;
+
+      if (p.post_type === "content") data = contentMap[p.id];
+      if (p.post_type === "confession") data = confessionMap[p.id];
+
+      if (p.post_type === "question") {
+        const q = questionMap[p.id];
+        if (!q) return { ...p, data: null };
+
+        let extra = {};
+
+        switch (q.question_type) {
+          case "closedend":
+            extra = closedMap[q.id];
+            break;
+          case "range":
+            extra = rangeMap[q.id];
+            break;
+          case "singlechoice":
+            extra = { choices: singleMap[q.id] || [] };
+            break;
+          case "multiplechoice":
+            extra = { choices: multipleMap[q.id] || [] };
+            break;
+          case "rankingorder":
+            extra = { items: rankingMap[q.id] || [] };
+            break;
+          case "rating":
+            extra = ratingMap[q.id];
+            break;
+        }
+
+        data = { ...q, ...extra };
+      }
+
+      return { ...p, data };
+    });
+
+
+    await redisClient.set(CACHE_KEY, JSON.stringify(final), { EX: 60 });
+
+     return res.status(200).json({
+      source: "db",
+      data: final,
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
 
 
 
@@ -297,5 +470,8 @@ module.exports = {
   getPosts,
   getPostById,
   markSolved,
-  upload
+  upload,
+
+
+  getAllPosts
 };

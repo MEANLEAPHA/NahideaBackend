@@ -30,6 +30,8 @@ router.post("/create-posts", protect,
   ]),
   createPost);
 
+  router.get("/all-posts", getPosts);
+
 router.get("/", getPosts);
 router.get("/:id", getPostById);
 
