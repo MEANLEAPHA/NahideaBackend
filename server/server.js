@@ -14,7 +14,7 @@ app.use(cors({
   allowedHeaders: ["Content-Type","Authorization"]
 })); 
 app.use(express.json());
-await connectRedis();
+
 
 const authRoutes = require("./src/routes/authentication/authRoutes");
 const postRoutes = require("./src/routes/upload/postRoutes");
@@ -30,8 +30,20 @@ app.get("/", (req, res) => {
 
 // Redis cache
 
+async function startServer() {
+  try {
+    await connectRedis();   // safe inside async
+    app.listen(process.env.PORT, () => {
+      console.log("Server is running on port:" + process.env.PORT);
+    });
+  } catch (err) {
+    console.error("Failed to connect to Redis:", err);
+    process.exit(1);
+  }
+}
 
+startServer();
 
-app.listen(process.env.PORT, ()=>{
-    console.log("Sever is running on port:" + process.env.PORT);
-});
+// app.listen(process.env.PORT, ()=>{
+//     console.log("Sever is running on port:" + process.env.PORT);
+// });
