@@ -375,7 +375,7 @@ const getAllPosts = async (req, res) => {
         data = confessions.find((c) => c.post_id === post.id) || null;
       }
 
-      
+
       // -------- QUESTION --------
       if (post.post_type === "question") {
         const q = questions.find((q) => q.post_id === post.id);
@@ -665,5 +665,5 @@ module.exports = {
 
 
   getAllPosts,
-  displayAllPosts
+ 
 };
