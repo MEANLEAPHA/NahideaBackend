@@ -122,11 +122,10 @@ const createPost = async (req, res) => {
 
               switch (question_type) {
                 case "openend":
-
-                  await pool.query(
-                    "INSERT INTO openend (question_id) VALUES (?)",
-                    [questionId]
-                  );
+                  // await pool.query(
+                  //   "INSERT INTO openend (question_id) VALUES (?)",
+                  //   [questionId]
+                  // );
                   break;
 
                 case "closedend":
@@ -241,7 +240,7 @@ const createPost = async (req, res) => {
 
 
     // clear old cache
-    await redisClient.del("posts:all");
+    await redisClient.del("posts:page:1");
 
       }
     catch(error){
@@ -254,8 +253,11 @@ const createPost = async (req, res) => {
 
 const getAllPosts = async (req, res) => {
   try {
-
-    const CACHE_KEY = "posts:all";
+    const page = parseInt(req.query.page) || 1;
+    const limit = 25;
+    const offset = (page - 1) * limit;
+  
+    const CACHE_KEY = `posts:page:${page}`;
 
     // =====================
     // 1. CHECK CACHE FIRST
@@ -275,13 +277,13 @@ const getAllPosts = async (req, res) => {
     // =====================
     // 2. GET BASE POSTS
     // =====================
-    const [posts] = await pool.query(`
+     const [posts] = await pool.query(`
       SELECT p.*, u.username
       FROM posts p
       JOIN users u ON p.user_id = u.id
       ORDER BY p.created_at DESC
-      LIMIT 50
-    `);
+      LIMIT ? OFFSET ?
+    `, [limit, offset]);
 
     if (!posts.length) {
       return res.status(200).json({ source: "db", data: [] });
