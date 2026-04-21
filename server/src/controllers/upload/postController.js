@@ -252,7 +252,46 @@ const createPost = async (req, res) => {
 }; 
 
 
+const displayAllPosts = async () =>{
+  try{
+    const CACHE_KEY = process.env.CACHE_POST;
 
+    // Find cache to display second user
+    const cached = await redisClient.get(CACHE_KEY);
+
+    if(cached){
+      console.log("Cached HIT");
+      return res.status(200).json(JSON.parse(cached)) || ['cached hit but no data'];
+    };
+
+    console.log("Cached miss user will queries from DB");
+
+    const [posts] = await pool.query(
+      `SELECT p.*, u.username 
+      FROM posts p
+      JOIN users u ON p.user_id = u.id
+      ORDER BY p.created_at DESC
+      LIMIT 50`
+    );
+
+
+    if(posts.length === 0){
+      return res.json([])
+    }
+
+    
+    await redisClient.set(CACHE_KEY, JSON.stringify(posts), { EX: 60 });
+
+     return res.status(200).json({
+      source: "db",
+      data: posts,
+    });
+  }
+  catch(err){
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+}
 
 const getAllPosts = async (req, res) => {
   try {
@@ -473,5 +512,6 @@ module.exports = {
   upload,
 
 
-  getAllPosts
+  getAllPosts,
+  displayAllPosts
 };

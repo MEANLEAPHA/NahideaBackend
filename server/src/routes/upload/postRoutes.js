@@ -6,6 +6,8 @@ const {
   getPosts,
   getPostById,
   markSolved,
+  displayAllPosts,
+  getAllPosts
 } = require("../../controllers/upload/postController");
 const {
   content,
@@ -30,7 +32,9 @@ router.post("/create-posts", protect,
   ]),
   createPost);
 
-  router.get("/all-posts", getPosts);
+  router.get("/all-posts", getAllPosts);
+
+  router.get("display-all0pots", displayAllPosts)
 
 router.get("/", getPosts);
 router.get("/:id", getPostById);
