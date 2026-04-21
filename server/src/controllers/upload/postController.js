@@ -301,7 +301,12 @@ const getAllPosts = async (req, res) => {
 
     if (cached) {
       console.log("Cached HIT");
-      return res.json(JSON.parse(cached));
+      return res.json(
+        {
+          source: "cache",
+          data: JSON.parse(cached)
+        }
+      );
     }
 
     console.log("Cached MISS → querying DB");
@@ -393,7 +398,7 @@ const getAllPosts = async (req, res) => {
     const contentMap = Object.fromEntries(contents.map(c => [c.post_id, c]));
     const confessionMap = Object.fromEntries(confessions.map(c => [c.post_id, c]));
     const questionMap = Object.fromEntries(questions.map(q => [q.id, q]));
-    
+
     const singleMap = {};
     singleOptions.forEach(o => {
       if (!singleMap[o.question_id]) singleMap[o.question_id] = [];
@@ -452,7 +457,7 @@ const getAllPosts = async (req, res) => {
     });
 
 
-    await redisClient.set(CACHE_KEY, JSON.stringify(final), { EX: 60 });
+    await redisClient.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
 
      return res.status(200).json({
       source: "db",
