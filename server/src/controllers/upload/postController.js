@@ -252,69 +252,29 @@ const createPost = async (req, res) => {
 }; 
 
 
-const displayAllPosts = async () =>{
-  try{
-    const CACHE_KEY = process.env.CACHE_POST;
-
-    // Find cache to display second user
-    const cached = await redisClient.get(CACHE_KEY);
-
-    if(cached){
-      console.log("Cached HIT");
-      return res.status(200).json(JSON.parse(cached)) || ['cached hit but no data'];
-    };
-
-    console.log("Cached miss user will queries from DB");
-
-    const [posts] = await pool.query(
-      `SELECT p.*, u.username 
-      FROM posts p
-      JOIN users u ON p.user_id = u.id
-      ORDER BY p.created_at DESC
-      LIMIT 50`
-    );
-
-
-    if(posts.length === 0){
-      return res.json([])
-    }
-
-    
-    await redisClient.set(CACHE_KEY, JSON.stringify(posts), { EX: 60 });
-
-     return res.status(200).json({
-      source: "db",
-      data: posts,
-    });
-  }
-  catch(err){
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-}
-
 const getAllPosts = async (req, res) => {
   try {
+
     const CACHE_KEY = "posts:all";
- 
+
+    // =====================
+    // 1. CHECK CACHE FIRST
+    // =====================
     const cached = await redisClient.get(CACHE_KEY);
 
     if (cached) {
-      console.log("Cached HIT");
-      return res.json(
-        {
-          source: "cache",
-          data: JSON.parse(cached)
-        }
-      );
+      console.log("CACHE HIT");
+      return res.status(200).json({
+        source: "cache",
+        data: JSON.parse(cached),
+      });
     }
 
-    console.log("Cached MISS → querying DB");
+    console.log("CACHE MISS → DB");
 
-    // =========================
-    // YOUR EXISTING DB LOGIC
-    // =========================
-
+    // =====================
+    // 2. GET BASE POSTS
+    // =====================
     const [posts] = await pool.query(`
       SELECT p.*, u.username
       FROM posts p
@@ -324,142 +284,150 @@ const getAllPosts = async (req, res) => {
     `);
 
     if (!posts.length) {
-      return res.json([]);
+      return res.status(200).json({ source: "db", data: [] });
     }
 
+    // =====================
+    // 3. SPLIT IDS BY TYPE
+    // =====================
     const contentIds = [];
     const confessionIds = [];
+
     const questionIds = [];
 
-    posts.forEach(p => {
+    posts.forEach((p) => {
       if (p.post_type === "content") contentIds.push(p.id);
       if (p.post_type === "confession") confessionIds.push(p.id);
+
       if (p.post_type === "question") questionIds.push(p.id);
     });
 
+    // =====================
+    // 4. FETCH RELATED DATA
+    // =====================
     const [contents] = contentIds.length
       ? await pool.query(`SELECT * FROM content WHERE post_id IN (?)`, [contentIds])
-      : [];
+      : [[]];
 
     const [confessions] = confessionIds.length
       ? await pool.query(`SELECT * FROM confession WHERE post_id IN (?)`, [confessionIds])
-      : [];
+      : [[]];
 
     const [questions] = questionIds.length
       ? await pool.query(`SELECT * FROM question WHERE post_id IN (?)`, [questionIds])
-      : [];
-
-    const questionIdsList = questions.map(q => q.id);
-
-    const [closed] = questionIdsList.length
-      ? await pool.query(`SELECT * FROM closedend WHERE question_id IN (?)`, [questionIdsList])
-      : [];
-
-    const [ranges] = questionIdsList.length
-      ? await pool.query(`SELECT * FROM question_range WHERE question_id IN (?)`, [questionIdsList])
-      : [];
-
-    const [ratings] = questionIdsList.length
-      ? await pool.query(`SELECT * FROM rating WHERE question_id IN (?)`, [questionIdsList])
-      : [];
-
-    const [singleOptions] = questionIdsList.length
-      ? await pool.query(`
-          SELECT sco.*, sc.question_id
-          FROM singlechoice_option sco
-          JOIN singlechoice sc ON sco.singlechoice_id = sc.id
-          WHERE sc.question_id IN (?)
-        `, [questionIdsList])
       : [[]];
 
-    const [multipleOptions] = questionIdsList.length
-      ? await pool.query(`
-          SELECT mco.*, mc.question_id
-          FROM multiplechoice_option mco
-          JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
-          WHERE mc.question_id IN (?)
-        `, [questionIdsList])
+    // get question ids
+    const qIds = questions.map((q) => q.id);
+
+    const [closed] = qIds.length
+      ? await pool.query(`SELECT * FROM closedend WHERE question_id IN (?)`, [qIds])
       : [[]];
 
-    const [rankingItems] = questionIdsList.length
-      ? await pool.query(`
-          SELECT ri.*, ro.question_id
-          FROM ranking_item ri
-          JOIN rankingorder ro ON ri.ranking_id = ro.id
-          WHERE ro.question_id IN (?)
-        `, [questionIdsList])
+    const [ranges] = qIds.length
+      ? await pool.query(`SELECT * FROM question_range WHERE question_id IN (?)`, [qIds])
       : [[]];
 
-    // maps
-    const closedMap = Object.fromEntries(closed.map(c => [c.question_id, c]));
-    const rangeMap = Object.fromEntries(ranges.map(r => [r.question_id, r]));
-    const ratingMap = Object.fromEntries(ratings.map(r => [r.question_id, r]));
+    const [ratings] = qIds.length
+      ? await pool.query(`SELECT * FROM rating WHERE question_id IN (?)`, [qIds])
+      : [[]];
 
-    const contentMap = Object.fromEntries(contents.map(c => [c.post_id, c]));
-    const confessionMap = Object.fromEntries(confessions.map(c => [c.post_id, c]));
-    const questionMap = Object.fromEntries(questions.map(q => [q.id, q]));
+    const [singleOptions] = qIds.length
+      ? await pool.query(`
+        SELECT sco.*, sc.question_id
+        FROM singlechoice_option sco
+        JOIN singlechoice sc ON sco.singlechoice_id = sc.id
+        WHERE sc.question_id IN (?)
+      `, [qIds])
+      : [[]];
 
-    const singleMap = {};
-    singleOptions.forEach(o => {
-      if (!singleMap[o.question_id]) singleMap[o.question_id] = [];
-      singleMap[o.question_id].push(o);
-    });
+    const [multipleOptions] = qIds.length
+      ? await pool.query(`
+        SELECT mco.*, mc.question_id
+        FROM multiplechoice_option mco
+        JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
+        WHERE mc.question_id IN (?)
+      `, [qIds])
+      : [[]];
 
-    const multipleMap = {};
-    multipleOptions.forEach(o => {
-      if (!multipleMap[o.question_id]) multipleMap[o.question_id] = [];
-      multipleMap[o.question_id].push(o);
-    });
+    const [rankingItems] = qIds.length
+      ? await pool.query(`
+        SELECT ri.*, ro.question_id
+        FROM ranking_item ri
+        JOIN rankingorder ro ON ri.ranking_id = ro.id
+        WHERE ro.question_id IN (?)
+      `, [qIds])
+      : [[]];
 
-    const rankingMap = {};
-    rankingItems.forEach(o => {
-      if (!rankingMap[o.question_id]) rankingMap[o.question_id] = [];
-      rankingMap[o.question_id].push(o);
-    });
-
-    const final = posts.map(p => {
+    // =====================
+    // 5. BUILD FINAL RESULT
+    // =====================
+    const final = posts.map((post) => {
       let data = null;
 
-      if (p.post_type === "content") data = contentMap[p.id];
-      if (p.post_type === "confession") data = confessionMap[p.id];
+      // -------- CONTENT --------
+      if (post.post_type === "content") {
+        data = contents.find((c) => c.post_id === post.id) || null;
+      }
 
-      if (p.post_type === "question") {
-        const q = questionMap[p.id];
-        if (!q) return { ...p, data: null };
+      // -------- CONFESSION --------
+      if (post.post_type === "confession") {
+        data = confessions.find((c) => c.post_id === post.id) || null;
+      }
+
+      
+      // -------- QUESTION --------
+      if (post.post_type === "question") {
+        const q = questions.find((q) => q.post_id === post.id);
+
+        if (!q) return { ...post, data: null };
 
         let extra = {};
 
         switch (q.question_type) {
           case "closedend":
-            extra = closedMap[q.id];
+            extra = closed.find((c) => c.question_id === q.id) || {};
             break;
+
           case "range":
-            extra = rangeMap[q.id];
+            extra = ranges.find((r) => r.question_id === q.id) || {};
             break;
+
           case "singlechoice":
-            extra = { choices: singleMap[q.id] || [] };
+            extra = {
+              choices: singleOptions.filter((o) => o.question_id === q.id),
+            };
             break;
+
           case "multiplechoice":
-            extra = { choices: multipleMap[q.id] || [] };
+            extra = {
+              choices: multipleOptions.filter((o) => o.question_id === q.id),
+            };
             break;
+
           case "rankingorder":
-            extra = { items: rankingMap[q.id] || [] };
+            extra = {
+              items: rankingItems.filter((i) => i.question_id === q.id),
+            };
             break;
+
           case "rating":
-            extra = ratingMap[q.id];
+            extra = ratings.find((r) => r.question_id === q.id) || {};
             break;
         }
 
         data = { ...q, ...extra };
       }
 
-      return { ...p, data };
+      return { ...post, data };
     });
 
-
+    // =====================
+    // 6. CACHE RESULT
+    // =====================
     await redisClient.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
 
-     return res.status(200).json({
+    return res.status(200).json({
       source: "db",
       data: final,
     });
@@ -469,6 +437,181 @@ const getAllPosts = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+// const getAllPosts = async (req, res) => {
+//   try {
+//     const CACHE_KEY = "posts:all";
+ 
+//     const cached = await redisClient.get(CACHE_KEY);
+
+//     if (cached) {
+//       console.log("Cached HIT");
+//       return res.status(200).json(
+//         {
+//           source: "cache",
+//           data: JSON.parse(cached)
+//         }
+//       );
+//     }
+
+//     console.log("Cached MISS → querying DB");
+
+
+//     const [posts] = await pool.query(`
+//       SELECT p.*, u.username
+//       FROM posts p
+//       JOIN users u ON p.user_id = u.id
+//       ORDER BY p.created_at DESC
+//       LIMIT 50
+//     `);
+
+//     if (!posts.length) {
+//       return res.json([]);
+//     }
+
+//     const contentIds = [];
+//     const confessionIds = [];
+//     const questionIds = [];
+
+//     posts.forEach(p => {
+//       if (p.post_type === "content") contentIds.push(p.id);
+//       if (p.post_type === "confession") confessionIds.push(p.id);
+//       if (p.post_type === "question") questionIds.push(p.id);
+//     });
+
+//     const [contents] = contentIds.length
+//       ? await pool.query(`SELECT * FROM content WHERE post_id IN (?)`, [contentIds])
+//       : [];
+
+//     const [confessions] = confessionIds.length 
+//       ? await pool.query(`SELECT * FROM confession WHERE post_id IN (?)`, [confessionIds])
+//       : [];
+
+//     const [questions] = questionIds.length
+//       ? await pool.query(`SELECT * FROM question WHERE post_id IN (?)`, [questionIds])
+//       : [];
+
+
+//     const questionIdsList = questions.map(q => q.id);
+
+//     const [closed] = questionIdsList.length
+//       ? await pool.query(`SELECT * FROM closedend WHERE question_id IN (?)`, [questionIdsList])
+//       : [];
+
+//     const [ranges] = questionIdsList.length
+//       ? await pool.query(`SELECT * FROM question_range WHERE question_id IN (?)`, [questionIdsList])
+//       : [];
+
+//     const [ratings] = questionIdsList.length
+//       ? await pool.query(`SELECT * FROM rating WHERE question_id IN (?)`, [questionIdsList])
+//       : [];
+
+//     const [singleOptions] = questionIdsList.length
+//       ? await pool.query(`
+//           SELECT sco.*, sc.question_id
+//           FROM singlechoice_option sco
+//           JOIN singlechoice sc ON sco.singlechoice_id = sc.id
+//           WHERE sc.question_id IN (?)
+//         `, [questionIdsList])
+//       : [];
+
+//     const [multipleOptions] = questionIdsList.length
+//       ? await pool.query(`
+//           SELECT mco.*, mc.question_id
+//           FROM multiplechoice_option mco
+//           JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
+//           WHERE mc.question_id IN (?)
+//         `, [questionIdsList])
+//       : [];
+
+//     const [rankingItems] = questionIdsList.length
+//       ? await pool.query(`
+//           SELECT ri.*, ro.question_id
+//           FROM ranking_item ri
+//           JOIN rankingorder ro ON ri.ranking_id = ro.id
+//           WHERE ro.question_id IN (?)
+//         `, [questionIdsList])
+//       : [];
+
+//     // maps
+//     const closedMap = Object.fromEntries(closed.map(c => [c.question_id, c]));
+//     const rangeMap = Object.fromEntries(ranges.map(r => [r.question_id, r]));
+//     const ratingMap = Object.fromEntries(ratings.map(r => [r.question_id, r]));
+
+//     const contentMap = Object.fromEntries(contents.map(c => [c.post_id, c]));
+//     const confessionMap = Object.fromEntries(confessions.map(c => [c.post_id, c]));
+//     const questionMap = Object.fromEntries(questions.map(q => [q.id, q]));
+
+//     const singleMap = {};
+//     singleOptions.forEach(o => {
+//       if (!singleMap[o.question_id]) singleMap[o.question_id] = [];
+//       singleMap[o.question_id].push(o);
+//     });
+
+//     const multipleMap = {};
+//     multipleOptions.forEach(o => {
+//       if (!multipleMap[o.question_id]) multipleMap[o.question_id] = [];
+//       multipleMap[o.question_id].push(o);
+//     });
+
+//     const rankingMap = {};
+//     rankingItems.forEach(o => {
+//       if (!rankingMap[o.question_id]) rankingMap[o.question_id] = [];
+//       rankingMap[o.question_id].push(o);
+//     });
+
+//     const final = posts.map(p => {
+//       let data = null;
+
+//       if (p.post_type === "content") data = contentMap[p.id];
+//       if (p.post_type === "confession") data = confessionMap[p.id];
+
+//       if (p.post_type === "question") {
+//         const q = questionMap[p.id];
+//         if (!q) return { ...p, data: null };
+
+//         let extra = {};
+
+//         switch (q.question_type) {
+//           case "closedend":
+//             extra = closedMap[q.id];
+//             break;
+//           case "range":
+//             extra = rangeMap[q.id];
+//             break;
+//           case "singlechoice":
+//             extra = { choices: singleMap[q.id] || [] };
+//             break;
+//           case "multiplechoice":
+//             extra = { choices: multipleMap[q.id] || [] };
+//             break;
+//           case "rankingorder":
+//             extra = { items: rankingMap[q.id] || [] };
+//             break;
+//           case "rating":
+//             extra = ratingMap[q.id];
+//             break;
+//         }
+
+//         data = { ...q, ...extra };
+//       }
+
+//       return { ...p, data };
+//     });
+
+
+//     await redisClient.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
+
+//      return res.status(200).json({
+//       source: "db",
+//       data: final,
+//     });
+
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
 
 
 
