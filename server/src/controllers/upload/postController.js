@@ -390,6 +390,10 @@ const getAllPosts = async (req, res) => {
     const rangeMap = Object.fromEntries(ranges.map(r => [r.question_id, r]));
     const ratingMap = Object.fromEntries(ratings.map(r => [r.question_id, r]));
 
+    const contentMap = Object.fromEntries(contents.map(c => [c.post_id, c]));
+    const confessionMap = Object.fromEntries(confessions.map(c => [c.post_id, c]));
+    const questionMap = Object.fromEntries(questions.map(q => [q.id, q]));
+    
     const singleMap = {};
     singleOptions.forEach(o => {
       if (!singleMap[o.question_id]) singleMap[o.question_id] = [];
