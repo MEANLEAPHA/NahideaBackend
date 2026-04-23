@@ -13,7 +13,7 @@ const { register,
         getUserInfo
       } = require("../../controllers/authentication/authController");
 
-// const {protect} = require("../../middleware/authMiddleware");
+const {protect} = require("../../middleware/authMiddleware");
 
 router.post("/register", register);
 router.post("/verify-email", verifyEmail);
@@ -29,6 +29,6 @@ router.post("/change-password", changePassword);
 router.post("/new-password", newPassword);
 
 
-router.get("/me", getUserInfo);
+router.get("/me", protect, getUserInfo);
 
 module.exports = router;
