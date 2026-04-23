@@ -10,6 +10,7 @@ const {redisClient} = require("../../config/redisClient");
 
 
 
+
 const createPost = async (req, res) => {
   try{
 
@@ -37,9 +38,35 @@ const createPost = async (req, res) => {
         return res.status(404).json({ message: "Missing post type." });
       };
 
+        // Generate only if anonymous
+    let anonName = null;
+    let anonColor = null;
+
+    if (isAnonymous === 1) {
+      const anonymousName = () => {
+        const generateNum = Array.from({ length: 6 }, () =>
+          Math.floor(Math.random() * 10)
+        ).join("");
+        return `An${generateNum}nymous`;
+      };
+
+      const anonymousBgColor = () => {
+        const colors = [
+          "yellowgreen", "skyblue", "tomato", "yellow",
+          "purple", "orange", "grey", "black", "brown",
+          "pink", "cyan"
+        ];
+        const randomIndex = Math.floor(Math.random() * colors.length);
+        return colors[randomIndex];
+      };
+
+      anonName = anonymousName();
+      anonColor = anonymousBgColor();
+    }
+
       const [result] = await pool.query(
-        "INSERT INTO posts (user_id, post_type, is_anonymous) VALUES (?, ?, ?)",
-        [userId, post_type, isAnonymous]
+        "INSERT INTO posts (user_id, post_type, is_anonymous, anonymous_name, anonymous_bg_color) VALUES (?, ?, ?, ?, ?)",
+        [userId, post_type, isAnonymous, anonName, anonColor]
       );
 
       const postId = result.insertId;

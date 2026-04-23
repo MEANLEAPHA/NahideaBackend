@@ -8,7 +8,9 @@ const { register,
         resendForgetPasswordPin,
         setNewPassword,
         changePassword,
-        newPassword
+        newPassword,
+
+        getUserInfo
       } = require("../../controllers/authentication/authController");
 
 // const {protect} = require("../../middleware/authMiddleware");
@@ -25,5 +27,8 @@ router.post("/set-new-password", setNewPassword);
 
 router.post("/change-password", changePassword);
 router.post("/new-password", newPassword);
+
+
+router.get("/me", getUserInfo);
 
 module.exports = router;
