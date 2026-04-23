@@ -563,20 +563,24 @@ const newPassword = async (req, res) => {
     return res.status(500).json({ message: "Server error during password update" });
   }
 };
-const getUserInfo = async (req,res) => {
-  try{
+const getUserInfo = async (req, res) => {
+  try {
     const userId = req.user.userId;
-    const [userInfo] = await pool.query(`SELECT username, avatar_url FROM users WHERE id = ?`, [userId]);
-    if(!userInfo){
+    const [rows] = await pool.query(
+      "SELECT username, avatar_url FROM users WHERE id = ?",
+      [userId]
+    );
+
+    if (rows.length === 0) {
       return res.status(404).json({ message: "User not found" });
     }
-    return res.status(200).json({userInfo});
-  }
-  catch(err){
-    console.log("Error in getUserInfo:", err);
+
+    return res.status(200).json({ userData: rows[0] });
+  } catch (err) {
+    console.error("Error in getUserInfo:", err);
     return res.status(500).json({ message: "Server error" });
   }
-}
+};
 
 
 module.exports = {
