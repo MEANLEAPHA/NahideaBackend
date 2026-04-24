@@ -42,7 +42,7 @@ const createPost = async (req, res) => {
     let anonName = null;
     let anonColor = null;
 
-    if (isAnonymous === 1) {
+    if (Number(isAnonymous) === 1 || isAnonymous === "1") {
       const anonymousName = () => {
         const generateNum = Array.from({ length: 6 }, () =>
           Math.floor(Math.random() * 10)
@@ -305,9 +305,16 @@ const getAllPosts = async (req, res) => {
     // 2. GET BASE POSTS
     // =====================
      const [posts] = await pool.query(`
-      SELECT p.*, u.username
+      SELECT
+        p.id, p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color, p.likes_count, p.comments_count, p.views_count,
+        p.created_at, p.status,
+        u.username,
+        GROUP_CONCAT(tg.label) as tags
       FROM posts p
       JOIN users u ON p.user_id = u.id
+      LEFT JOIN post_tags pt ON pt.post_id = p.id 
+      LEFT JOIN tags tg ON tg.is = pt.tag_id
+      GROUP BY p.id
       ORDER BY p.created_at DESC
       LIMIT ? OFFSET ?
     `, [limit, offset]);
@@ -325,10 +332,11 @@ const getAllPosts = async (req, res) => {
     const questionIds = [];
 
     posts.forEach((p) => {
+
       if (p.post_type === "content") contentIds.push(p.id);
       if (p.post_type === "confession") confessionIds.push(p.id);
-
       if (p.post_type === "question") questionIds.push(p.id);
+
     });
 
     // =====================
@@ -448,7 +456,10 @@ const getAllPosts = async (req, res) => {
         data = { ...q, ...extra };
       }
 
-      return { ...post, data };
+      return { 
+        ...post, 
+        created_at: timeAgo(post.created_at), 
+        data };
     });
 
     // =====================
@@ -467,181 +478,26 @@ const getAllPosts = async (req, res) => {
   }
 };
 
-// const getAllPosts = async (req, res) => {
-//   try {
-//     const CACHE_KEY = "posts:all";
- 
-//     const cached = await redisClient.get(CACHE_KEY);
+function timeAgo(data){
 
-//     if (cached) {
-//       console.log("Cached HIT");
-//       return res.status(200).json(
-//         {
-//           source: "cache",
-//           data: JSON.parse(cached)
-//         }
-//       );
-//     }
+  // get the time now in ms
+  const getTimeNow = new Date.now();
 
-//     console.log("Cached MISS → querying DB");
+  // find the gap from post created_at in ms
+  const DiffMs = getTimeNow - new Date(date).getTime();
 
+  const seconds = Math.floor(DiffMs/1000);
+  const minutes = Math.floor(seconds/60);
+  const hours = Math.floor(minutes/60);
+  const days = Math.floor(hours/24);
 
-//     const [posts] = await pool.query(`
-//       SELECT p.*, u.username
-//       FROM posts p
-//       JOIN users u ON p.user_id = u.id
-//       ORDER BY p.created_at DESC
-//       LIMIT 50
-//     `);
+  if(seconds < 60) return "Just now";
+  if(minutes < 60) return `${minutes} mintute${minutes>1 ? "s" : ""} ago`;
+  if (hours < 24)   return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+  if (days < 7)     return `${days} day${days > 1 ? "s" : ""} ago`;
 
-//     if (!posts.length) {
-//       return res.json([]);
-//     }
-
-//     const contentIds = [];
-//     const confessionIds = [];
-//     const questionIds = [];
-
-//     posts.forEach(p => {
-//       if (p.post_type === "content") contentIds.push(p.id);
-//       if (p.post_type === "confession") confessionIds.push(p.id);
-//       if (p.post_type === "question") questionIds.push(p.id);
-//     });
-
-//     const [contents] = contentIds.length
-//       ? await pool.query(`SELECT * FROM content WHERE post_id IN (?)`, [contentIds])
-//       : [];
-
-//     const [confessions] = confessionIds.length 
-//       ? await pool.query(`SELECT * FROM confession WHERE post_id IN (?)`, [confessionIds])
-//       : [];
-
-//     const [questions] = questionIds.length
-//       ? await pool.query(`SELECT * FROM question WHERE post_id IN (?)`, [questionIds])
-//       : [];
-
-
-//     const questionIdsList = questions.map(q => q.id);
-
-//     const [closed] = questionIdsList.length
-//       ? await pool.query(`SELECT * FROM closedend WHERE question_id IN (?)`, [questionIdsList])
-//       : [];
-
-//     const [ranges] = questionIdsList.length
-//       ? await pool.query(`SELECT * FROM question_range WHERE question_id IN (?)`, [questionIdsList])
-//       : [];
-
-//     const [ratings] = questionIdsList.length
-//       ? await pool.query(`SELECT * FROM rating WHERE question_id IN (?)`, [questionIdsList])
-//       : [];
-
-//     const [singleOptions] = questionIdsList.length
-//       ? await pool.query(`
-//           SELECT sco.*, sc.question_id
-//           FROM singlechoice_option sco
-//           JOIN singlechoice sc ON sco.singlechoice_id = sc.id
-//           WHERE sc.question_id IN (?)
-//         `, [questionIdsList])
-//       : [];
-
-//     const [multipleOptions] = questionIdsList.length
-//       ? await pool.query(`
-//           SELECT mco.*, mc.question_id
-//           FROM multiplechoice_option mco
-//           JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
-//           WHERE mc.question_id IN (?)
-//         `, [questionIdsList])
-//       : [];
-
-//     const [rankingItems] = questionIdsList.length
-//       ? await pool.query(`
-//           SELECT ri.*, ro.question_id
-//           FROM ranking_item ri
-//           JOIN rankingorder ro ON ri.ranking_id = ro.id
-//           WHERE ro.question_id IN (?)
-//         `, [questionIdsList])
-//       : [];
-
-//     // maps
-//     const closedMap = Object.fromEntries(closed.map(c => [c.question_id, c]));
-//     const rangeMap = Object.fromEntries(ranges.map(r => [r.question_id, r]));
-//     const ratingMap = Object.fromEntries(ratings.map(r => [r.question_id, r]));
-
-//     const contentMap = Object.fromEntries(contents.map(c => [c.post_id, c]));
-//     const confessionMap = Object.fromEntries(confessions.map(c => [c.post_id, c]));
-//     const questionMap = Object.fromEntries(questions.map(q => [q.id, q]));
-
-//     const singleMap = {};
-//     singleOptions.forEach(o => {
-//       if (!singleMap[o.question_id]) singleMap[o.question_id] = [];
-//       singleMap[o.question_id].push(o);
-//     });
-
-//     const multipleMap = {};
-//     multipleOptions.forEach(o => {
-//       if (!multipleMap[o.question_id]) multipleMap[o.question_id] = [];
-//       multipleMap[o.question_id].push(o);
-//     });
-
-//     const rankingMap = {};
-//     rankingItems.forEach(o => {
-//       if (!rankingMap[o.question_id]) rankingMap[o.question_id] = [];
-//       rankingMap[o.question_id].push(o);
-//     });
-
-//     const final = posts.map(p => {
-//       let data = null;
-
-//       if (p.post_type === "content") data = contentMap[p.id];
-//       if (p.post_type === "confession") data = confessionMap[p.id];
-
-//       if (p.post_type === "question") {
-//         const q = questionMap[p.id];
-//         if (!q) return { ...p, data: null };
-
-//         let extra = {};
-
-//         switch (q.question_type) {
-//           case "closedend":
-//             extra = closedMap[q.id];
-//             break;
-//           case "range":
-//             extra = rangeMap[q.id];
-//             break;
-//           case "singlechoice":
-//             extra = { choices: singleMap[q.id] || [] };
-//             break;
-//           case "multiplechoice":
-//             extra = { choices: multipleMap[q.id] || [] };
-//             break;
-//           case "rankingorder":
-//             extra = { items: rankingMap[q.id] || [] };
-//             break;
-//           case "rating":
-//             extra = ratingMap[q.id];
-//             break;
-//         }
-
-//         data = { ...q, ...extra };
-//       }
-
-//       return { ...p, data };
-//     });
-
-
-//     await redisClient.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
-
-//      return res.status(200).json({
-//       source: "db",
-//       data: final,
-//     });
-
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Server error" });
-//   }
-// };
-
+  return new Date(date).toLocaleDateString();
+}
 
 
 const getPosts = async (req, res) => {
