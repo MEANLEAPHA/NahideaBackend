@@ -481,7 +481,7 @@ const getAllPosts = async (req, res) => {
 function timeAgo(data){
 
   // get the time now in ms
-  const getTimeNow = new Date.now();
+  const getTimeNow =  Date.now();
 
   // find the gap from post created_at in ms
   const DiffMs = getTimeNow - new Date(date).getTime();
