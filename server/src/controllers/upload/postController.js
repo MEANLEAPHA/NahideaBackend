@@ -313,7 +313,7 @@ const getAllPosts = async (req, res) => {
       FROM posts p
       JOIN users u ON p.user_id = u.id
       LEFT JOIN post_tags pt ON pt.post_id = p.id 
-      LEFT JOIN tags tg ON tg.is = pt.tag_id
+      LEFT JOIN tags tg ON tg.id = pt.tag_id
       GROUP BY p.id
       ORDER BY p.created_at DESC
       LIMIT ? OFFSET ?
