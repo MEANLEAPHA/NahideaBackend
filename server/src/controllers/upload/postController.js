@@ -478,7 +478,7 @@ const getAllPosts = async (req, res) => {
   }
 };
 
-function timeAgo(data){
+function timeAgo(date){
 
   // get the time now in ms
   const getTimeNow =  Date.now();
