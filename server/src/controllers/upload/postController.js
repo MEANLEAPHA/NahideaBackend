@@ -127,7 +127,7 @@ const createPost = async (req, res) => {
 
             await pool.query(
                 `INSERT INTO confession(user_id, post_id, type, title, media_type, media_url) 
-                VALUE(?, ?, ?, ?, ?, ?, ?)`,
+                VALUE(?, ?, ?, ?, ?, ?)`,
                 [userId, postId, confession_type, confession_title, media_type, media_url]
             );
         },
