@@ -1,8 +1,9 @@
 const pool = require("../../config/db");
 const GIPHY_API_KEY = process.env.GIPHY_API_KEY;
 const ffmpeg = require("fluent-ffmpeg");
-const fs = require("fs");
-const path = require("path");
+const stream = require("stream");
+const FormData = require("form-data");
+const fetch = require("node-fetch");
 
 const uploadGif = async (req, res) => {
   try {
@@ -11,25 +12,26 @@ const uploadGif = async (req, res) => {
     const file = req.file;
     if (!file) return res.status(400).json({ error: "No file uploaded" });
 
-    // Save temp file
-    const tempPath = path.join(__dirname, "../../tmp", file.originalname);
-    fs.writeFileSync(tempPath, file.buffer);
+    // Stream the uploaded buffer into ffmpeg
+    const bufferStream = new stream.PassThrough();
+    bufferStream.end(file.buffer);
 
-    // Convert video/image to GIF if not already .gif
-    const outputPath = path.join(__dirname, "../../tmp", Date.now() + ".gif");
+    // Capture ffmpeg output into memory
+    const chunks = [];
     await new Promise((resolve, reject) => {
-      ffmpeg(tempPath)
+      ffmpeg(bufferStream)
         .outputOptions([
           "-t 5", // limit to 5 seconds
           "-vf fps=10,scale=320:-1:flags=lanczos" // resize & frame rate
         ])
         .toFormat("gif")
-        .save(outputPath)
+        .pipe()
+        .on("data", (chunk) => chunks.push(chunk))
         .on("end", resolve)
         .on("error", reject);
     });
 
-    const gifBuffer = fs.readFileSync(outputPath);
+    const gifBuffer = Buffer.concat(chunks);
 
     // Upload to GIPHY
     const formData = new FormData();
