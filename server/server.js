@@ -23,7 +23,7 @@ const gifRoutes = require("./src/routes/upload/gifRoute");
 
 app.use("/api", authRoutes);
 app.use("/api", postRoutes);
-app.use("/api/gifs/", gifRoutes); 
+app.use("/api/gifs", gifRoutes); 
 
 app.get("/", (req, res) => {
   res.send("API Server Running");
