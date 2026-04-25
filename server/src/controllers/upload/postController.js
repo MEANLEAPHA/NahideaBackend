@@ -107,9 +107,9 @@ const createPost = async (req, res) => {
             mediaType = results.map(r => r.type);
 
             await pool.query(
-              `INSERT INTO content(user_id, post_id, type, title, text_body, media_type, media_url, is_anonymous)
-                    VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [userId, postId, content_type, content_title, text_body,JSON.stringify(mediaType), JSON.stringify(mediaUrl), isAnonymous]
+              `INSERT INTO content(user_id, post_id, type, title, text_body, media_type, media_url)
+                    VALUES(?, ?, ?, ?, ?, ?, ?)`,
+                    [userId, postId, content_type, content_title, text_body,JSON.stringify(mediaType), JSON.stringify(mediaUrl)]
             );
         },
         confession: async() => {
@@ -126,9 +126,9 @@ const createPost = async (req, res) => {
             const media_type = mediaType || null;
 
             await pool.query(
-                `INSERT INTO confession(user_id, post_id, type, title, media_type, media_url, is_anonymous) 
+                `INSERT INTO confession(user_id, post_id, type, title, media_type, media_url) 
                 VALUE(?, ?, ?, ?, ?, ?, ?)`,
-                [userId, postId, confession_type, confession_title, media_type, media_url, isAnonymous]
+                [userId, postId, confession_type, confession_title, media_type, media_url]
             );
         },
         question: async() => {
