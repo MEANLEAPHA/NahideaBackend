@@ -6,7 +6,7 @@ const cloudinary = require("../../config/cloudinary");
 
 const uploadGif = async (req, res) => {
   try {
-    const { gif_name, gif_label, gif_url, gif_type } = req.body;
+    const {gif_name, gif_label, gif_url, gif_type } = req.body;
 
     await pool.query(
       "INSERT INTO gifs (gif_name, gif_label, gif_url, gif_type) VALUES (?, ?, ?, ?)",
