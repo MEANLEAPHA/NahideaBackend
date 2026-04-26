@@ -9,7 +9,7 @@ const uploadGif = async (req, res) => {
     const { gif_name, gif_label, gif_url, gif_type } = req.body;
 
     await pool.query(
-      "INSERT INTO gifs (gif_name, gi_label, gif_url, gif_type) VALUES (?, ?, ?, ?)",
+      "INSERT INTO gifs (gif_name, gif_label, gif_url, gif_type) VALUES (?, ?, ?, ?)",
       [gif_name, gif_label, gif_url, gif_type]
     );
 
