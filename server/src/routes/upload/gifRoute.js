@@ -7,7 +7,7 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 const { protect } = require("../../middleware/authMiddleware");
 
-router.post("/upload", upload.single("gif"), protect, uploadGif);
+router.post("/upload", upload.single("gif"), uploadGif);
 router.get("/", getGifs);
 router.get("/search", searchGif);
 

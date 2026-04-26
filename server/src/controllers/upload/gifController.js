@@ -7,8 +7,8 @@ const fetch = require("node-fetch");
 
 const uploadGif = async (req, res) => {
   try {
-    const { gif_name } = req.body;
-    const userId = req.user.userId;
+    const { gif_name,userId } = req.body;
+    // const userId = req.user.userId;
     const file = req.file;
     if (!file) return res.status(400).json({ error: "No file uploaded" });
 
