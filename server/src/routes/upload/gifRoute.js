@@ -17,9 +17,9 @@ const multer = require("multer");
 const { uploadGif, getGifs, searchGif } = require("../../controllers/upload/gifController");
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage() });
 
-router.post("/upload", upload.single("gif"), uploadGif);
+
+router.post("/upload", uploadGif);
 router.get("/getGifs", getGifs);
 router.get("/search", searchGif);
 
