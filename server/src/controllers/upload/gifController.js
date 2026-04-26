@@ -15,7 +15,7 @@ const uploadGif = async (req, res) => {
 
     res.json({
       success: true,
-      gif_url: finalGifUrl,
+      gif_url: gif_url,
     });
 
   } catch (err) {
