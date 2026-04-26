@@ -20,7 +20,7 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 router.post("/upload", upload.single("gif"), uploadGif);
-router.get("/", getGifs);
+router.get("/getGifs", getGifs);
 router.get("/search", searchGif);
 
 module.exports = router;
