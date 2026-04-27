@@ -8,7 +8,6 @@ const { redisClient } = require("../../config/redisClient");
 const uploadGif = async (req, res) => {
   try {
     const {gif_name, gif_label, gif_url, gif_type } = req.body;
-
     await pool.query(
       "INSERT INTO gifs (gif_name, gif_label, gif_url, gif_type) VALUES (?, ?, ?, ?)",
       [gif_name, gif_label, gif_url, gif_type]
@@ -213,4 +212,79 @@ const searchByCategory = async (req, res) => {
   }
 };
 
-module.exports = { uploadGif, getGifs, searchGif, searchByCategory };
+
+// Add favorite
+const addFavorite = async (req, res) => {
+  try {
+    const { gif_id } = req.body;
+      const userId = req.user.userId;
+    await pool.query(
+      "INSERT IGNORE INTO fav_gifs (user_id, gif_id) VALUES (?, ?)",
+      [userId, gif_id]
+    );
+    res.status(200).json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Add favorite failed" });
+  }
+};
+
+// Remove favorite
+const removeFavorite = async (req, res) => {
+  try {
+    const { gif_id } = req.body;
+      const userId = req.user.userId;
+    await pool.query(
+      "DELETE FROM fav_gifs WHERE user_id = ? AND gif_id = ?",
+      [userId, gif_id]
+    );
+    res.status(200).json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Remove favorite failed" });
+  }
+};
+
+// Get favorites (fallback if localStorage empty)
+const getFavorites = async (req, res) => {
+  try {
+    const { user_id } = req.query;
+    const [rows] = await pool.query(
+      `SELECT g.id as gif_id, g.gif_name, g.gif_url
+       FROM fav_gifs f
+       JOIN gifs g ON f.gif_id = g.id
+       WHERE f.user_id = ?`,
+      [user_id]
+    );
+    res.status(200).json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: "Fetch favorites failed" });
+  }
+};
+
+// Get favorites feed
+const getUserFavoritesFeed = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 25;
+    const offset = (page - 1) * limit;
+    const { user_id } = req.query;
+
+    const [rows] = await pool.query(
+      `SELECT g.id as gif_id, g.gif_name, g.gif_url
+       FROM fav_gifs f
+       JOIN gifs g ON f.gif_id = g.id
+       WHERE f.user_id = ?
+       ORDER BY f.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [user_id, limit, offset]
+    );
+
+    res.status(200).json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: "Fetch favorites failed" });
+  }
+};
+
+
+module.exports = { uploadGif, getGifs, searchGif, searchByCategory,
+                   addFavorite, removeFavorite, getFavorites, getUserFavoritesFeed
+ };
