@@ -128,7 +128,8 @@ const getGifs = async (req, res) => {
       return res.status(200).json({ source: "db", data: [] });
     }
 
-    await redisClient.set(CACHE_KEY, JSON.stringify(rows));
+    await redisClient.set(CACHE_KEY, JSON.stringify(rows), {EX: 300});
+       
     return res.status(200).json({ data: rows });
   } catch (err) {
     res.status(500).json({ error: "Fetch failed" });
@@ -167,7 +168,7 @@ const searchGif = async (req, res) => {
       return res.status(200).json({ source: "db", data: [] });
     }
 
-    await redisClient.set(CACHE_KEY, JSON.stringify(rows));
+    await redisClient.set(CACHE_KEY, JSON.stringify(rows), {EX: 300});
     return res.status(200).json({ data: rows });
   } catch (err) {
     res.status(500).json({ error: "Fetch failed" });
@@ -205,7 +206,7 @@ const searchByCategory = async (req, res) => {
       return res.status(200).json({ source: "db", data: [] });
     }
 
-    await redisClient.set(CACHE_KEY, JSON.stringify(rows));
+    await redisClient.set(CACHE_KEY, JSON.stringify(rows), {EX: 300});
     return res.status(200).json({ data: rows });
   } catch (err) {
     res.status(500).json({ error: "Category fetch failed" });
