@@ -14,7 +14,7 @@
 // module.exports = router;
 const express = require("express");
 const multer = require("multer");
-const { uploadGif, getGifs, searchGif } = require("../../controllers/upload/gifController");
+const { uploadGif, getGifs, searchGif,searchByCategory } = require("../../controllers/upload/gifController");
 
 const router = express.Router();
 
@@ -22,5 +22,7 @@ const router = express.Router();
 router.post("/upload", uploadGif);
 router.get("/getGifs", getGifs);
 router.get("/search", searchGif);
+router.get("/category", searchByCategory);
+
 
 module.exports = router;

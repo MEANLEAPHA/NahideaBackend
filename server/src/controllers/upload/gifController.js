@@ -176,4 +176,41 @@ const searchGif = async (req, res) => {
 };
 
 
-module.exports = { uploadGif, getGifs, searchGif };
+const searchByCategory = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 25;
+    const offset = (page - 1) * limit;
+    const { category } = req.query;
+
+    const CACHE_KEY = `gifs:category:${category}:page:${page}`;
+    const cached = await redisClient.get(CACHE_KEY);
+
+    if (cached) {
+      console.log("CACHE HIT (category)");
+      return res.status(200).json({ source: "cache", data: JSON.parse(cached) });
+    }
+
+    console.log("CACHE MISS → DB");
+
+    const [rows] = await pool.query(
+      `SELECT * 
+       FROM gifs 
+       WHERE gif_type = ? 
+       ORDER BY created_at DESC 
+       LIMIT ? OFFSET ?`,
+      [category, limit, offset]
+    );
+
+    if (!rows.length) {
+      return res.status(200).json({ source: "db", data: [] });
+    }
+
+    await redisClient.set(CACHE_KEY, JSON.stringify(rows));
+    return res.status(200).json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: "Category fetch failed" });
+  }
+};
+
+module.exports = { uploadGif, getGifs, searchGif, searchByCategory };
