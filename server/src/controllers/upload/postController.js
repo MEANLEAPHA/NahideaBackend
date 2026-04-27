@@ -269,7 +269,7 @@ const createPost = async (req, res) => {
     // clear old cache
     await redisClient.del("posts:page:1");
 
-      }
+    }
     catch(error){
       console.error(error.message);
       await Errors(error.message, error.code, "post-controller", error.stack);

@@ -3,6 +3,7 @@
 // module.exports = { uploadGif, getGifs, searchGif };
 const pool = require("../../config/db");
 const cloudinary = require("../../config/cloudinary");
+const { redisClient } = require("../../config/redisClient");
 
 const uploadGif = async (req, res) => {
   try {
@@ -17,6 +18,7 @@ const uploadGif = async (req, res) => {
       success: true,
       gif_url: gif_url,
     });
+     await redisClient.del("gifs:page:1");
 
   } catch (err) {
     console.error("UPLOAD ERROR:", err);
@@ -24,30 +26,154 @@ const uploadGif = async (req, res) => {
   }
 };
 
+// const getGifs = async (req, res) => {
+//   try {
+//     const page = parseInt(req.query.page) ||1;
+//     const limit = 25;
+//     const offset = (page - 1) * limit;
+
+//     const CACHE_KEY = `gifs:page:${page}`;
+
+
+//     const cached = await redisClient.get(CACHE_KEY);
+
+//     if(cached){
+//       console.log('cache hit on gif')
+//       return res.status(200).json({
+//         data: JSON.parse(cached)
+//       })
+//     }
+//     const [rows] = await pool.query(
+//       "SELECT * FROM gifs ORDER BY created_at DESC LIMIT ? OFFSET ?",
+//       [limit, offset]
+//     );
+//     if(!rows.length){
+//       return res.status(200).json({ source: "db", data: [] });
+//     }
+//     await redisClient.set(CACHE_KEY, JSON.stringify(rows));
+//     return res.status(200).json({
+//       data: rows
+//     })
+//   } catch (err) {
+//     res.status(500).json({ error: "Fetch failed" });
+//   }
+// };
+
+// const searchGif = async (req, res) => {
+//   try {
+//     const page = parseInt(req.query.page) || 1;
+//     const limit = 25;
+//     const offset = (page - 1) * limit;
+
+//     const { name } = req.query;
+
+//     const CACHE_KEY = `gifs:${name}:page:${page}`;
+
+//     const cached = await redisClient.get(CACHE_KEY);
+
+//     if (cached) {
+//       console.log("CACHE HIT");
+//       return res.status(200).json({
+//         source: "cache",
+//         data: JSON.parse(cached),
+//       });
+//     }
+
+//     console.log("CACHE MISS → DB");
+
+//     const [rows] = await pool.query(
+//       `SELECT * 
+//       FROM gifs 
+//       WHERE gif_name LIKE ? 
+//           OR gif_label LIKE ? 
+//       ORDER BY created_at DESC 
+//       LIMIT ? OFFSET ?`,
+//       [`%${name}%`, `%${name}%`, limit, offset]
+//     );
+
+
+//     if (!rows.length) {
+//       return res.status(200).json({ source: "db", data: [] });
+//     }
+
+//     await redisClient.set(CACHE_KEY, JSON.stringify(rows));
+
+//     return res.status(200).json({
+//       data: rows,
+//     });
+//   } catch (err) {
+//     res.status(500).json({ error: "Fetch failed" });
+//   }
+// };
+   // getGifs
 const getGifs = async (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 25;
+    const offset = (page - 1) * limit;
+
+    const CACHE_KEY = `gifs:page:${page}`;
+    const cached = await redisClient.get(CACHE_KEY);
+
+    if (cached) {
+      console.log("cache hit on gif");
+      return res.status(200).json({ data: JSON.parse(cached) });
+    }
+
     const [rows] = await pool.query(
-      "SELECT * FROM gifs ORDER BY created_at DESC"
+      "SELECT * FROM gifs ORDER BY created_at DESC LIMIT ? OFFSET ?",
+      [limit, offset]
     );
-    res.json(rows);
+
+    if (!rows.length) {
+      return res.status(200).json({ source: "db", data: [] });
+    }
+
+    await redisClient.set(CACHE_KEY, JSON.stringify(rows));
+    return res.status(200).json({ data: rows });
   } catch (err) {
     res.status(500).json({ error: "Fetch failed" });
   }
 };
 
+// searchGif
 const searchGif = async (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 25;
+    const offset = (page - 1) * limit;
     const { name } = req.query;
 
+    const CACHE_KEY = `gifs:${name}:page:${page}`;
+    const cached = await redisClient.get(CACHE_KEY);
+
+    if (cached) {
+      console.log("CACHE HIT");
+      return res.status(200).json({ source: "cache", data: JSON.parse(cached) });
+    }
+
+    console.log("CACHE MISS → DB");
+
     const [rows] = await pool.query(
-      "SELECT * FROM gifs WHERE gif_name LIKE ? ORDER BY created_at DESC",
-      [`%${name}%`]
+      `SELECT * 
+       FROM gifs 
+       WHERE gif_name LIKE ? 
+          OR gif_label LIKE ? 
+       ORDER BY created_at DESC 
+       LIMIT ? OFFSET ?`,
+      [`%${name}%`, `%${name}%`, limit, offset]
     );
 
-    res.json(rows);
-  } catch {
-    res.status(500).json({ error: "Search failed" });
+    if (!rows.length) {
+      return res.status(200).json({ source: "db", data: [] });
+    }
+
+    await redisClient.set(CACHE_KEY, JSON.stringify(rows));
+    return res.status(200).json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: "Fetch failed" });
   }
 };
+
 
 module.exports = { uploadGif, getGifs, searchGif };
