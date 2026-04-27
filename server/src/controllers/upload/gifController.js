@@ -247,13 +247,13 @@ const removeFavorite = async (req, res) => {
 // Get favorites (fallback if localStorage empty)
 const getFavorites = async (req, res) => {
   try {
-    const { user_id } = req.query;
+    const userId = req.user.userId;
     const [rows] = await pool.query(
       `SELECT g.id as gif_id, g.gif_name, g.gif_url
        FROM fav_gifs f
        JOIN gifs g ON f.gif_id = g.id
        WHERE f.user_id = ?`,
-      [user_id]
+      [userId]
     );
     res.status(200).json({ data: rows });
   } catch (err) {
@@ -267,7 +267,10 @@ const getUserFavoritesFeed = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = 25;
     const offset = (page - 1) * limit;
-    const { user_id } = req.query;
+   
+    const userId = req.user.userId;
+  
+
 
     const [rows] = await pool.query(
       `SELECT g.id as gif_id, g.gif_name, g.gif_url
@@ -276,7 +279,7 @@ const getUserFavoritesFeed = async (req, res) => {
        WHERE f.user_id = ?
        ORDER BY f.created_at DESC
        LIMIT ? OFFSET ?`,
-      [user_id, limit, offset]
+      [userId, limit, offset]
     );
 
     res.status(200).json({ data: rows });
