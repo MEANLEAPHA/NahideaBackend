@@ -2,7 +2,6 @@
 
 // module.exports = { uploadGif, getGifs, searchGif };
 const pool = require("../../config/db");
-const cloudinary = require("../../config/cloudinary");
 const { redisClient } = require("../../config/redisClient");
 
 const uploadGif = async (req, res) => {
@@ -225,7 +224,8 @@ const addFavorite = async (req, res) => {
     );
     res.status(200).json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: "Add favorite failed" });
+    console.log(err.message);
+    res.status(500).json({ error: "Add Gifs to favorite failed" });
   }
 };
 

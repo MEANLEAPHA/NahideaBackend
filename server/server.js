@@ -19,11 +19,13 @@ app.use(express.json());
 const authRoutes = require("./src/routes/authentication/authRoutes");
 const postRoutes = require("./src/routes/upload/postRoutes");
 const gifRoutes = require("./src/routes/upload/gifRoute");
+const postArchiveRoutes = require("./src/routes/upload/postArchiveRoute");
 
 
 app.use("/api", authRoutes);
 app.use("/api", postRoutes);
 app.use("/api/gifs", gifRoutes); 
+app.use("/api", postArchiveRoutes);
 
 app.get("/", (req, res) => {
   res.send("API Server Running");
