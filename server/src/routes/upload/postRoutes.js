@@ -3,10 +3,9 @@ const { protect } = require("../../middleware/authMiddleware");
 
 const {
   createPost,
-  getPosts,
-  getPostById,
   markSolved,
-  getAllPosts
+  getAllPosts,
+  getPostsById
 } = require("../../controllers/upload/postController");
 const {
   content,
@@ -33,10 +32,8 @@ router.post("/create-posts", protect,
 
   router.get("/all-posts", getAllPosts);
 
+  router.get("/get-post/:id", getPostsById);
 
-
-router.get("/", getPosts);
-router.get("/:id", getPostById);
 
 
 router.post("/:id/comments", protect, addComment);

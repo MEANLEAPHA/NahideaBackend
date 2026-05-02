@@ -21,11 +21,14 @@ const postRoutes = require("./src/routes/upload/postRoutes");
 const gifRoutes = require("./src/routes/upload/gifRoute");
 const postArchiveRoutes = require("./src/routes/upload/postArchiveRoute");
 
+const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
+
 
 app.use("/api", authRoutes);
 app.use("/api", postRoutes);
 app.use("/api/gifs", gifRoutes); 
 app.use("/api", postArchiveRoutes);
+app.use("/api", postHistoryRoutes);
 
 app.get("/", (req, res) => {
   res.send("API Server Running");

@@ -8,12 +8,8 @@ require("dotenv").config();
 // Redis Cache
 const {redisClient} = require("../../config/redisClient");
 
-
-
-
 const createPost = async (req, res) => {
   try{
-
       const { 
               // post based
               post_type, tags = [], isAnonymous,
@@ -277,7 +273,6 @@ const createPost = async (req, res) => {
     }
 }; 
 
-
 const getAllPosts = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -299,7 +294,7 @@ const getAllPosts = async (req, res) => {
       });
     }
 
-    console.log("CACHE MISS → DB");
+   
 
     // =====================
     // 2. GET BASE POSTS
@@ -478,6 +473,129 @@ const getAllPosts = async (req, res) => {
   }
 };
 
+const getPostsById = async(req, res)=>{
+
+  try{
+    const {id} = req.params;
+    const CACHE_KEY = `posts:id:${id}`;
+
+    const cached = await redisClient.get(CACHE_KEY);
+
+    if (cached) {
+      console.log("CACHE HIT");
+      return res.status(200).json({
+        source: "cache",
+        data: JSON.parse(cached),
+      });
+    }
+
+    const [aboutpost] = await pool.query(
+      `SELECT 
+        p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color, p.status, p.view_count, p.comment_count,
+        p.created_at, p.user_id, p.post_id,
+        u.username,
+        GROUP_CONCAT(tg.label) as tags
+        FROM posts p 
+        JOIN users u ON p.user_id = u.id
+        LEFT JOIN post_tags pt ON p.id = pt.post_id
+        LEFT JOIN tags tg ON pt.tag_id = tg.id
+        WHERE p.id = ?
+        GROUP BY p.id`,
+      [id]
+    )
+    if (!aboutpost.length) {
+      return res.status(404).json({ message: "Post not found or deleted" });
+    }
+
+    const post = aboutpost[0];
+
+    let data = null;
+   
+    if(post.post_type === 'content'){
+      const [datas] = await pool.query(
+        `SELECT id, type, title, text_body, media_url FROM content WHERE post_id = ?`,
+        [id]
+      )
+      data = datas[0];
+    };
+    
+    if(post.post_type === 'confession'){
+      const [datas] = await pool.query(
+        `SELECT id, type, title, media_url FROM confession WHERE post_id = ?`,
+        [id]
+      )
+      data = datas[0];
+    };
+
+    if(post.post_type === 'question'){
+      const [rows] = await pool.query(
+          `SELECT id, question_type, question_related_to, title, media_url FROM question WHERE post_id = ?`,
+          [id]
+        );
+        const row = rows[0];
+        switch(row.question_type){   
+
+          case 'range' :
+            const [rangeRows] = await pool.query(
+                `SELECT * FROM question_range WHERE question_id = ?`,
+                [row.id]
+              );
+            const range = rangeRows[0] || {};
+            data = { ...row, ...range };
+            break;
+
+          case 'rating':
+            const [ratingRows] = await pool.query(
+              `SELECT * FROM rating WHERE question_id = ?`,
+              [row.id]
+            );
+            const rating = ratingRows[0] || {};
+            data = { ...row, ...rating };
+            break;
+          
+          case 'singlechoice':
+            const [singleRows] = await pool.query(`
+              SELECT sco.*, sc.question_id
+              FROM singlechoice_option sco
+              JOIN singlechoice sc ON sco.singlechoice_id = sc.id
+              WHERE sc.question_id = ?`, [row.id]);
+            data = { ...row, choices: singleRows };
+            break;
+
+          case 'multiplechoice':
+            const [multiRows] = await pool.query(`
+              SELECT mco.*, mc.question_id
+              FROM multiplechoice_option mco
+              JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
+              WHERE mc.question_id = ?`, [row.id]);
+            data = { ...row, choices: multiRows };
+            break;
+
+          case 'rankingorder' :
+            const [rankRows] = await pool.query(`
+              SELECT ri.*, ro.question_id
+              FROM ranking_item ri
+              JOIN rankingorder ro ON ri.ranking_id = ro.id
+              WHERE ro.question_id = ?`, [row.id]);
+            data = { ...row, items: rankRows };
+            break;
+        }
+    }
+    const final = { ...post, ...data };
+     
+    await redisClient.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
+
+    return res.status(200).json({
+      source: "db",
+      data: final,
+    });
+
+  }
+  catch(err){
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+}
 function timeAgo(date){
 
   // get the time now in ms
@@ -504,36 +622,6 @@ function timeAgo(date){
 }
 
 
-const getPosts = async (req, res) => {
-  const [rows] = await pool.query(
-    "SELECT p.*, u.username FROM posts p JOIN users u ON p.user_id = u.id ORDER BY p.created_at DESC"
-  );
-  res.json(rows);
-};
-
-const getPostById = async (req, res) => {
-  const { id } = req.params;
-
-  const [post] = await pool.query(
-    "SELECT * FROM posts WHERE id=?",
-    [id]
-  );
-
-  const [comments] = await pool.query(
-    "SELECT * FROM comments WHERE post_id=?",
-    [id]
-  );
-
-  const [options] = await pool.query(
-    "SELECT * FROM decision_options WHERE post_id=?",
-    [id]
-  );
-
-  res.json({ post: post[0], comments, options });
-};
-
-
-
 const markSolved = async (req, res) => {
   const { id } = req.params;
 
@@ -546,13 +634,11 @@ const markSolved = async (req, res) => {
 };
 
 module.exports = {
+
   createPost,
-  getPosts,
-  getPostById,
   markSolved,
   upload,
-
-
   getAllPosts,
- 
+  getPostsById
+
 };
