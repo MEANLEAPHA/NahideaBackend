@@ -491,7 +491,7 @@ const getPostsById = async(req, res)=>{
 
     const [aboutpost] = await pool.query(
       `SELECT 
-        p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color, p.status, p.view_count, p.comment_count,
+        p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color, p.status, p.views_count, p.comments_count, p.likes_count,
         p.created_at, p.user_id, p.post_id,
         u.username,
         GROUP_CONCAT(tg.label) as tags
