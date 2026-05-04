@@ -6,7 +6,7 @@ const app = express();
 
 const { connectRedis } = require("./src/config/redisClient");
 
-require("./src/workers/hydrateViewsToDB");
+// require("./src/workers/hydrateViewsToDB");
 
 // app.use(cor());
 app.use(cors({
