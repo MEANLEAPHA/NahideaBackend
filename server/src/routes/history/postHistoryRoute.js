@@ -6,7 +6,7 @@ const {
     savePostHistory,
     removeHistoryPost,
     removeAllHistoryPost
-} = require("../../controllers/history/postHistoryController");
+} = require("../../controllers/upload/history/postHistoryController");
 
 router.get("/history-post", protect, getHistoryPost);
 router.post("/history-post/:postId", protect, savePostHistory);
