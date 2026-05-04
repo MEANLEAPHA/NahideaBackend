@@ -44,9 +44,9 @@ app.use("/api", viewPostRoutes);
 
 
 
-app.use("/api", postArchiveRoutes);
-const postArchiveRoutes = require("./src/routes/upload/postArchiveRoute");
 
+const postArchiveRoutes = require("./src/routes/upload/postArchiveRoute");
+app.use("/api", postArchiveRoutes);
 
 
 
