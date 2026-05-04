@@ -26,8 +26,8 @@ const postRoutes = require("./src/routes/upload/postRoutes");
 app.use("/api", postRoutes);
 
 // answer question 
-const answerQARoutes = require("./src/routes/upload/answerQAroute");
-app.use("/api", answerQARoutes);
+// const answerQARoutes = require("./src/routes/upload/answerQAroute");
+// app.use("/api", answerQARoutes);
 
 // gif
 const gifRoutes = require("./src/routes/upload/gifRoute");
@@ -35,18 +35,18 @@ app.use("/api/gifs", gifRoutes);
 
 
 // history recorder post
-const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
-app.use("/api", postHistoryRoutes);
+// const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
+// app.use("/api", postHistoryRoutes);
 
 // view recorder post
-const viewPostRoutes = require("./src/routes/view/viewPostRoute");
-app.use("/api", viewPostRoutes);
+// const viewPostRoutes = require("./src/routes/view/viewPostRoute");
+// app.use("/api", viewPostRoutes);
 
 
 
 
-const postArchiveRoutes = require("./src/routes/upload/postArchiveRoute");
-app.use("/api", postArchiveRoutes);
+// const postArchiveRoutes = require("./src/routes/upload/postArchiveRoute");
+// app.use("/api", postArchiveRoutes);
 
 
 
