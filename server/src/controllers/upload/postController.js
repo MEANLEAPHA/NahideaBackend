@@ -427,7 +427,7 @@ const getAllPosts = async (req, res) => {
 
           case "singlechoice":
             extra = {
-              choices: singleOptions.filter((o) => o.question_id === q.id),
+              choice: singleOptions.filter((o) => o.question_id === q.id),
             };
             break;
 

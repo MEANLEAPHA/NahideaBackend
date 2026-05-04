@@ -6,6 +6,7 @@ const app = express();
 
 const { connectRedis } = require("./src/config/redisClient");
 
+require("./src/workers/hydrateViewsToDB");
 
 // app.use(cor());
 app.use(cors({
@@ -16,19 +17,38 @@ app.use(cors({
 app.use(express.json());
 
 
+// user authentication
 const authRoutes = require("./src/routes/authentication/authRoutes");
+app.use("/api", authRoutes);
+
+// post
 const postRoutes = require("./src/routes/upload/postRoutes");
+app.use("/api", postRoutes);
+
+// answer question 
+const answerQARoutes = require("./src/routes/upload/answerQAroute");
+app.use("/api", answerQARoutes);
+
+// gif
 const gifRoutes = require("./src/routes/upload/gifRoute");
+app.use("/api/gifs", gifRoutes); 
+
+
+// history recorder post
+const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
+app.use("/api", postHistoryRoutes);
+
+// view recorder post
+const viewPostRoutes = require("./src/routes/view/viewPostRoute");
+app.use("/api", viewPostRoutes);
+
+
+
+app.use("/api", postArchiveRoutes);
 const postArchiveRoutes = require("./src/routes/upload/postArchiveRoute");
 
-const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
 
 
-app.use("/api", authRoutes);
-app.use("/api", postRoutes);
-app.use("/api/gifs", gifRoutes); 
-app.use("/api", postArchiveRoutes);
-app.use("/api", postHistoryRoutes);
 
 app.get("/", (req, res) => {
   res.send("API Server Running");
