@@ -115,13 +115,16 @@ const getQuestionById = async (req, res) => {
         data = {...question};
         break;
       case 'range':
-      const [rangeRows] = await pool.query(
-        `SELECT * FROM question_range WHERE question_id = ?`,
-        [questionId]
-      );
-      const range = rangeRows[0] || null;
+        const [rangeRows] = await pool.query(
+          `SELECT * FROM question_range WHERE question_id = ?`,
+          [questionId]
+        );
+        const range = rangeRows[0] || null;
+        if (!range) {
+          console.warn("No range data found for question_id:", questionId);
+        }
 
-      data ={ ...question, ...range };
+        data ={ ...question, ...range };
       break;
       case 'rating' :
         const [ratingRows] = await pool.query(
@@ -160,7 +163,7 @@ const getQuestionById = async (req, res) => {
 
     res.status(200).json({
       source: "db",
-      data: data,
+      datas: data,
     });
    }catch(err){
     console.error(err);
