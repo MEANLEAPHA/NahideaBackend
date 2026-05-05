@@ -1,5 +1,4 @@
 const pool = require("../../config/db");
-
 const answerQA = async (req, res) => {
     try{
         const userId = req.user.userId;
@@ -36,7 +35,7 @@ const answerQA = async (req, res) => {
                 `INSERT INTO answers 
                     (question_id, post_id, user_id, question_type, text_answer, is_anonymous, anonymous_name, anonymous_bg_color)
                     VALUES (?, ?, ?, 'openend', ?, ?, ?, ?)`,
-                [questionId, postId, userId, answerText, is_anonymous, anonymous_name, anonymous_bg_color]);
+                [questionId, postId, userId, answerText, is_anonymous || null, anonymous_name || null, anonymous_bg_color || null]);
                 break;
             case "closedend":
                 await pool.query(
@@ -166,4 +165,5 @@ const getQuestionById = async (req, res) => {
     res.status(500).json({ message: "Server error" });
    }
 }
+
 module.exports = {answerQA, getQuestionById};

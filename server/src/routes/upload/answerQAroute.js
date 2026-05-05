@@ -7,5 +7,4 @@ const {answerQA, getQuestionById} = require("../../controllers/upload/answerQAco
 
 router.post("/answer-qa/:postId/:questionId/:questionType", protect, answerQA);
 router.get("/get-question/:questionId/:questionType", getQuestionById);
-
 module.exports = router;
