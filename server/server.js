@@ -14,8 +14,6 @@ app.use(cors({
   methods: ["GET","POST","PUT","DELETE","OPTIONS"],
   allowedHeaders: ["Content-Type","Authorization"],
 }));
-
-app.options("*", cors());
 app.use(express.json());
 // app.use(cors({
 //   origin: process.env.ORIGIN_URL,
@@ -34,7 +32,7 @@ const postRoutes = require("./src/routes/upload/postRoutes");
 app.use("/api", postRoutes);
 
 // answer question 
-const answerQARoutes = require("./src/routes/upload/answerQAroute");
+const answerQARoutes = require("./src/routes/upload/postRoutes");
 app.use("/api", answerQARoutes);
 
 // gif

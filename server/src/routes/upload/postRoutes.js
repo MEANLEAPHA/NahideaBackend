@@ -6,6 +6,8 @@ const {
   markSolved,
   getAllPosts,
   getPostsById,
+  answerQA,
+  getQuestionById
 
 } = require("../../controllers/upload/postController");
 const {
@@ -36,7 +38,8 @@ router.post("/create-posts", protect,
   router.get("/get-post/:id", getPostsById);
 
 
-
+router.post("/answer-qa/:postId/:questionId/:questionType", protect, answerQA);
+router.get("/get-question/:questionId/:questionType", getQuestionById);
 
 router.post("/:id/comments", protect, addComment);
 router.post("/:id/vote", protect, vote); 
