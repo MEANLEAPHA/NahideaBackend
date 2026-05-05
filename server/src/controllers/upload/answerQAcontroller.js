@@ -3,9 +3,8 @@ const pool = require("../../config/db");
 const answerQA = async (req, res) => {
     try{
         const userId = req.user.userId;
-        const { postId }= req.params.postId;
-        const { questionId } = req.params.questionId;
-        const { questionType } = req.params.questionType;
+        const { postId, questionId, questionType } = req.params;
+
         const {
             is_anonymous, anonymous_name, anonymous_bg_color,
 
@@ -13,7 +12,7 @@ const answerQA = async (req, res) => {
             answerText,
 
             // closed
-            answerValue,
+            answerYesNo,
 
             // rating
             ratingValue,
@@ -44,7 +43,7 @@ const answerQA = async (req, res) => {
                 `INSERT INTO answers 
                     (question_id, post_id, user_id, question_type, yes_no, is_anonymous, anonymous_name, anonymous_bg_color)
                     VALUES (?, ?, ?, 'closedend', ?, ?, ?, ?)`,
-                [questionId, postId, userId, answerValue, is_anonymous, anonymous_name, anonymous_bg_color]);
+                [questionId, postId, userId, answerYesNo, is_anonymous, anonymous_name, anonymous_bg_color]);
                 break;
 
             case "rating":

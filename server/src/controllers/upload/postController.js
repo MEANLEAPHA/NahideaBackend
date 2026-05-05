@@ -621,7 +621,72 @@ function timeAgo(date){
   return `${years} year${years > 1 ? "s" : ""} ago`;
 }
 
+const getQuestionById = async (req, res) => {
+   try{
+    const { questionId, questionType } = req.params;
+   const [questions] = await pool.query(
+      `SELECT title, question_related_to WHERE id = ?`,
+    );
+    const question = questions[0];
+    const data = {};
+    switch(questionType){
+      case 'openend' :
+        data = {...question};
+        break;
+      case 'closedend' :
+        data = {...question};
+        break;
+      case 'range' :
+        const [rangeRows] = await pool.query(
+          `SELECT * FROM question_range WHERE question_id = ?`,
+          [questionId]
+        );
+        const range = rangeRows[0];
+        data = { ...question, ...range };
+        break;
+      case 'rating' :
+        const [ratingRows] = await pool.query(
+          `SELECT rating_icon_id FROM rating WHERE question_id = ?`,
+          [questionId]
+        );
+        const rating = ratingRows[0];
+        data = { ...question, ...rating };
+        break;
+      case 'singlechoice' :
+        const [singleRows] = await pool.query(`
+          SELECT sco.*, sc.question_id
+          FROM singlechoice_option sco
+          JOIN singlechoice sc ON sco.singlechoice_id = sc.id
+          WHERE sc.question_id = ?`, [questionId]);
+        data = { ...question, choice: singleRows };
+        break;
+      case 'multiplechoice' :
+        const [multiRows] = await pool.query(`
+          SELECT mco.*, mc.question_id
+          FROM multiplechoice_option mco
+          JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
+          WHERE mc.question_id = ?`, [questionId]);
+        data = { ...question, choices: multiRows };
+        break;
+      case 'rankingorder' :
+        const [rankRows] = await pool.query(`
+          SELECT ri.*, ro.question_id
+          FROM ranking_item ri
+          JOIN rankingorder ro ON ri.ranking_id = ro.id
+          WHERE ro.question_id = ?`, [questionId]);
+        data = { ...question, items: rankRows };
+        break;
+    }
 
+    res.status(200).json({
+      source: "db",
+      data: data,
+    });
+   }catch(err){
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+   }
+}
 const markSolved = async (req, res) => {
   const { id } = req.params;
 
@@ -639,6 +704,7 @@ module.exports = {
   markSolved,
   upload,
   getAllPosts,
-  getPostsById
+  getPostsById,
+  getQuestionById
 
 };
