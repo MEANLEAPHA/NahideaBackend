@@ -104,9 +104,10 @@ const getQuestionById = async (req, res) => {
     const { questionId, questionType } = req.params;
     const [questions] = await pool.query(
       `SELECT title, question_related_to FROM question WHERE id = ?`,
+      [questionId]
     );
     const question = questions[0];
-    const data = {};
+    let data = {};
     switch(questionType){
       case 'openend' :
         data = {...question};
