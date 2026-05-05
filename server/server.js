@@ -26,8 +26,8 @@ const postRoutes = require("./src/routes/upload/postRoutes");
 app.use("/api", postRoutes);
 
 // answer question 
-// const answerQARoutes = require("./src/routes/upload/answerQAroute");
-// app.use("/api", answerQARoutes);
+const answerQARoutes = require("./src/routes/upload/answerQAroute");
+app.use("/api", answerQARoutes);
 
 // gif
 const gifRoutes = require("./src/routes/upload/gifRoute");
