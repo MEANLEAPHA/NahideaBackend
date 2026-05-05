@@ -11,10 +11,18 @@ const { connectRedis } = require("./src/config/redisClient");
 // app.use(cor());
 app.use(cors({
   origin: process.env.ORIGIN_URL,
-  methods: ["GET","POST","PUT","DELETE"],
-  allowedHeaders: ["Content-Type","Authorization"]
-})); 
+  methods: ["GET","POST","PUT","DELETE","OPTIONS"],
+  allowedHeaders: ["Content-Type","Authorization"],
+}));
+
+app.options("*", cors());
 app.use(express.json());
+// app.use(cors({
+//   origin: process.env.ORIGIN_URL,
+//   methods: ["GET","POST","PUT","DELETE"],
+//   allowedHeaders: ["Content-Type","Authorization"]
+// })); 
+// app.use(express.json());
 
 
 // user authentication
