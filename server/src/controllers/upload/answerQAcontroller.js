@@ -115,23 +115,23 @@ const getQuestionById = async (req, res) => {
         data = {...question};
         break;
       case 'range' :
-        const [rangeRows] = await pool.query(
+        const [[range]] = await pool.query(
           `SELECT * FROM question_range WHERE question_id = ?`,
           [questionId]
         );
-        const range = rangeRows[0];
+        
         data = { ...question, ...range };
         break;
       case 'rating' :
-        const [ratingRows] = await pool.query(
+        const [[rating]] = await pool.query(
           `SELECT rating_icon_id FROM rating WHERE question_id = ?`,
           [questionId]
         );
-        const rating = ratingRows[0];
+        
         data = { ...question, ...rating };
         break;
       case 'singlechoice' :
-        const [singleRows] = await pool.query(`
+        const [[singleRows]] = await pool.query(`
           SELECT sco.*, sc.question_id
           FROM singlechoice_option sco
           JOIN singlechoice sc ON sco.singlechoice_id = sc.id
@@ -139,7 +139,7 @@ const getQuestionById = async (req, res) => {
         data = { ...question, choice: singleRows };
         break;
       case 'multiplechoice' :
-        const [multiRows] = await pool.query(`
+        const [[multiRows]] = await pool.query(`
           SELECT mco.*, mc.question_id
           FROM multiplechoice_option mco
           JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
@@ -147,7 +147,7 @@ const getQuestionById = async (req, res) => {
         data = { ...question, choices: multiRows };
         break;
       case 'rankingorder' :
-        const [rankRows] = await pool.query(`
+        const [[rankRows]] = await pool.query(`
           SELECT ri.*, ro.question_id
           FROM ranking_item ri
           JOIN rankingorder ro ON ri.ranking_id = ro.id
