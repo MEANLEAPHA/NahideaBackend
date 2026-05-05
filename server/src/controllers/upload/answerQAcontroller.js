@@ -145,11 +145,12 @@ const getQuestionById = async (req, res) => {
         break;
       case 'multiplechoice' :
         const [multiRows] = await pool.query(`
-          SELECT mco.*, mc.question_id
+          SELECT mco.*, mc.question_id, mc.include_all_above
           FROM multiplechoice_option mco
           JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
           WHERE mc.question_id = ?`, [questionId]);
-        data = { ...question, choices: multiRows };
+          const include_all_above = multiRows[0]?.include_all_above || 0;
+        data = { ...question, include_all_above, choices: multiRows };
         break;
       case 'rankingorder' :
         const [rankRows] = await pool.query(`
