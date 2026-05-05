@@ -74,7 +74,7 @@ const answerQA = async (req, res) => {
                 await pool.query(
                 `INSERT INTO answers 
                     (question_id, post_id, user_id, question_type, ranking_positions, is_anonymous, anonymous_name, anonymous_bg_color)
-                    VALUES (?, ?, ?, 'ranking', ?, ?, ?, ?)`,
+                    VALUES (?, ?, ?, 'rankingorder', ?, ?, ?, ?)`,
                 [questionId, postId, userId, JSON.stringify(rankingMap), is_anonymous, anonymous_name, anonymous_bg_color]);
                 break;
 
@@ -102,8 +102,8 @@ const answerQA = async (req, res) => {
 const getQuestionById = async (req, res) => {
    try{
     const { questionId, questionType } = req.params;
-   const [questions] = await pool.query(
-      `SELECT title, question_related_to WHERE id = ?`,
+    const [questions] = await pool.query(
+      `SELECT title, question_related_to FROM question WHERE id = ?`,
     );
     const question = questions[0];
     const data = {};
