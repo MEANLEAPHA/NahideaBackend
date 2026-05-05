@@ -124,14 +124,14 @@ const getQuestionById = async (req, res) => {
         break;
       case 'rating' :
         const [[rating]] = await pool.query(
-          `SELECT rating_icon_id FROM rating WHERE question_id = ?`,
+          `SELECT * FROM rating WHERE question_id = ?`,
           [questionId]
         );
         
         data = { ...question, ...rating };
         break;
       case 'singlechoice' :
-        const [[singleRows]] = await pool.query(`
+        const [singleRows] = await pool.query(`
           SELECT sco.*, sc.question_id
           FROM singlechoice_option sco
           JOIN singlechoice sc ON sco.singlechoice_id = sc.id
@@ -139,7 +139,7 @@ const getQuestionById = async (req, res) => {
         data = { ...question, choice: singleRows };
         break;
       case 'multiplechoice' :
-        const [[multiRows]] = await pool.query(`
+        const [multiRows] = await pool.query(`
           SELECT mco.*, mc.question_id
           FROM multiplechoice_option mco
           JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
@@ -147,7 +147,7 @@ const getQuestionById = async (req, res) => {
         data = { ...question, choices: multiRows };
         break;
       case 'rankingorder' :
-        const [[rankRows]] = await pool.query(`
+        const [rankRows] = await pool.query(`
           SELECT ri.*, ro.question_id
           FROM ranking_item ri
           JOIN rankingorder ro ON ri.ranking_id = ro.id
