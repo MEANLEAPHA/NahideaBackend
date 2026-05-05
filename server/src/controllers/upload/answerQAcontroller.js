@@ -114,19 +114,21 @@ const getQuestionById = async (req, res) => {
       case 'closedend' :
         data = {...question};
         break;
-      case 'range' :
-        const [[range]] = await pool.query(
-          `SELECT * FROM question_range WHERE question_id = ?`,
-          [questionId]
-        );
-        
-        data = { ...question, ...range };
-        break;
+      case 'range':
+      const [rangeRows] = await pool.query(
+        `SELECT * FROM question_range WHERE question_id = ?`,
+        [questionId]
+      );
+      const range = rangeRows[0] || null;
+
+      data ={ ...question, ...range };
+      break;
       case 'rating' :
-        const [[rating]] = await pool.query(
+        const [ratingRows] = await pool.query(
           `SELECT * FROM rating WHERE question_id = ?`,
           [questionId]
         );
+        const rating = ratingRows[0] || null;
         
         data = { ...question, ...rating };
         break;
