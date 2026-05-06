@@ -433,6 +433,7 @@ const getAllPosts = async (req, res) => {
 
           case "multiplechoice":
             extra = {
+              include_all_above: multipleOptions.filter((o) => o.question_id === q.id)[0]?.include_all_above,
               choices: multipleOptions.filter((o) => o.question_id === q.id),
             };
             break;
