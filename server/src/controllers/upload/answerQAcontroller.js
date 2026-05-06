@@ -18,12 +18,15 @@ const answerQA = async (req, res) => {
 
             // singlechoice
             optionId,
+            optionText,
 
             // multiplechoice
             optionIds,
+            optionTexts,
 
             // ranking
-            rankingMap,
+            rankingIds,
+            rankingTexts,
 
             // range
             rangeValue
@@ -56,25 +59,25 @@ const answerQA = async (req, res) => {
             case "singlechoice":
                 await pool.query(
                 `INSERT INTO answers 
-                    (question_id, post_id, user_id, question_type, singlechoice_option_id, is_anonymous, anonymous_name, anonymous_bg_color)
-                    VALUES (?, ?, ?, 'singlechoice', ?, ?, ?, ?)`,
-                [questionId, postId, userId, optionId, is_anonymous, anonymous_name, anonymous_bg_color]);
+                    (question_id, post_id, user_id, question_type, singlechoice_option_id, singlechoice_option_value, is_anonymous, anonymous_name, anonymous_bg_color)
+                    VALUES (?, ?, ?, 'singlechoice', ?, ?, ?, ?, ?)`,
+                [questionId, postId, userId, optionId, optionText, is_anonymous, anonymous_name, anonymous_bg_color]);
                 break;
 
             case "multiplechoice":
                 await pool.query(
                 `INSERT INTO answers 
-                    (question_id, post_id, user_id, question_type, multiplechoice_option_ids, is_anonymous, anonymous_name, anonymous_bg_color)
-                    VALUES (?, ?, ?, 'multiplechoice', ?, ?, ?, ?)`,
-                [questionId, postId, userId, JSON.stringify(optionIds), is_anonymous, anonymous_name, anonymous_bg_color]);
+                    (question_id, post_id, user_id, question_type, multiplechoice_option_ids, multiplechoice_option_values,is_anonymous, anonymous_name, anonymous_bg_color)
+                    VALUES (?, ?, ?, 'multiplechoice', ?, ?, ?, ?, ?)`,
+                [questionId, postId, userId, JSON.stringify(optionIds), JSON.stringify(optionTexts), is_anonymous, anonymous_name, anonymous_bg_color]);
                 break;
 
             case "rankingorder":
                 await pool.query(
                 `INSERT INTO answers 
-                    (question_id, post_id, user_id, question_type, ranking_positions, is_anonymous, anonymous_name, anonymous_bg_color)
-                    VALUES (?, ?, ?, 'rankingorder', ?, ?, ?, ?)`,
-                [questionId, postId, userId, JSON.stringify(rankingMap), is_anonymous, anonymous_name, anonymous_bg_color]);
+                    (question_id, post_id, user_id, question_type, ranking_positions, ranking_position_values, is_anonymous, anonymous_name, anonymous_bg_color)
+                    VALUES (?, ?, ?, 'rankingorder', ?, ?, ?, ?, ?)`,
+                [questionId, postId, userId, JSON.stringify(rankingIds) ,JSON.stringify(rankingTexts), is_anonymous, anonymous_name, anonymous_bg_color]);
                 break;
 
             case "range":
