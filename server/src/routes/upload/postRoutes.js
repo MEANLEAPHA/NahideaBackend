@@ -14,7 +14,7 @@ const {
   upload
 } = require("../../controllers/upload/contentController");
 
-const { addComment } = require("../../controllers/upload/commentController");
+// const { addComment } = require("../../controllers/upload/commentController");
 const { vote } = require("../../controllers/upload/voteController");
 
 
@@ -39,9 +39,9 @@ router.post("/create-posts", protect,
 
 
 
-router.post("/:id/comments", protect, addComment);
-router.post("/:id/vote", protect, vote); 
-router.patch("/:id/solve", protect, markSolved);
+// router.post("/:id/comments", protect, addComment);
+// router.post("/:id/vote", protect, vote); 
+// router.patch("/:id/solve", protect, markSolved);
 
 
 // router.post("/create/content", upload.array("media", 5), content);
