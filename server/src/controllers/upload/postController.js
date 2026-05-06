@@ -154,8 +154,8 @@ const createPost = async (req, res) => {
                 case "closedend":
 
                   await pool.query(
-                    "INSERT INTO closedend (question_id, yes_title, no_title) VALUES (?, ?, ?)",
-                    [questionId, req.body.yesTitle, req.body.noTitle]
+                    // "INSERT INTO closedend (question_id, yes_title, no_title) VALUES (?, ?, ?)",
+                    // [questionId, req.body.yesTitle, req.body.noTitle]
                   );
                   break;
 
@@ -375,7 +375,7 @@ const getAllPosts = async (req, res) => {
 
     const [multipleOptions] = qIds.length
       ? await pool.query(`
-        SELECT mco.*, mc.question_id
+        SELECT mco.*, mc.question_id, mc.include_all_above
         FROM multiplechoice_option mco
         JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
         WHERE mc.question_id IN (?)
