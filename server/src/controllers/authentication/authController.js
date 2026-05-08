@@ -567,7 +567,7 @@ const getUserInfo = async (req, res) => {
   try {
     const userId = req.user.userId;
     const [rows] = await pool.query(
-      "SELECT username, avatar_url FROM users WHERE id = ?",
+      "SELECT username, avatar_url, id FROM users WHERE id = ?",
       [userId]
     );
 
