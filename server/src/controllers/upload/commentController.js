@@ -33,194 +33,335 @@ const generateAnonymousBgColor = () => {
 
     return colors[randomIndex];
 };
+// const addComment = async (req, res) => {
+//     const connection = await db.getConnection();
+
+//     try {
+//         await connection.beginTransaction();
+
+//         const userId = req.user.userId;
+
+//         const {
+//             parent_id,
+//             username,
+//             content,
+//             gif_url,
+//             username_mention,
+//             is_anonymous,
+//             anonymous_name,
+//             anonymous_bg_color
+//         } = req.body;
+
+//         const { postId } = req.params;
+
+//         if (!postId || !username) {
+
+//             console.warning("missing something")
+//             return res.status(400).json({
+//                 message: "Missing required fields"
+//             });
+//         }
+
+//         if (!content) {
+//             console.warning("Content or GIF required")
+//             return res.status(400).json({
+//                 message: "Content or GIF required"
+//             });
+//         }
+
+//         let finalParentId = null;
+//         let parentOwnerId = null;
+
+//         let finalAnonymousName = null;
+//         let finalAnonymousBgColor = null;
+
+//         if (Number(is_anonymous) === 1) {
+
+//             // check existing anonymous identity
+//             const [existingIdentity] = await connection.query(
+//                 `SELECT
+//                     anonymous_name,
+//                     anonymous_bg_color
+
+//                 FROM comments
+
+//                 WHERE post_id = ?
+//                 AND user_id = ?
+//                 AND is_anonymous = 1
+//                 AND is_deleted = 0
+
+//                 LIMIT 1`,
+//                 [postId, userId]
+//             );
+
+//             // reuse old identity
+//             if (existingIdentity.length > 0) {
+
+//                 finalAnonymousName =
+//                     existingIdentity[0].anonymous_name;
+
+//                 finalAnonymousBgColor =
+//                     existingIdentity[0].anonymous_bg_color;
+
+//             } else {
+
+//                 // generate new identity
+//                 finalAnonymousName =
+//                     generateAnonymousName();
+
+//                 finalAnonymousBgColor =
+//                     generateAnonymousBgColor();
+//             }
+//         }
+//         // reply logic
+//         if (parent_id) {
+
+//             const [parentRows] = await connection.query(
+//                 `SELECT id, parent_id, user_id
+//                  FROM comments
+//                  WHERE id = ?`,
+//                 [parent_id]
+//             );
+
+//             if (!parentRows.length) {
+//                 return res.status(404).json({
+//                     message: "Parent comment not found"
+//                 });
+//             }
+
+//             const parent = parentRows[0];
+
+//             finalParentId = parent.parent_id || parent.id;
+
+//             parentOwnerId = parent.user_id;
+//         }
+
+//         // create comment
+//         const [result] = await connection.query(
+//             `INSERT INTO comments
+//             (
+//                 post_id,
+//                 parent_id,
+//                 user_id,
+//                 username,
+//                 content,
+//                 gif_url,
+//                 username_mention,
+//                 is_anonymous,
+//                 anonymous_name,
+//                 anonymous_bg_color
+//             )
+//             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+//             [
+//                 postId,
+//                 finalParentId,
+//                 userId,
+//                 username,
+//                 content || null,
+//                 gif_url || null,
+//                 username_mention || null,
+//                 is_anonymous || 0,
+//                 finalAnonymousName,
+//                 finalAnonymousBgColor
+//             ]
+//         );
+
+//         // increment reply_count
+//         if (finalParentId) {
+//             // parent
+//             await connection.query(
+//                 `UPDATE comments
+//                  SET reply_count = reply_count + 1
+//                  WHERE id = ?`,
+//                 [finalParentId]
+//             );
+//         }
+
+//         // notification to parent
+//         if (parentOwnerId && parentOwnerId !== userId) {
+
+//             await connection.query(
+//               `INSERT INTO notifications
+//               (
+//                   receiver_id,
+//                   sender_id,
+//                   type,
+//                   post_id,
+//                   comment_id,
+//                   is_viewed
+//               )
+//               VALUES (?, ?, ?, ?, ?, 0)`,
+//               [
+//                   parentOwnerId,
+//                   userId,
+//                   'comment_reply',
+//                   postId,
+//                   result.insertId
+//               ]
+//           );
+//         }
+
+//         await connection.commit();
+
+//         res.status(201).json({
+//             message: "Comment created",
+//             comment_id: result.insertId
+//         });
+
+//     } catch (err) {
+
+//         await connection.rollback();
+
+//         console.error(err);
+
+//         res.status(500).json({
+//             message: "Server error"
+//         });
+
+//     } finally {
+//         connection.release();
+//     }
+// };
 const addComment = async (req, res) => {
-    const connection = await db.getConnection();
+  const connection = await db.getConnection();
 
-    try {
-        await connection.beginTransaction();
+  try {
+    await connection.beginTransaction();
 
-        const userId = req.user.userId;
+    const userId = req.user.userId;
+    const {
+      username,
+      parent_id,
+      content,
+      gif_url,
+      username_mention,
+      is_anonymous
+    } = req.body;
+    const { postId } = req.params;
 
-        const {
-            parent_id,
-            username,
-            content,
-            gif_url,
-            username_mention,
-            is_anonymous,
-            anonymous_name,
-            anonymous_bg_color
-        } = req.body;
-
-        const { postId } = req.params;
-
-        if (!postId || !username) {
-
-            console.warning("missing something")
-            return res.status(400).json({
-                message: "Missing required fields"
-            });
-        }
-
-        if (!content) {
-            console.warning("Content or GIF required")
-            return res.status(400).json({
-                message: "Content or GIF required"
-            });
-        }
-
-        let finalParentId = null;
-        let parentOwnerId = null;
-
-        let finalAnonymousName = null;
-        let finalAnonymousBgColor = null;
-
-        if (Number(is_anonymous) === 1) {
-
-            // check existing anonymous identity
-            const [existingIdentity] = await connection.query(
-                `SELECT
-                    anonymous_name,
-                    anonymous_bg_color
-
-                FROM comments
-
-                WHERE post_id = ?
-                AND user_id = ?
-                AND is_anonymous = 1
-                AND is_deleted = 0
-
-                LIMIT 1`,
-                [postId, userId]
-            );
-
-            // reuse old identity
-            if (existingIdentity.length > 0) {
-
-                finalAnonymousName =
-                    existingIdentity[0].anonymous_name;
-
-                finalAnonymousBgColor =
-                    existingIdentity[0].anonymous_bg_color;
-
-            } else {
-
-                // generate new identity
-                finalAnonymousName =
-                    generateAnonymousName();
-
-                finalAnonymousBgColor =
-                    generateAnonymousBgColor();
-            }
-        }
-        // reply logic
-        if (parent_id) {
-
-            const [parentRows] = await connection.query(
-                `SELECT id, parent_id, user_id
-                 FROM comments
-                 WHERE id = ?`,
-                [parent_id]
-            );
-
-            if (!parentRows.length) {
-                return res.status(404).json({
-                    message: "Parent comment not found"
-                });
-            }
-
-            const parent = parentRows[0];
-
-            finalParentId = parent.parent_id || parent.id;
-
-            parentOwnerId = parent.user_id;
-        }
-
-        // create comment
-        const [result] = await connection.query(
-            `INSERT INTO comments
-            (
-                post_id,
-                parent_id,
-                user_id,
-                username,
-                content,
-                gif_url,
-                username_mention,
-                is_anonymous,
-                anonymous_name,
-                anonymous_bg_color
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                postId,
-                finalParentId,
-                userId,
-                username,
-                content || null,
-                gif_url || null,
-                username_mention || null,
-                is_anonymous || 0,
-                finalAnonymousName,
-                finalAnonymousBgColor
-            ]
-        );
-
-        // increment reply_count
-        if (finalParentId) {
-            await connection.query(
-                `UPDATE comments
-                 SET reply_count = reply_count + 1
-                 WHERE id = ?`,
-                [finalParentId]
-            );
-        }
-
-        // notification
-        if (parentOwnerId && parentOwnerId !== userId) {
-
-            await connection.query(
-              `INSERT INTO notifications
-              (
-                  receiver_id,
-                  sender_id,
-                  type,
-                  post_id,
-                  comment_id,
-                  is_viewed
-              )
-              VALUES (?, ?, ?, ?, ?, 0)`,
-              [
-                  parentOwnerId,
-                  userId,
-                  'comment_reply',
-                  postId,
-                  result.insertId
-              ]
-          );
-        }
-
-        await connection.commit();
-
-        res.status(201).json({
-            message: "Comment created",
-            comment_id: result.insertId
-        });
-
-    } catch (err) {
-
-        await connection.rollback();
-
-        console.error(err);
-
-        res.status(500).json({
-            message: "Server error"
-        });
-
-    } finally {
-        connection.release();
+    if (!postId) {
+      return res.status(400).json({ message: "Missing postId" });
     }
+    if (!content && !gif_url) {
+      return res.status(400).json({ message: "Content or GIF required" });
+    }
+
+   
+
+    let finalParentId = null;
+    let parentOwnerId = null;
+    let finalAnonymousName = null;
+    let finalAnonymousBgColor = null;
+
+    if (Number(is_anonymous) === 1) {
+      const [existingIdentity] = await connection.query(
+        `SELECT anonymous_name, anonymous_bg_color
+         FROM comments
+         WHERE post_id = ? AND user_id = ? AND is_anonymous = 1 AND is_deleted = 0
+         LIMIT 1`,
+        [postId, userId]
+      );
+      if (existingIdentity.length > 0) {
+        finalAnonymousName = existingIdentity[0].anonymous_name;
+        finalAnonymousBgColor = existingIdentity[0].anonymous_bg_color;
+      } else {
+        finalAnonymousName = generateAnonymousName();
+        finalAnonymousBgColor = generateAnonymousBgColor();
+      }
+    }
+
+    // reply logic
+    if (parent_id) {
+      const [parentRows] = await connection.query(
+        `SELECT id, parent_id, user_id
+         FROM comments
+         WHERE id = ?`,
+        [parent_id]
+      );
+      if (!parentRows.length) {
+        return res.status(404).json({ message: "Parent comment not found" });
+      }
+      const parent = parentRows[0];
+      finalParentId = parent.parent_id || parent.id;
+      parentOwnerId = parent.user_id;
+    }
+
+    // create comment
+    const [result] = await connection.query(
+      `INSERT INTO comments
+       (post_id, parent_id, user_id, username, content, gif_url,
+        username_mention, is_anonymous, anonymous_name, anonymous_bg_color)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        postId,
+        finalParentId,
+        userId,
+        username,
+        content || null,
+        gif_url || null,
+        username_mention || null,
+        is_anonymous || 0,
+        finalAnonymousName,
+        finalAnonymousBgColor
+      ]
+    );
+
+    // increment reply_count on top-level parent
+    if (finalParentId) {
+      await connection.query(
+        `UPDATE comments SET reply_count = reply_count + 1 WHERE id = ?`,
+        [finalParentId]
+      );
+    }
+
+    // notify top-level parent owner
+    if (parentOwnerId && parentOwnerId !== userId) {
+      await connection.query(
+        `INSERT INTO notifications
+         (receiver_id, sender_id, type, post_id, comment_id, is_viewed)
+         VALUES (?, ?, 'comment_reply', ?, ?, 0)`,
+        [parentOwnerId, userId, postId, result.insertId]
+      );
+    }
+
+    // if replying to a reply, increment that reply’s count and notify its owner
+    if (parent_id && parent_id !== finalParentId) {
+      await connection.query(
+        `UPDATE comments SET reply_count = reply_count + 1 WHERE id = ?`,
+        [parent_id]
+      );
+
+      const [replyRows] = await connection.query(
+        `SELECT user_id FROM comments WHERE id = ?`,
+        [parent_id]
+      );
+      const replyOwnerId = replyRows[0]?.user_id;
+
+      if (
+        replyOwnerId &&
+        replyOwnerId !== userId &&
+        replyOwnerId !== parentOwnerId
+      ) {
+        await connection.query(
+          `INSERT INTO notifications
+           (receiver_id, sender_id, type, post_id, comment_id, is_viewed)
+           VALUES (?, ?, 'comment_reply', ?, ?, 0)`,
+          [replyOwnerId, userId, postId, result.insertId]
+        );
+      }
+    }
+
+    await connection.commit();
+    res.status(201).json({ message: "Comment created", comment_id: result.insertId });
+  } catch (err) {
+    await connection.rollback();
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  } finally {
+    connection.release();
+  }
 };
+
 const updateComment = async (req, res) => {
 
     try {
@@ -697,72 +838,3 @@ module.exports = {
 };
 
 
-
-
-// const addComment = async (req, res) => {
-//     try{
-//         const userId = req.user.userId;
-//         const {
-//             parent_id,
-//             username,
-//             content,
-//             gif_url,
-//             username_mention,
-//             is_anonymous,
-//             anonymous_name,
-//             anonymous_bg_color
-//         } = req.body;
-//         const { postId } = req.params;
-
-//          if (!postId || !username) {
-//             return res.status(400).json({ message: "Missing required fields" });
-//         }
-
-//         if (!content) {
-//             return res.status(400).json({ message: "Content or GIF required" });
-//         }
-
-//         let finalParentId = null;
-
-//         if (parent_id) {
-//             const [parent] = await db.query(
-//                 "SELECT id, parent_id FROM comments WHERE id = ?",
-//                 [parent_id]
-//             );
-
-//             if (!parent.length) {
-//                 return res.status(404).json({ message: "Parent not found" });
-//             }
-
-//             // enforce flat structure
-//             finalParentId = parent[0].parent_id || parent[0].id;
-//         }
-
-//         const [result] = await db.query(
-//             `INSERT INTO comments 
-//             (post_id, parent_id, user_id, username, content, gif_url, username_mention, is_anonymous, anonymous_name, anonymous_bg_color)
-//             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-//             [
-//                 postId,
-//                 finalParentId,
-//                 userId,
-//                 username,
-//                 content,
-//                 gif_url,
-//                 username_mention,
-//                 is_anonymous,
-//                 anonymous_name,
-//                 anonymous_bg_color
-//             ]
-//         );
-
-//         res.status(201).json({
-//         message: "Comment created",
-//         comment_id: result.insertId
-//         });
-
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Server error" });
-//   }
-// };
