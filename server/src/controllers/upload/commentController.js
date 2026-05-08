@@ -55,12 +55,15 @@ const addComment = async (req, res) => {
         const { postId } = req.params;
 
         if (!postId || !username) {
+
+            console.warning("missing something")
             return res.status(400).json({
                 message: "Missing required fields"
             });
         }
 
-        if (!content && !gif_url) {
+        if (!content) {
+            console.warning("Content or GIF required")
             return res.status(400).json({
                 message: "Content or GIF required"
             });
@@ -229,9 +232,12 @@ const updateComment = async (req, res) => {
         const { content } = req.body;
 
         if (!content) {
-            return res.status(400).json({
-                message: "Content required"
-            });
+      
+            return res.status(400).json(
+                {
+                message: "Content required", 
+                }
+        );
         }
 
         const [result] = await db.query(
