@@ -35,6 +35,11 @@ app.use("/api", postRoutes);
 const answerQARoutes = require("./src/routes/upload/answerQAroute");
 app.use("/api", answerQARoutes);
 
+
+// comment and reply
+const commentsRoutes = require("./src/routes/upload/commentRoute");
+app.use("/api", commentsRoutes);
+
 // gif
 const gifRoutes = require("./src/routes/upload/gifRoute");
 app.use("/api/gifs", gifRoutes); 
