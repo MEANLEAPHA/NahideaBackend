@@ -180,13 +180,14 @@ const addComment = async (req, res) => {
   const connection = await db.getConnection();
 
   try {
+
     await connection.beginTransaction();
 
     const userId = req.user.userId;
 
     const {
       username,
-      comment_id, 
+      comment_id,
       content,
       gif_url,
       user_id_mention,
@@ -211,6 +212,15 @@ const addComment = async (req, res) => {
         message: "Content or GIF required"
       });
     }
+
+    // =========================
+    // NOTIFICATION TEXT
+    // =========================
+
+    const notificationText = content
+      ? content.slice(0, 100) +
+        (content.length > 100 ? "..." : "")
+      : "GIF";
 
     // =========================
     // ANONYMOUS IDENTITY
@@ -270,6 +280,7 @@ const addComment = async (req, res) => {
       );
 
       if (!parentRows.length) {
+
         return res.status(404).json({
           message: "Parent comment not found"
         });
@@ -277,7 +288,7 @@ const addComment = async (req, res) => {
 
       const parentComment = parentRows[0];
 
-      // always point to top-level comment
+      // always store top-level parent
       finalParentId =
         parentComment.parent_id || parentComment.id;
     }
@@ -341,7 +352,7 @@ const addComment = async (req, res) => {
 
     if (comment_id) {
 
-      // comment user is replying to
+      // comment being replied to
       const [replyRows] = await connection.query(
         `
         SELECT id, user_id, username, parent_id
@@ -361,7 +372,7 @@ const addComment = async (req, res) => {
         const replyOwnerUsername =
           replyComment.username;
 
-        // top-level parent comment owner
+        // top-level parent comment
         const [topRows] = await connection.query(
           `
           SELECT id, user_id, username
@@ -383,7 +394,6 @@ const addComment = async (req, res) => {
 
         if (comment_id === finalParentId) {
 
-          // notify parent owner only
           if (
             parentOwnerId &&
             parentOwnerId !== userId
@@ -406,12 +416,7 @@ const addComment = async (req, res) => {
               [
                 parentOwnerId,
                 userId,
-                `${username} replied to your comment: ${
-                  content
-                    ? content.slice(0, 100) +
-                      (content.length > 100 ? "..." : "")
-                    : "GIF"
-                }`,
+                `${username} replied to your comment: ${notificationText}`,
                 postId,
                 result.insertId
               ]
@@ -426,81 +431,117 @@ const addComment = async (req, res) => {
 
         else {
 
-          // -----------------------------
-          // notify parent owner
-          // -----------------------------
+          // -----------------------------------
+          // SAME USER:
+          // parent owner == reply owner
+          // -----------------------------------
 
-          if (
-            parentOwnerId &&
-            parentOwnerId !== userId
-          ) {
+          if (parentOwnerId === replyOwnerId) {
 
-            await connection.query(
-              `
-              INSERT INTO notifications
-              (
-                receiver_id,
-                sender_id,
-                type,
-                content,
-                post_id,
-                comment_id,
-                is_viewed
-              )
-              VALUES (?, ?, 'comment_reply', ?, ?, ?, 0)
-              `,
-              [
-                parentOwnerId,
-                userId,
-                `${username} replied to ${replyOwnerUsername} on your comment: ${
-                  content
-                    ? content.slice(0, 100) +
-                      (content.length > 100 ? "..." : "")
-                    : "GIF"
-                }`,
-                postId,
-                result.insertId
-              ]
-            );
+            // Example:
+            //
+            // User1 parent
+            // User2 reply
+            // User1 reply back
+            // User4 reply to User1
+            //
+            // User1 should ONLY get:
+            // "User4 replied to you"
+
+            if (replyOwnerId !== userId) {
+
+              await connection.query(
+                `
+                INSERT INTO notifications
+                (
+                  receiver_id,
+                  sender_id,
+                  type,
+                  content,
+                  post_id,
+                  comment_id,
+                  is_viewed
+                )
+                VALUES (?, ?, 'comment_reply', ?, ?, ?, 0)
+                `,
+                [
+                  replyOwnerId,
+                  userId,
+                  `${username} replied to you: ${notificationText}`,
+                  postId,
+                  result.insertId
+                ]
+              );
+            }
           }
 
-          // -----------------------------
-          // notify reply owner
-          // -----------------------------
+          // -----------------------------------
+          // DIFFERENT USERS
+          // -----------------------------------
 
-          if (
-            replyOwnerId &&
-            replyOwnerId !== userId &&
-            replyOwnerId !== parentOwnerId
-          ) {
+          else {
 
-            await connection.query(
-              `
-              INSERT INTO notifications
-              (
-                receiver_id,
-                sender_id,
-                type,
-                content,
-                post_id,
-                comment_id,
-                is_viewed
-              )
-              VALUES (?, ?, 'comment_reply', ?, ?, ?, 0)
-              `,
-              [
-                replyOwnerId,
-                userId,
-                `${username} replied to you: ${
-                  content
-                    ? content.slice(0, 100) +
-                      (content.length > 100 ? "..." : "")
-                    : "GIF"
-                }`,
-                postId,
-                result.insertId
-              ]
-            );
+            // notify parent owner
+
+            if (
+              parentOwnerId &&
+              parentOwnerId !== userId
+            ) {
+
+              await connection.query(
+                `
+                INSERT INTO notifications
+                (
+                  receiver_id,
+                  sender_id,
+                  type,
+                  content,
+                  post_id,
+                  comment_id,
+                  is_viewed
+                )
+                VALUES (?, ?, 'comment_reply', ?, ?, ?, 0)
+                `,
+                [
+                  parentOwnerId,
+                  userId,
+                  `${username} replied to ${replyOwnerUsername} on your comment: ${notificationText}`,
+                  postId,
+                  result.insertId
+                ]
+              );
+            }
+
+            // notify reply owner
+
+            if (
+              replyOwnerId &&
+              replyOwnerId !== userId
+            ) {
+
+              await connection.query(
+                `
+                INSERT INTO notifications
+                (
+                  receiver_id,
+                  sender_id,
+                  type,
+                  content,
+                  post_id,
+                  comment_id,
+                  is_viewed
+                )
+                VALUES (?, ?, 'comment_reply', ?, ?, ?, 0)
+                `,
+                [
+                  replyOwnerId,
+                  userId,
+                  `${username} replied to you: ${notificationText}`,
+                  postId,
+                  result.insertId
+                ]
+              );
+            }
           }
         }
       }

@@ -1,0 +1,356 @@
+const addComment = async (req, res) => {
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const userId = req.user.userId;
+
+    const {
+      username,
+      comment_id, 
+      content,
+      gif_url,
+      user_id_mention,
+      username_mention,
+      is_anonymous
+    } = req.body;
+
+    const { postId } = req.params;
+
+    // =========================
+    // VALIDATION
+    // =========================
+
+    if (!postId) {
+      return res.status(400).json({
+        message: "Missing postId"
+      });
+    }
+
+    if (!content && !gif_url) {
+      return res.status(400).json({
+        message: "Content or GIF required"
+      });
+    }
+
+    // =========================
+    // ANONYMOUS IDENTITY
+    // =========================
+
+    let finalAnonymousName = null;
+    let finalAnonymousBgColor = null;
+
+    if (Number(is_anonymous) === 1) {
+
+      const [existingIdentity] = await connection.query(
+        `
+        SELECT anonymous_name, anonymous_bg_color
+        FROM comments
+        WHERE post_id = ?
+        AND user_id = ?
+        AND is_anonymous = 1
+        AND is_deleted = 0
+        LIMIT 1
+        `,
+        [postId, userId]
+      );
+
+      if (existingIdentity.length > 0) {
+
+        finalAnonymousName =
+          existingIdentity[0].anonymous_name;
+
+        finalAnonymousBgColor =
+          existingIdentity[0].anonymous_bg_color;
+
+      } else {
+
+        finalAnonymousName =
+          generateAnonymousName();
+
+        finalAnonymousBgColor =
+          generateAnonymousBgColor();
+      }
+    }
+
+    // =========================
+    // REPLY LOGIC
+    // =========================
+
+    let finalParentId = null;
+
+    if (comment_id) {
+
+      const [parentRows] = await connection.query(
+        `
+        SELECT id, parent_id
+        FROM comments
+        WHERE id = ?
+        `,
+        [comment_id]
+      );
+
+      if (!parentRows.length) {
+        return res.status(404).json({
+          message: "Parent comment not found"
+        });
+      }
+
+      const parentComment = parentRows[0];
+
+      // always point to top-level comment
+      finalParentId =
+        parentComment.parent_id || parentComment.id;
+    }
+
+    // =========================
+    // CREATE COMMENT
+    // =========================
+
+    const [result] = await connection.query(
+      `
+      INSERT INTO comments
+      (
+        post_id,
+        parent_id,
+        user_id,
+        username,
+        content,
+        gif_url,
+        user_id_mention,
+        username_mention,
+        is_anonymous,
+        anonymous_name,
+        anonymous_bg_color
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        postId,
+        finalParentId,
+        userId,
+        username,
+        content || null,
+        gif_url || null,
+        user_id_mention || null,
+        username_mention || null,
+        is_anonymous || 0,
+        finalAnonymousName,
+        finalAnonymousBgColor
+      ]
+    );
+
+    // =========================
+    // UPDATE REPLY COUNT
+    // =========================
+
+    if (finalParentId) {
+
+      await connection.query(
+        `
+        UPDATE comments
+        SET reply_count = reply_count + 1
+        WHERE id = ?
+        `,
+        [finalParentId]
+      );
+    }
+
+    // =========================
+    // NOTIFICATION LOGIC
+    // =========================
+
+    if (comment_id) {
+
+      // comment user is replying to
+      const [replyRows] = await connection.query(
+        `
+        SELECT id, user_id, username, parent_id
+        FROM comments
+        WHERE id = ?
+        `,
+        [comment_id]
+      );
+
+      const replyComment = replyRows[0];
+
+      if (replyComment) {
+
+        const replyOwnerId =
+          replyComment.user_id;
+
+        const replyOwnerUsername =
+          replyComment.username;
+
+        // top-level parent comment owner
+        const [topRows] = await connection.query(
+          `
+          SELECT id, user_id, username
+          FROM comments
+          WHERE id = ?
+          `,
+          [finalParentId]
+        );
+
+        const topComment = topRows[0];
+
+        const parentOwnerId =
+          topComment?.user_id;
+
+        // =====================================
+        // CASE 1
+        // DIRECT REPLY TO PARENT COMMENT
+        // =====================================
+
+        if (comment_id === finalParentId) {
+
+          // notify parent owner only
+          if (
+            parentOwnerId &&
+            parentOwnerId !== userId
+          ) {
+
+            await connection.query(
+              `
+              INSERT INTO notifications
+              (
+                receiver_id,
+                sender_id,
+                type,
+                content,
+                post_id,
+                comment_id,
+                is_viewed
+              )
+              VALUES (?, ?, 'comment_reply', ?, ?, ?, 0)
+              `,
+              [
+                parentOwnerId,
+                userId,
+                `${username} replied to your comment: ${
+                  content
+                    ? content.slice(0, 100) +
+                      (content.length > 100 ? "..." : "")
+                    : "GIF"
+                }`,
+                postId,
+                result.insertId
+              ]
+            );
+          }
+        }
+
+        // =====================================
+        // CASE 2
+        // REPLY TO REPLY
+        // =====================================
+
+        else {
+
+          // -----------------------------
+          // notify parent owner
+          // -----------------------------
+
+          if (
+            parentOwnerId &&
+            parentOwnerId !== userId
+          ) {
+
+            await connection.query(
+              `
+              INSERT INTO notifications
+              (
+                receiver_id,
+                sender_id,
+                type,
+                content,
+                post_id,
+                comment_id,
+                is_viewed
+              )
+              VALUES (?, ?, 'comment_reply', ?, ?, ?, 0)
+              `,
+              [
+                parentOwnerId,
+                userId,
+                `${username} replied to ${replyOwnerUsername} on your comment: ${
+                  content
+                    ? content.slice(0, 100) +
+                      (content.length > 100 ? "..." : "")
+                    : "GIF"
+                }`,
+                postId,
+                result.insertId
+              ]
+            );
+          }
+
+          // -----------------------------
+          // notify reply owner
+          // -----------------------------
+
+          if (
+            replyOwnerId &&
+            replyOwnerId !== userId &&
+            replyOwnerId !== parentOwnerId
+          ) {
+
+            await connection.query(
+              `
+              INSERT INTO notifications
+              (
+                receiver_id,
+                sender_id,
+                type,
+                content,
+                post_id,
+                comment_id,
+                is_viewed
+              )
+              VALUES (?, ?, 'comment_reply', ?, ?, ?, 0)
+              `,
+              [
+                replyOwnerId,
+                userId,
+                `${username} replied to you: ${
+                  content
+                    ? content.slice(0, 100) +
+                      (content.length > 100 ? "..." : "")
+                    : "GIF"
+                }`,
+                postId,
+                result.insertId
+              ]
+            );
+          }
+        }
+      }
+    }
+
+    // =========================
+    // SUCCESS
+    // =========================
+
+    await connection.commit();
+
+    return res.status(201).json({
+      message: "Comment created",
+      comment_id: result.insertId
+    });
+
+  } catch (err) {
+
+    await connection.rollback();
+
+    console.error(err);
+
+    return res.status(500).json({
+      message: "Server error"
+    });
+
+  } finally {
+
+    connection.release();
+  }
+};
