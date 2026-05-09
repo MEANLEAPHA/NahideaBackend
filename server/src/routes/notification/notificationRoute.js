@@ -4,11 +4,14 @@ const { protect } = require("../../middleware/authMiddleware");
 
 const {
     getNotifications,
-    markNotificationRead
+    markNotificationRead,
+    markAllNotification,
+    deleteNotification,
+    deleteAllNotification
 } = require("../../controllers/notifications/notificationController");
 
 router.get(
-    "/notifications",
+    "/notifications/get-all",
     protect,
     getNotifications
 );
@@ -17,6 +20,24 @@ router.patch(
     "/notifications/:notificationId/read",
     protect,
     markNotificationRead
+);
+
+router.patch(
+    "/notifications/mark-all-read",
+    protect,
+    markAllNotification
+);
+
+router.delete(
+    "/notifications/:notificationId",
+    protect,
+    deleteNotification
+);
+
+router.delete(
+    "/notifications/delete-all",
+    protect,
+    deleteAllNotification
 );
 
 module.exports = router;
