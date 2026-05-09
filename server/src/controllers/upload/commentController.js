@@ -318,8 +318,8 @@ const addComment = async (req, res) => {
     if (parentOwnerId && parentOwnerId !== userId) {
       await connection.query(
         `INSERT INTO notifications
-         (receiver_id, sender_id, type, post_id, comment_id, is_viewed)
-         VALUES (?, ?, 'comment_reply', ?, ?, 0)`,
+         (receiver_id, sender_id, type, content, post_id, comment_id, is_viewed)
+         VALUES (?, ?, 'comment_reply', '${username} replied to ${username_mention}: ${content.slice(0, 100) + (content.length > 100 ? '...' : '')}', ?, ?, 0)`,
         [parentOwnerId, userId, postId, result.insertId]
       );
     }
@@ -344,8 +344,8 @@ const addComment = async (req, res) => {
       ) {
         await connection.query(
           `INSERT INTO notifications
-           (receiver_id, sender_id, type, post_id, comment_id, is_viewed)
-           VALUES (?, ?, 'comment_reply', ?, ?, 0)`,
+           (receiver_id, sender_id, type, content, post_id, comment_id, is_viewed)
+           VALUES (?, ?, 'comment_reply', '${username} replied to you: ${content.slice(0, 100) + (content.length > 100 ? '...' : '')}',?, ?, 0)`,
           [replyOwnerId, userId, postId, result.insertId]
         );
       }
