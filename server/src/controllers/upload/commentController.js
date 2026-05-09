@@ -234,6 +234,7 @@ const addComment = async (req, res) => {
       parent_id,
       content,
       gif_url,
+      user_id_mention,
       username_mention,
       is_anonymous
     } = req.body;
@@ -290,15 +291,17 @@ const addComment = async (req, res) => {
     const [result] = await connection.query(
       `INSERT INTO comments
        (post_id, parent_id, user_id, username, content, gif_url,
-        username_mention, is_anonymous, anonymous_name, anonymous_bg_color)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        user_id_mention,username_mention, is_anonymous, anonymous_name, anonymous_bg_color)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         postId,
         finalParentId,
         userId,
+
         username,
         content || null,
         gif_url || null,
+        user_id_mention || null,
         username_mention || null,
         is_anonymous || 0,
         finalAnonymousName,
@@ -315,11 +318,11 @@ const addComment = async (req, res) => {
     }
 
     // notify top-level parent owner
-    if (parentOwnerId && parentOwnerId !== userId) {
+    if (parentOwnerId && parentOwnerId !== userId ) {
       await connection.query(
         `INSERT INTO notifications
          (receiver_id, sender_id, type, content, post_id, comment_id, is_viewed)
-         VALUES (?, ?, 'comment_reply', '${username} replied to ${username_mention} on your comment: ${content.slice(0, 100) + (content.length > 100 ? '...' : '')}', ?, ?, 0)`,
+         VALUES (?, ?, 'comment_reply', '${username} replied to ${parentOwnerId === user_id_mention ? username_mention : 'you'}${parentOwnerId === user_id_mention ? ' ' : ' on your comment'}: ${content.slice(0, 100) + (content.length > 100 ? '...' : '')}', ?, ?, 0)`,
         [parentOwnerId, userId, postId, result.insertId]
       );
     }
@@ -338,9 +341,9 @@ const addComment = async (req, res) => {
       const replyOwnerId = replyRows[0]?.user_id;
 
       if (
-        replyOwnerId &&
-        replyOwnerId !== userId &&
-        replyOwnerId !== parentOwnerId
+        replyOwnerId && // check if reply owner id exist
+        replyOwnerId !== userId && // compare current user with reply owner id prevent self notification
+        replyOwnerId !== parentOwnerId // compare reply owner id with parent owner id prevent double notification
       ) {
         await connection.query(
           `INSERT INTO notifications
