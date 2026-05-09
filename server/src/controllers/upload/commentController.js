@@ -547,7 +547,8 @@ const getCommentsByPostId = async (req, res) => {
             WHERE c.parent_id IN (?)
 
             ORDER BY c.created_at ASC`,
-            [userId, parentIds]
+            [userId, parentIds.length ? parentIds : [0]] // ensure array expands
+            // [userId, parentIds]
         );
 
         // group replies
