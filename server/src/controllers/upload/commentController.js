@@ -186,7 +186,7 @@ const addComment = async (req, res) => {
 
     const {
       username,
-      comment_id, // reply target comment
+      comment_id, 
       content,
       gif_url,
       user_id_mention,
