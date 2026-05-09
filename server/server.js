@@ -44,6 +44,10 @@ app.use("/api", commentsRoutes);
 const gifRoutes = require("./src/routes/upload/gifRoute");
 app.use("/api/gifs", gifRoutes); 
 
+// notification 
+const notificationRoutes = require("./src/routes/notification/notificationRoute");
+app.use("/api", notificationRoutes);
+
 
 // history recorder post
 // const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
