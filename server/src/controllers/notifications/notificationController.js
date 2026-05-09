@@ -4,7 +4,7 @@ const getNotifications = async (req, res) => {
     try{
         const userId = req.user.userId;
         const [rows] = await pool.query(
-            "SELECT * FROM notifications WHERE user_id = ? AND is_viewed = 0 ORDER BY created_at DESC",
+            "SELECT * FROM notifications WHERE receiver_id = ? AND is_viewed = 0 ORDER BY created_at DESC",
             [userId]
         );
         res.status(200).json(
@@ -21,8 +21,8 @@ const markNotificationRead = async (req, res) => {
         const userId = req.user.userId;
         const notificationId = req.params;
         await pool.query(
-            "UPDATE notifications SET is_viewed = 1 WHERE id = ?",
-            [notificationId]
+            "UPDATE notifications SET is_viewed = 1 WHERE id = ? AND is_viewed = 0 AND receiver_id = ?",
+            [notificationId, userId]
         );
         res.status(200).json({message: "Notification marked as read"});
     }
@@ -36,8 +36,8 @@ const markAllNotification = async (req, res) => {
     try{
         const userId = req.user.userId;
         await pool.query(
-            "UPDATE notifications SET is_viewed = 1 WHERE user_id = ? AND is_viewed = 0",
-            [userId]
+            "UPDATE notifications SET is_viewed = 1 WHERE user_id = ? AND is_viewed = 0 AND receiver_id = ?",
+            [userId, userId]
         );
         res.status(200).json({message: "All notifications marked as read"});
     }
@@ -52,8 +52,8 @@ const deleteNotification = async (req, res) => {
         const userId = req.user.userId;
         const notificationId = req.params;
         await pool.query(
-            "DELETE FROM notifications WHERE id = ?",
-            [notificationId]
+            "DELETE FROM notifications WHERE id = ? AND receiver_id = ?",
+            [notificationId, userId]
         );
         res.status(200).json({message: "Notification deleted"});
     }
@@ -67,7 +67,7 @@ const deleteAllNotification = async (req, res) => {
     try{
         const userId = req.user.userId;
         await pool.query(
-            "DELETE FROM notifications WHERE user_id = ?",
+            "DELETE FROM notifications WHERE receiver_id = ? ",
             [userId]
         );
         res.status(200).json({message: "All notifications deleted"});
