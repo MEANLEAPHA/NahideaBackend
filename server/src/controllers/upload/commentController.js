@@ -322,7 +322,7 @@ const addComment = async (req, res) => {
       await connection.query(
         `INSERT INTO notifications
          (receiver_id, sender_id, type, content, post_id, comment_id, is_viewed)
-         VALUES (?, ?, 'comment_reply', '${username} replied to ${parentOwnerId === user_id_mention ? username_mention : 'you'}${parentOwnerId === user_id_mention ? ' ' : ' on your comment'}: ${content.slice(0, 100) + (content.length > 100 ? '...' : '')}', ?, ?, 0)`,
+         VALUES (?, ?, 'comment_reply', '${username} replied to ${parentOwnerId === user_id_mention ? 'you' :username_mention }${parentOwnerId === user_id_mention ? ' ' : ' on your comment'}: ${content.slice(0, 100) + (content.length > 100 ? '...' : '')}', ?, ?, 0)`,
         [parentOwnerId, userId, postId, result.insertId]
       );
     }
