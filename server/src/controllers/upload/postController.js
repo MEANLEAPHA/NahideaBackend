@@ -273,6 +273,43 @@ const createPost = async (req, res) => {
     }
 }; 
 
+// only for content post body
+const updatePostBodyContent = async (req, res) => {
+   try {
+    const userId = req.user.id;
+    const { contentId, postId } = req.params;
+    const { bodyText } = req.body;
+
+    const [post] = await pool.query(
+      "UPDATE content SET text_body = ? WHERE id = ? AND user_id = ? AND post_id = ?",
+      [bodyText, contentId, userId, postId]
+    );
+
+    res.status(200).json({ message: "Content updated successfully" });
+   }
+   catch(error){
+      console.error(error.message);
+      return res.status(500).json({ message: "Sorry, Server Error" });
+   }
+}
+
+// all post type
+const deletePost = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const { postId } = req.params;
+    const [post] = await pool.query(
+      "DELETE FROM posts WHERE id = ? AND user_id = ? AND is_deleted = 0",
+      [postId, userId]
+    )
+
+   }
+   catch(error){
+      console.error(error.message);
+      return res.status(500).json({ message: "Sorry, Server Error" });
+   }
+}
 const getAllPosts = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -643,6 +680,7 @@ module.exports = {
   upload,
   getAllPosts,
   getPostsById,
+  updatePostBodyContent
  
 
 };
