@@ -914,6 +914,7 @@ const reportComment = async (req, res) => {
     }
 };
 
+
 const likeComment = async (req, res) => {
 
     const connection = await db.getConnection();
@@ -925,54 +926,38 @@ const likeComment = async (req, res) => {
         const userId = req.user.userId;
         const { commentId } = req.params;
 
-        const [existing] = await connection.query(
-            `SELECT id
-             FROM comment_likes
-             WHERE comment_id = ?
-             AND user_id = ?`,
+        // =========================================
+        // CHECK IF USER ALREADY LIKED
+        // =========================================
+
+        const [existingLike] = await connection.query(
+            `
+            SELECT id
+            FROM comment_likes
+            WHERE comment_id = ?
+            AND user_id = ?
+            `,
             [commentId, userId]
         );
 
-        // UNLIKE
-        if (existing.length > 0) {
+        // =========================================
+        // GET COMMENT INFO
+        // =========================================
 
-            await connection.query(
-                `DELETE FROM comment_likes
-                 WHERE comment_id = ?
-                 AND user_id = ?`,
-                [commentId, userId]
-            );
-
-            await connection.query(
-                `UPDATE comments
-                 SET likes_count = GREATEST(likes_count - 1, 0)
-                 WHERE id = ?`,
-                [commentId]
-            );
-            await connection.query(
-                `DELETE FROM notifications
-                WHERE sender_id = ?
-                AND comment_id = ?
-                AND type = 'comment_like'`,
-                [userId, commentId]
-            );
-
-            await connection.commit();
-
-            return res.json({
-                liked: false
-            });
-        }
-
-        const [commentExists] = await connection.query(
-            `SELECT id, user_id, post_id
-            FROM comments
-            WHERE id = ?
-            AND is_deleted = 0`,
+        const [commentRows] = await connection.query(
+            `
+            SELECT
+                c.id,
+                c.user_id,
+                c.post_id
+            FROM comments c
+            WHERE c.id = ?
+            AND c.is_deleted = 0
+            `,
             [commentId]
         );
 
-        if (!commentExists.length) {
+        if (!commentRows.length) {
 
             await connection.rollback();
 
@@ -981,46 +966,303 @@ const likeComment = async (req, res) => {
             });
         }
 
+        const commentOwnerId = commentRows[0].user_id;
+        const postId = commentRows[0].post_id;
+
+        // aggregate notification key
+        const aggregateKey =
+            `comment_like_${commentOwnerId}_${commentId}`;
+
+        // =========================================
+        // UNLIKE
+        // =========================================
+
+        if (existingLike.length > 0) {
+
+            // -------------------------------------
+            // REMOVE LIKE
+            // -------------------------------------
+
+            await connection.query(
+                `
+                DELETE FROM comment_likes
+                WHERE comment_id = ?
+                AND user_id = ?
+                `,
+                [commentId, userId]
+            );
+
+            // -------------------------------------
+            // DECREASE LIKE COUNT
+            // -------------------------------------
+
+            await connection.query(
+                `
+                UPDATE comments
+                SET likes_count = GREATEST(likes_count - 1, 0)
+                WHERE id = ?
+                `,
+                [commentId]
+            );
+
+            // -------------------------------------
+            // GET UPDATED TOTAL LIKES
+            // -------------------------------------
+
+            const [[likeData]] = await connection.query(
+                `
+                SELECT COUNT(*) AS totalLikes
+                FROM comment_likes
+                WHERE comment_id = ?
+                `,
+                [commentId]
+            );
+
+            const totalLikes = likeData.totalLikes;
+
+            // -------------------------------------
+            // IF NO LIKES LEFT
+            // DELETE NOTIFICATION
+            // -------------------------------------
+
+            if (totalLikes === 0) {
+
+                await connection.query(
+                    `
+                    DELETE FROM notifications
+                    WHERE aggregate_key = ?
+                    `,
+                    [aggregateKey]
+                );
+            }
+
+            // -------------------------------------
+            // OTHERWISE UPDATE NOTIFICATION
+            // -------------------------------------
+
+            else {
+
+                // get newest liker
+                const [[latestLiker]] = await connection.query(
+                    `
+                    SELECT
+                        cl.user_id,
+                        u.username
+                    FROM comment_likes cl
+                    JOIN users u
+                        ON u.id = cl.user_id
+                    WHERE cl.comment_id = ?
+                    ORDER BY cl.id DESC
+                    LIMIT 1
+                    `,
+                    [commentId]
+                );
+
+                // build notification text
+                let notificationContent;
+
+                if (totalLikes === 1) {
+
+                    notificationContent =
+                        `${latestLiker.username} liked your comment`;
+
+                } else {
+
+                    notificationContent =
+                        `${latestLiker.username} and ${totalLikes - 1} others liked your comment`;
+                }
+
+                // update notification
+                await connection.query(
+                    `
+                    UPDATE notifications
+                    SET
+                        sender_id = ?,
+                        content = ?,
+                        is_viewed = 0,
+                        created_at = NOW()
+                    WHERE aggregate_key = ?
+                    `,
+                    [
+                        latestLiker.user_id,
+                        notificationContent,
+                        aggregateKey
+                    ]
+                );
+            }
+
+            // -------------------------------------
+            // SUCCESS
+            // -------------------------------------
+
+            await connection.commit();
+
+            return res.json({
+                liked: false
+            });
+        }
+
+        // =========================================
         // LIKE
+        // =========================================
+
+        // -----------------------------------------
+        // INSERT LIKE
+        // -----------------------------------------
+
         await connection.query(
-            `INSERT INTO comment_likes
+            `
+            INSERT INTO comment_likes
             (comment_id, user_id)
-            VALUES (?, ?)`,
+            VALUES (?, ?)
+            `,
             [commentId, userId]
         );
 
+        // -----------------------------------------
+        // INCREASE COMMENT LIKE COUNT
+        // -----------------------------------------
+
         await connection.query(
-            `UPDATE comments
+            `
+            UPDATE comments
             SET likes_count = likes_count + 1
-            WHERE id = ?`,
+            WHERE id = ?
+            `,
             [commentId]
         );
-        const commentOwnerId = commentExists[0].user_id;
-        const postId = commentExists[0].post_id;
+
+        // =========================================
+        // NOTIFICATION LOGIC
+        // =========================================
+
+        // don't notify self-like
         if (commentOwnerId !== userId) {
-            await connection.query(
-                `INSERT INTO notifications
-                (
-                    receiver_id,
-                    sender_id,
-                    type,
-                    post_id,
-                    comment_id,
-                    is_viewed
-                )
-                VALUES (?, ?, ?, ?, ?, 0)`,
-                [
-                    commentOwnerId,
-                    userId,
-                    'comment_like',
-                    postId,
-                    commentId
-                ]
+
+            // -------------------------------------
+            // GET TOTAL LIKES
+            // -------------------------------------
+
+            const [[likeData]] = await connection.query(
+                `
+                SELECT COUNT(*) AS totalLikes
+                FROM comment_likes
+                WHERE comment_id = ?
+                `,
+                [commentId]
             );
+
+            const totalLikes = likeData.totalLikes;
+
+            // -------------------------------------
+            // GET CURRENT USERNAME
+            // -------------------------------------
+
+            const [[currentUser]] = await connection.query(
+                `
+                SELECT username
+                FROM users
+                WHERE id = ?
+                `,
+                [userId]
+            );
+
+            // -------------------------------------
+            // BUILD NOTIFICATION CONTENT
+            // -------------------------------------
+
+            let notificationContent;
+
+            if (totalLikes === 1) {
+
+                notificationContent =
+                    `${currentUser.username} liked your comment`;
+
+            } else {
+
+                notificationContent =
+                    `${currentUser.username} and ${totalLikes - 1} other${totalLikes - 1 > 1 ? 's' : ''} liked your comment`;
+            }
+
+            // -------------------------------------
+            // FIND EXISTING AGGREGATED NOTIFICATION
+            // -------------------------------------
+
+            const [existingNotification] = await connection.query(
+                `
+                SELECT id
+                FROM notifications
+                WHERE aggregate_key = ?
+                LIMIT 1
+                `,
+                [aggregateKey]
+            );
+
+            // -------------------------------------
+            // UPDATE EXISTING NOTIFICATION
+            // -------------------------------------
+
+            if (existingNotification.length > 0) {
+
+                await connection.query(
+                    `
+                    UPDATE notifications
+                    SET
+                        sender_id = ?,
+                        content = ?,
+                        is_viewed = 0,
+                        created_at = NOW()
+                    WHERE aggregate_key = ?
+                    `,
+                    [
+                        userId,
+                        notificationContent,
+                        aggregateKey
+                    ]
+                );
+            }
+
+            // -------------------------------------
+            // CREATE NEW NOTIFICATION
+            // -------------------------------------
+
+            else {
+
+                await connection.query(
+                    `
+                    INSERT INTO notifications
+                    (
+                        receiver_id,
+                        sender_id,
+                        type,
+                        content,
+                        post_id,
+                        comment_id,
+                        aggregate_key,
+                        is_viewed
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                    `,
+                    [
+                        commentOwnerId,
+                        userId,
+                        'comment_like',
+                        notificationContent,
+                        postId,
+                        commentId,
+                        aggregateKey
+                    ]
+                );
+            }
         }
+
+        // =========================================
+        // SUCCESS
+        // =========================================
+
         await connection.commit();
 
-        res.json({
+        return res.json({
             liked: true
         });
 
@@ -1030,14 +1272,139 @@ const likeComment = async (req, res) => {
 
         console.error(err);
 
-        res.status(500).json({
+        return res.status(500).json({
             message: "Server error"
         });
 
     } finally {
+
         connection.release();
     }
 };
+// const likeComment = async (req, res) => {
+
+//     const connection = await db.getConnection();
+
+//     try {
+
+//         await connection.beginTransaction();
+
+//         const userId = req.user.userId;
+//         const { commentId } = req.params;
+
+//         const [existing] = await connection.query(
+//             `SELECT id
+//              FROM comment_likes
+//              WHERE comment_id = ?
+//              AND user_id = ?`,
+//             [commentId, userId]
+//         );
+
+//         // UNLIKE
+//         if (existing.length > 0) {
+
+//             await connection.query(
+//                 `DELETE FROM comment_likes
+//                  WHERE comment_id = ?
+//                  AND user_id = ?`,
+//                 [commentId, userId]
+//             );
+
+//             await connection.query(
+//                 `UPDATE comments
+//                  SET likes_count = GREATEST(likes_count - 1, 0)
+//                  WHERE id = ?`,
+//                 [commentId]
+//             );
+//             await connection.query(
+//                 `DELETE FROM notifications
+//                 WHERE sender_id = ?
+//                 AND comment_id = ?
+//                 AND type = 'comment_like'`,
+//                 [userId, commentId]
+//             );
+
+//             await connection.commit();
+
+//             return res.json({
+//                 liked: false
+//             });
+//         }
+
+//         const [commentExists] = await connection.query(
+//             `SELECT id, user_id, post_id
+//             FROM comments
+//             WHERE id = ?
+//             AND is_deleted = 0`,
+//             [commentId]
+//         );
+
+//         if (!commentExists.length) {
+
+//             await connection.rollback();
+
+//             return res.status(404).json({
+//                 message: "Comment not found"
+//             });
+//         }
+
+//         // LIKE
+//         await connection.query(
+//             `INSERT INTO comment_likes
+//             (comment_id, user_id)
+//             VALUES (?, ?)`,
+//             [commentId, userId]
+//         );
+
+//         await connection.query(
+//             `UPDATE comments
+//             SET likes_count = likes_count + 1
+//             WHERE id = ?`,
+//             [commentId]
+//         );
+//         const commentOwnerId = commentExists[0].user_id;
+//         const postId = commentExists[0].post_id;
+//         if (commentOwnerId !== userId) {
+//             await connection.query(
+//                 `INSERT INTO notifications
+//                 (
+//                     receiver_id,
+//                     sender_id,
+//                     type,
+//                     post_id,
+//                     comment_id,
+//                     is_viewed
+//                 )
+//                 VALUES (?, ?, ?, ?, ?, 0)`,
+//                 [
+//                     commentOwnerId,
+//                     userId,
+//                     'comment_like',
+//                     postId,
+//                     commentId
+//                 ]
+//             );
+//         }
+//         await connection.commit();
+
+//         res.json({
+//             liked: true
+//         });
+
+//     } catch (err) {
+
+//         await connection.rollback();
+
+//         console.error(err);
+
+//         res.status(500).json({
+//             message: "Server error"
+//         });
+
+//     } finally {
+//         connection.release();
+//     }
+// };
 
 module.exports = {
      addComment, 
