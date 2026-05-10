@@ -276,7 +276,7 @@ const createPost = async (req, res) => {
 // only for content post body
 const updatePostBodyContent = async (req, res) => {
    try {
-    const userId = req.user.id;
+    const userId = req.user.userId;
     const { contentId, postId } = req.params;
     const { bodyText } = req.body;
 

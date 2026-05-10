@@ -37,7 +37,7 @@ router.post("/create-posts", protect,
 
   router.get("/get-post/:id", getPostsById);
 
-  router.patch("/update-post-body-content/:contentId/:postId", protect, updatePostBodyContent);
+  router.put("/update-post-body-content/:contentId/:postId", protect, updatePostBodyContent);
 
 
 
