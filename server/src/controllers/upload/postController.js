@@ -341,26 +341,26 @@ const createPost = async (req, res) => {
 }; 
 
 // only for content post body
-const updatePostBodyContent = async (req, res) => {
-   try {
-    const userId = req.user.userId;
-    const { contentId, postId } = req.params;
-    const { bodyText} = req.body;
+// const updatePostBodyContent = async (req, res) => {
+//    try {
+//     const userId = req.user.userId;
+//     const { contentId, postId } = req.params;
+//     const { bodyText} = req.body;
 
-    const [post] = await pool.query(
-      "UPDATE content SET text_body = ? WHERE id = ? AND user_id = ? AND post_id = ?",
-      [bodyText, contentId, userId, postId]
-    );
-   // Invalidate only this post cache
-    await redisClient.del(`post:${postId}`);
+//     const [post] = await pool.query(
+//       "UPDATE content SET text_body = ? WHERE id = ? AND user_id = ? AND post_id = ?",
+//       [bodyText, contentId, userId, postId]
+//     );
+//    // Invalidate only this post cache
+//     await redisClient.del(`post:${postId}`);
 
-    res.status(200).json({ message: "Content updated successfully" });
-   }
-   catch(error){
-      console.error(error.message);
-      return res.status(500).json({ message: "Sorry, Server Error" });
-   }
-}
+//     res.status(200).json({ message: "Content updated successfully" });
+//    }
+//    catch(error){
+//       console.error(error.message);
+//       return res.status(500).json({ message: "Sorry, Server Error" });
+//    }
+// }
 
 // all post type
 const deletePost = async (req, res) => {
@@ -600,6 +600,9 @@ const deletePost = async (req, res) => {
 //   }
 // };
 
+// ================================
+// SAFE JSON PARSER
+// ================================
 function safeJsonParse(str) {
   try {
     return JSON.parse(str);
@@ -609,6 +612,9 @@ function safeJsonParse(str) {
   }
 }
 
+// ================================
+// GET ALL POSTS
+// ================================
 const getAllPosts = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -617,62 +623,117 @@ const getAllPosts = async (req, res) => {
 
     const PAGE_KEY = `posts:page:${page}`;
 
-    // =====================
-    // 1. CHECK PAGE CACHE
-    // =====================
+    // ====================================
+    // 1. CHECK PAGE IDS CACHE
+    // ====================================
     const cachedIds = await redisClient.get(PAGE_KEY);
+
     if (cachedIds) {
       const ids = safeJsonParse(cachedIds) || [];
 
-      // pipeline to fetch all post caches
-      const pipeline = redisClient.multi();
-      ids.forEach(id => pipeline.get(`post:${id}`));
-      const results = await pipeline.exec();
+      if (ids.length) {
 
-      const posts = [];
-      const missingIds = [];
+        // fetch all cached posts
+        const pipeline = redisClient.multi();
 
-      results.forEach((r, idx) => {
-        const val = r[1];
-        if (val) {
+        ids.forEach(id => {
+          pipeline.get(`post:${id}`);
+        });
+
+        const results = await pipeline.exec();
+
+        const cachedPostMap = new Map();
+        const missingIds = [];
+
+        // FIXED PIPELINE PARSING
+        results.forEach((val, idx) => {
+
+          if (!val) {
+            missingIds.push(ids[idx]);
+            return;
+          }
+
           const parsed = safeJsonParse(val);
-          if (parsed) posts.push(parsed);
-          else missingIds.push(ids[idx]);
-        } else {
-          missingIds.push(ids[idx]);
+
+          if (parsed) {
+            cachedPostMap.set(String(ids[idx]), parsed);
+          } else {
+            missingIds.push(ids[idx]);
+          }
+        });
+
+        // ====================================
+        // ALL POSTS FOUND IN CACHE
+        // ====================================
+        if (missingIds.length === 0) {
+
+          const orderedPosts = ids
+            .map(id => cachedPostMap.get(String(id)))
+            .filter(Boolean);
+
+          console.log("CACHE HIT (page + posts)");
+
+          return res.status(200).json({
+            source: "cache",
+            data: orderedPosts
+          });
         }
-      });
 
-      // if all posts cached, return immediately
-      if (missingIds.length === 0) {
-        console.log("CACHE HIT (page + posts)");
-        return res.status(200).json({ source: "cache", data: posts });
+        // ====================================
+        // PARTIAL CACHE HIT
+        // ====================================
+        console.log("PARTIAL CACHE HIT");
+
+        const hydrated = await hydratePostsFromDb(missingIds);
+
+        // cache hydrated posts
+        const hydratePipeline = redisClient.multi();
+
+        hydrated.forEach(post => {
+
+          cachedPostMap.set(String(post.id), post);
+
+          hydratePipeline.set(
+            `post:${post.id}`,
+            JSON.stringify(post),
+            { EX: 300 }
+          );
+        });
+
+        await hydratePipeline.exec();
+
+        // preserve original order
+        const orderedPosts = ids
+          .map(id => cachedPostMap.get(String(id)))
+          .filter(Boolean);
+
+        return res.status(200).json({
+          source: "mixed",
+          data: orderedPosts
+        });
       }
-
-      // otherwise, fetch missing posts from DB and merge
-      console.log("PARTIAL CACHE HIT, hydrating missing posts...");
-      const hydrated = await hydratePostsFromDb(missingIds);
-      hydrated.forEach(p => {
-        posts.push(p);
-        redisClient.set(`post:${p.id}`, JSON.stringify(p), { EX: 300 });
-      });
-
-      return res.status(200).json({ source: "mixed", data: posts });
     }
 
-    // =====================
-    // 2. GET BASE POSTS FROM DB
-    // =====================
+    // ====================================
+    // 2. FETCH FROM DATABASE
+    // ====================================
     const [posts] = await pool.query(`
       SELECT
-        p.id, p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color,
-        p.likes_count, p.comments_count, p.views_count,
-        p.created_at, p.status,
+        p.id,
+        p.post_type,
+        p.is_anonymous,
+        p.anonymous_name,
+        p.anonymous_bg_color,
+        p.likes_count,
+        p.comments_count,
+        p.views_count,
+        p.created_at,
+        p.status,
         u.username,
         GROUP_CONCAT(tg.label) as tags
       FROM posts p
       JOIN users u ON p.user_id = u.id
-      LEFT JOIN post_tags pt ON pt.post_id = p.id 
+      LEFT JOIN post_tags pt ON pt.post_id = p.id
       LEFT JOIN tags tg ON tg.id = pt.tag_id
       GROUP BY p.id
       ORDER BY p.created_at DESC
@@ -680,140 +741,345 @@ const getAllPosts = async (req, res) => {
     `, [limit, offset]);
 
     if (!posts.length) {
-      return res.status(200).json({ source: "db", data: [] });
+      return res.status(200).json({
+        source: "db",
+        data: []
+      });
     }
 
-    // hydrate related data
-    const final = await hydratePostsFromDb(posts.map(p => p.id), posts);
+    // hydrate
+    const final = await hydratePostsFromDb(
+      posts.map(p => p.id),
+      posts
+    );
 
-    // =====================
+    // ====================================
     // 3. CACHE PAGE IDS + POSTS
-    // =====================
+    // ====================================
     const ids = final.map(p => p.id);
-    await redisClient.set(PAGE_KEY, JSON.stringify(ids), { EX: 300 });
+
+    await redisClient.set(
+      PAGE_KEY,
+      JSON.stringify(ids),
+      { EX: 300 }
+    );
+
     const pipeline = redisClient.multi();
-    final.forEach(p => pipeline.set(`post:${p.id}`, JSON.stringify(p), { EX: 300 }));
+
+    final.forEach(post => {
+      pipeline.set(
+        `post:${post.id}`,
+        JSON.stringify(post),
+        { EX: 300 }
+      );
+    });
+
     await pipeline.exec();
 
-    return res.status(200).json({ source: "db", data: final });
+    console.log("DB HIT");
+
+    return res.status(200).json({
+      source: "db",
+      data: final
+    });
 
   } catch (err) {
     console.error("getAllPosts error:", err);
-    res.status(500).json({ message: "Server error" });
+
+    return res.status(500).json({
+      message: "Server error"
+    });
   }
 };
 
-// helper to hydrate posts with related data
+// ================================
+// HYDRATE POSTS
+// ================================
 async function hydratePostsFromDb(ids, basePosts = null) {
-  // if basePosts not provided, fetch them
+
   let posts = basePosts;
+
+  // fetch posts if not supplied
   if (!posts) {
-    const [rows] = await pool.query(`SELECT * FROM posts WHERE id IN (?)`, [ids]);
+
+    const [rows] = await pool.query(`
+      SELECT *
+      FROM posts
+      WHERE id IN (?)
+      ORDER BY FIELD(id, ?)
+    `, [ids, ids]);
+
     posts = rows;
   }
 
-  // split by type
-  const contentIds = posts.filter(p => p.post_type === "content").map(p => p.id);
-  const confessionIds = posts.filter(p => p.post_type === "confession").map(p => p.id);
-  const questionIds = posts.filter(p => p.post_type === "question").map(p => p.id);
+  // ====================================
+  // SPLIT IDS
+  // ====================================
+  const contentIds = posts
+    .filter(p => p.post_type === "content")
+    .map(p => p.id);
 
+  const confessionIds = posts
+    .filter(p => p.post_type === "confession")
+    .map(p => p.id);
+
+  const questionIds = posts
+    .filter(p => p.post_type === "question")
+    .map(p => p.id);
+
+  // ====================================
+  // FETCH RELATED TABLES
+  // ====================================
   const [contents] = contentIds.length
-    ? await pool.query(`SELECT * FROM content WHERE post_id IN (?)`, [contentIds])
+    ? await pool.query(
+        `SELECT * FROM content WHERE post_id IN (?)`,
+        [contentIds]
+      )
     : [[]];
 
   const [confessions] = confessionIds.length
-    ? await pool.query(`SELECT * FROM confession WHERE post_id IN (?)`, [confessionIds])
+    ? await pool.query(
+        `SELECT * FROM confession WHERE post_id IN (?)`,
+        [confessionIds]
+      )
     : [[]];
 
   const [questions] = questionIds.length
-    ? await pool.query(`SELECT * FROM question WHERE post_id IN (?)`, [questionIds])
+    ? await pool.query(
+        `SELECT * FROM question WHERE post_id IN (?)`,
+        [questionIds]
+      )
     : [[]];
 
   const qIds = questions.map(q => q.id);
 
   const [closed] = qIds.length
-    ? await pool.query(`SELECT * FROM closedend WHERE question_id IN (?)`, [qIds])
+    ? await pool.query(
+        `SELECT * FROM closedend WHERE question_id IN (?)`,
+        [qIds]
+      )
     : [[]];
 
   const [ranges] = qIds.length
-    ? await pool.query(`SELECT * FROM question_range WHERE question_id IN (?)`, [qIds])
+    ? await pool.query(
+        `SELECT * FROM question_range WHERE question_id IN (?)`,
+        [qIds]
+      )
     : [[]];
 
   const [ratings] = qIds.length
-    ? await pool.query(`SELECT * FROM rating WHERE question_id IN (?)`, [qIds])
+    ? await pool.query(
+        `SELECT * FROM rating WHERE question_id IN (?)`,
+        [qIds]
+      )
     : [[]];
 
   const [singleOptions] = qIds.length
     ? await pool.query(`
-      SELECT sco.*, sc.question_id
-      FROM singlechoice_option sco
-      JOIN singlechoice sc ON sco.singlechoice_id = sc.id
-      WHERE sc.question_id IN (?)
-    `, [qIds])
+        SELECT sco.*, sc.question_id
+        FROM singlechoice_option sco
+        JOIN singlechoice sc
+          ON sco.singlechoice_id = sc.id
+        WHERE sc.question_id IN (?)
+      `, [qIds])
     : [[]];
 
   const [multipleOptions] = qIds.length
     ? await pool.query(`
-      SELECT mco.*, mc.question_id, mc.include_all_above
-      FROM multiplechoice_option mco
-      JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
-      WHERE mc.question_id IN (?)
-    `, [qIds])
+        SELECT
+          mco.*,
+          mc.question_id,
+          mc.include_all_above
+        FROM multiplechoice_option mco
+        JOIN multiplechoice mc
+          ON mco.multiplechoice_id = mc.id
+        WHERE mc.question_id IN (?)
+      `, [qIds])
     : [[]];
 
   const [rankingItems] = qIds.length
     ? await pool.query(`
-      SELECT ri.*, ro.question_id
-      FROM ranking_item ri
-      JOIN rankingorder ro ON ri.ranking_id = ro.id
-      WHERE ro.question_id IN (?)
-    `, [qIds])
+        SELECT ri.*, ro.question_id
+        FROM ranking_item ri
+        JOIN rankingorder ro
+          ON ri.ranking_id = ro.id
+        WHERE ro.question_id IN (?)
+      `, [qIds])
     : [[]];
 
-  // build final
+  // ====================================
+  // MAPS FOR FAST LOOKUP
+  // ====================================
+  const contentMap = new Map(
+    contents.map(c => [c.post_id, c])
+  );
+
+  const confessionMap = new Map(
+    confessions.map(c => [c.post_id, c])
+  );
+
+  const questionMap = new Map(
+    questions.map(q => [q.post_id, q])
+  );
+
+  const closedMap = new Map(
+    closed.map(c => [c.question_id, c])
+  );
+
+  const rangeMap = new Map(
+    ranges.map(r => [r.question_id, r])
+  );
+
+  const ratingMap = new Map(
+    ratings.map(r => [r.question_id, r])
+  );
+
+  // ====================================
+  // BUILD FINAL RESPONSE
+  // ====================================
   return posts.map(post => {
+
     let data = null;
 
+    // ====================================
+    // CONTENT
+    // ====================================
     if (post.post_type === "content") {
-      data = contents.find(c => c.post_id === post.id) || null;
+      data = contentMap.get(post.id) || null;
     }
+
+    // ====================================
+    // CONFESSION
+    // ====================================
     if (post.post_type === "confession") {
-      data = confessions.find(c => c.post_id === post.id) || null;
+      data = confessionMap.get(post.id) || null;
     }
+
+    // ====================================
+    // QUESTION
+    // ====================================
     if (post.post_type === "question") {
-      const q = questions.find(q => q.post_id === post.id);
-      if (!q) return { ...post, data: null };
+
+      const q = questionMap.get(post.id);
+
+      if (!q) {
+        return {
+          ...post,
+          data: null
+        };
+      }
 
       let extra = {};
+
       switch (q.question_type) {
+
         case "closedend":
-          extra = closed.find(c => c.question_id === q.id) || {};
+          extra = closedMap.get(q.id) || {};
           break;
+
         case "range":
-          extra = ranges.find(r => r.question_id === q.id) || {};
+          extra = rangeMap.get(q.id) || {};
           break;
+
         case "singlechoice":
-          extra = { choice: singleOptions.filter(o => o.question_id === q.id) };
-          break;
-        case "multiplechoice":
           extra = {
-            include_all_above: multipleOptions.find(o => o.question_id === q.id)?.include_all_above,
-            choices: multipleOptions.filter(o => o.question_id === q.id),
+            choices: singleOptions.filter(
+              o => o.question_id === q.id
+            )
           };
           break;
-        case "rankingorder":
-          extra = { items: rankingItems.filter(i => i.question_id === q.id) };
+
+        case "multiplechoice":
+          extra = {
+            include_all_above:
+              multipleOptions.find(
+                o => o.question_id === q.id
+              )?.include_all_above || false,
+
+            choices: multipleOptions.filter(
+              o => o.question_id === q.id
+            )
+          };
           break;
+
+        case "rankingorder":
+          extra = {
+            items: rankingItems.filter(
+              i => i.question_id === q.id
+            )
+          };
+          break;
+
         case "rating":
-          extra = ratings.find(r => r.question_id === q.id) || {};
+          extra = ratingMap.get(q.id) || {};
           break;
       }
-      data = { ...q, ...extra };
+
+      data = {
+        ...q,
+        ...extra
+      };
     }
 
-    return { ...post, created_at: timeAgo(post.created_at), data };
+    return {
+      ...post,
+      created_at: timeAgo(post.created_at),
+      data
+    };
   });
 }
+
+// ================================
+// UPDATE CONTENT
+// ================================
+const updatePostBodyContent = async (req, res) => {
+
+  try {
+
+    const userId = req.user.userId;
+
+    const { contentId, postId } = req.params;
+
+    const { bodyText } = req.body;
+
+    await pool.query(
+      `
+      UPDATE content
+      SET text_body = ?
+      WHERE id = ?
+      AND user_id = ?
+      AND post_id = ?
+      `,
+      [bodyText, contentId, userId, postId]
+    );
+
+    // ====================================
+    // INVALIDATE POST CACHE
+    // ====================================
+    await redisClient.del(`post:${postId}`);
+
+    // ====================================
+    // INVALIDATE PAGE CACHE
+    // ====================================
+    const pageKeys = await redisClient.keys("posts:page:*");
+
+    if (pageKeys.length) {
+      await redisClient.del(pageKeys);
+    }
+
+    return res.status(200).json({
+      message: "Content updated successfully"
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Sorry, Server Error"
+    });
+  }
+};
 
 const getPostsById = async(req, res)=>{
 
