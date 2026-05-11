@@ -345,7 +345,7 @@ const updatePostBodyContent = async (req, res) => {
    try {
     const userId = req.user.userId;
     const { contentId, postId } = req.params;
-    const { bodyText, page } = req.body;
+    const { bodyText} = req.body;
 
     const [post] = await pool.query(
       "UPDATE content SET text_body = ? WHERE id = ? AND user_id = ? AND post_id = ?",
@@ -600,6 +600,15 @@ const deletePost = async (req, res) => {
 //   }
 // };
 
+function safeJsonParse(str) {
+  try {
+    return JSON.parse(str);
+  } catch (err) {
+    console.error("Invalid JSON in cache:", str);
+    return null;
+  }
+}
+
 const getAllPosts = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -613,7 +622,7 @@ const getAllPosts = async (req, res) => {
     // =====================
     const cachedIds = await redisClient.get(PAGE_KEY);
     if (cachedIds) {
-      const ids = JSON.parse(cachedIds);
+      const ids = safeJsonParse(cachedIds) || [];
 
       // pipeline to fetch all post caches
       const pipeline = redisClient.multi();
@@ -626,7 +635,9 @@ const getAllPosts = async (req, res) => {
       results.forEach((r, idx) => {
         const val = r[1];
         if (val) {
-          posts.push(JSON.parse(val));
+          const parsed = safeJsonParse(val);
+          if (parsed) posts.push(parsed);
+          else missingIds.push(ids[idx]);
         } else {
           missingIds.push(ids[idx]);
         }
@@ -687,7 +698,7 @@ const getAllPosts = async (req, res) => {
     return res.status(200).json({ source: "db", data: final });
 
   } catch (err) {
-    console.error(err);
+    console.error("getAllPosts error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
