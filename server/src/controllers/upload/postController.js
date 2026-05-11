@@ -258,72 +258,51 @@ const createPost = async (req, res) => {
     }
     await handler[post_type]();
 
-    // =====================
-    //  CACHE NEW POST
-    // =====================
-    let data = null;
+   // ====================================
+// HYDRATE NEW POST FROM DB
+// ====================================
+const [basePosts] = await pool.query(`
+  SELECT
+    p.id,
+    p.post_type,
+    p.is_anonymous,
+    p.anonymous_name,
+    p.anonymous_bg_color,
+    p.likes_count,
+    p.comments_count,
+    p.views_count,
+    p.created_at,
+    p.status,
+    u.username,
+    GROUP_CONCAT(tg.label) as tags
+  FROM posts p
+  JOIN users u ON p.user_id = u.id
+  LEFT JOIN post_tags pt ON pt.post_id = p.id
+  LEFT JOIN tags tg ON tg.id = pt.tag_id
+  WHERE p.id = ?
+  GROUP BY p.id
+`, [postId]);
 
-    switch (post_type) {
-      case "content":
-        data = {
-          type: content_type,
-          title: content_title,
-          text_body,
-          media_url: req.files?.contentFile?.map(f => f.filename) || null
-        };
-        break;
+const hydratedPost = await hydratePostsFromDb(
+  [postId],
+  basePosts
+);
 
-      case "confession":
-        data = {
-          type: confession_type,
-          title: confession_title,
-          media_url: req.files?.confessionFile?.[0]?.filename || null
-        };
-        break;
+const finalPost = hydratedPost[0];
 
-      case "question":
-        data = {
-          question_type,
-          title: question_title,
-          question_related_to,
-          media_url: req.files?.questionFile?.[0]?.filename || null
-          // you can extend here with choices/range/rating if you want full hydration
-        };
-        break;
+// cache single post
+await redisClient.set(
+  `post:${postId}`,
+  JSON.stringify(finalPost),
+  { EX: 300 }
+);
 
-      case "repost":
-        data = { title: repost_title };
-        break;
-    }
+// invalidate page caches
+const pageKeys = await redisClient.keys("posts:page:*");
 
-    const newPost = {
-      id: postId,
-      post_type,
-      is_anonymous: isAnonymous,
-      anonymous_name: anonName,
-      anonymous_bg_color: anonColor,
-      likes_count: 0,
-      comments_count: 0,
-      views_count: 0,
-      created_at: new Date(),
-      username: req.user.username, // if available
-      tags, // normalized tags
-      status: "active",
-      data
-    };
-
-    // cache the new post individually
-    await redisClient.set(`post:${postId}`, JSON.stringify(newPost), { EX: 300 });
-
-    // update page 1 cache (prepend new ID, trim to limit)
-    const PAGE_KEY = "posts:page:1";
-    const cachedIds = await redisClient.get(PAGE_KEY);
-    let ids = cachedIds ? JSON.parse(cachedIds) : [];
-
-    ids.unshift(postId);
-    ids = ids.slice(0, 25);
-
-    await redisClient.set(PAGE_KEY, JSON.stringify(ids), { EX: 300 });
+if (pageKeys.length) {
+  await redisClient.del(pageKeys);
+}
 
     
     const postTypeRes = post_type.slice(0, 1).toUpperCase() + post_type.slice(1);
@@ -340,65 +319,48 @@ const createPost = async (req, res) => {
     }
 }; 
 
-// only for content post body
-// const updatePostBodyContent = async (req, res) => {
-//    try {
-//     const userId = req.user.userId;
-//     const { contentId, postId } = req.params;
-//     const { bodyText} = req.body;
-
-//     const [post] = await pool.query(
-//       "UPDATE content SET text_body = ? WHERE id = ? AND user_id = ? AND post_id = ?",
-//       [bodyText, contentId, userId, postId]
-//     );
-//    // Invalidate only this post cache
-//     await redisClient.del(`post:${postId}`);
-
-//     res.status(200).json({ message: "Content updated successfully" });
-//    }
-//    catch(error){
-//       console.error(error.message);
-//       return res.status(500).json({ message: "Sorry, Server Error" });
-//    }
-// }
 
 // all post type
 const deletePost = async (req, res) => {
   try {
+
     const userId = req.user.id;
     const { postId } = req.params;
 
-    // Delete from DB
+    // delete from DB
     await pool.query(
-      "DELETE FROM posts WHERE id = ? AND user_id = ? AND is_deleted = 0",
+      `
+      DELETE FROM posts
+      WHERE id = ?
+      AND user_id = ?
+      AND is_deleted = 0
+      `,
       [postId, userId]
     );
 
-    // Invalidate post cache
+    // delete single post cache
     await redisClient.del(`post:${postId}`);
 
-    // Remove postId from any page caches
-    // (optional: if you know which page(s) it was on, you can target those)
-    const keys = await redisClient.keys("posts:page:*");
-    for (const key of keys) {
-      const cachedIds = await redisClient.get(key);
-      if (!cachedIds) continue;
+    // invalidate all page caches
+    const pageKeys = await redisClient.keys("posts:page:*");
 
-      const ids = JSON.parse(cachedIds);
-      const newIds = ids.filter(id => id !== parseInt(postId));
-
-      if (newIds.length !== ids.length) {
-        await redisClient.set(key, JSON.stringify(newIds), { EX: 300 });
-      }
+    if (pageKeys.length) {
+      await redisClient.del(pageKeys);
     }
 
-    res.status(200).json({ message: "Post deleted successfully" });
+    return res.status(200).json({
+      message: "Post deleted successfully"
+    });
+
   } catch (error) {
+
     console.error(error.message);
-    res.status(500).json({ message: "Sorry, Server Error" });
+
+    return res.status(500).json({
+      message: "Sorry, Server Error"
+    });
   }
 };
-
 // const getAllPosts = async (req, res) => {
 //   try {
 //     const page = parseInt(req.query.page) || 1;
@@ -603,6 +565,7 @@ const deletePost = async (req, res) => {
 // ================================
 // SAFE JSON PARSER
 // ================================
+
 function safeJsonParse(str) {
   try {
     return JSON.parse(str);
@@ -1088,11 +1051,12 @@ const getPostsById = async(req, res)=>{
     const CACHE_KEY = `post:${id}`; // align with layered cache naming
     const cached = await redisClient.get(CACHE_KEY);
 
-    if (cached) {
-      console.log("CACHE HIT");
+   const parsed = safeJsonParse(cached);
+
+    if (parsed) {
       return res.status(200).json({
         source: "cache",
-        data: JSON.parse(cached),
+        data: parsed
       });
     }
 
@@ -1188,7 +1152,12 @@ const getPostsById = async(req, res)=>{
             break;
         }
     }
-    const final = { ...post, ...data };
+    const final = {
+      ...post,
+      created_at: timeAgo(post.created_at),
+      data
+    };
+    // const final = { ...post, ...data };
      
     // cache hydrated post
     await redisClient.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
@@ -1250,7 +1219,8 @@ module.exports = {
   upload,
   getAllPosts,
   getPostsById,
-  updatePostBodyContent
+  updatePostBodyContent,
+  deletePost
  
 
 };
