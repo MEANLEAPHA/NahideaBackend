@@ -257,13 +257,80 @@ const createPost = async (req, res) => {
       return res.status(400).json({ code: 400, message: "Invalid post type" });
     }
     await handler[post_type]();
+
+    // =====================
+    //  CACHE NEW POST
+    // =====================
+    let data = null;
+
+    switch (post_type) {
+      case "content":
+        data = {
+          type: content_type,
+          title: content_title,
+          text_body,
+          media_url: req.files?.contentFile?.map(f => f.filename) || null
+        };
+        break;
+
+      case "confession":
+        data = {
+          type: confession_type,
+          title: confession_title,
+          media_url: req.files?.confessionFile?.[0]?.filename || null
+        };
+        break;
+
+      case "question":
+        data = {
+          question_type,
+          title: question_title,
+          question_related_to,
+          media_url: req.files?.questionFile?.[0]?.filename || null
+          // you can extend here with choices/range/rating if you want full hydration
+        };
+        break;
+
+      case "repost":
+        data = { title: repost_title };
+        break;
+    }
+
+    const newPost = {
+      id: postId,
+      post_type,
+      is_anonymous: isAnonymous,
+      anonymous_name: anonName,
+      anonymous_bg_color: anonColor,
+      likes_count: 0,
+      comments_count: 0,
+      views_count: 0,
+      created_at: new Date(),
+      username: req.user.username, // if available
+      tags, // normalized tags
+      status: "active",
+      data
+    };
+
+    // cache the new post individually
+    await redisClient.set(`post:${postId}`, JSON.stringify(newPost), { EX: 300 });
+
+    // update page 1 cache (prepend new ID, trim to limit)
+    const PAGE_KEY = "posts:page:1";
+    const cachedIds = await redisClient.get(PAGE_KEY);
+    let ids = cachedIds ? JSON.parse(cachedIds) : [];
+
+    ids.unshift(postId);
+    ids = ids.slice(0, 25);
+
+    await redisClient.set(PAGE_KEY, JSON.stringify(ids), { EX: 300 });
+
     
     const postTypeRes = post_type.slice(0, 1).toUpperCase() + post_type.slice(1);
     res.status(200).json({ message: `${postTypeRes} uploaded successfully`, postId });
 
 
-    // clear old cache
-    await redisClient.del("posts:page:1");
+
 
     }
     catch(error){
@@ -278,12 +345,14 @@ const updatePostBodyContent = async (req, res) => {
    try {
     const userId = req.user.userId;
     const { contentId, postId } = req.params;
-    const { bodyText } = req.body;
+    const { bodyText, page } = req.body;
 
     const [post] = await pool.query(
       "UPDATE content SET text_body = ? WHERE id = ? AND user_id = ? AND post_id = ?",
       [bodyText, contentId, userId, postId]
     );
+   // Invalidate only this post cache
+    await redisClient.del(`post:${postId}`);
 
     res.status(200).json({ message: "Content updated successfully" });
    }
@@ -297,48 +366,296 @@ const updatePostBodyContent = async (req, res) => {
 const deletePost = async (req, res) => {
   try {
     const userId = req.user.id;
-
     const { postId } = req.params;
-    const [post] = await pool.query(
+
+    // Delete from DB
+    await pool.query(
       "DELETE FROM posts WHERE id = ? AND user_id = ? AND is_deleted = 0",
       [postId, userId]
-    )
+    );
 
-   }
-   catch(error){
-      console.error(error.message);
-      return res.status(500).json({ message: "Sorry, Server Error" });
-   }
-}
+    // Invalidate post cache
+    await redisClient.del(`post:${postId}`);
+
+    // Remove postId from any page caches
+    // (optional: if you know which page(s) it was on, you can target those)
+    const keys = await redisClient.keys("posts:page:*");
+    for (const key of keys) {
+      const cachedIds = await redisClient.get(key);
+      if (!cachedIds) continue;
+
+      const ids = JSON.parse(cachedIds);
+      const newIds = ids.filter(id => id !== parseInt(postId));
+
+      if (newIds.length !== ids.length) {
+        await redisClient.set(key, JSON.stringify(newIds), { EX: 300 });
+      }
+    }
+
+    res.status(200).json({ message: "Post deleted successfully" });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ message: "Sorry, Server Error" });
+  }
+};
+
+// const getAllPosts = async (req, res) => {
+//   try {
+//     const page = parseInt(req.query.page) || 1;
+//     const limit = 25;
+//     const offset = (page - 1) * limit;
+  
+//     const CACHE_KEY = `posts:page:${page}`;
+
+//     // =====================
+//     // 1. CHECK CACHE FIRST
+//     // =====================
+//     const cached = await redisClient.get(CACHE_KEY);
+
+//     if (cached) {
+//       console.log("CACHE HIT");
+//       return res.status(200).json({
+//         source: "cache",
+//         data: JSON.parse(cached),
+//       });
+//     }
+
+   
+
+//     // =====================
+//     // 2. GET BASE POSTS
+//     // =====================
+//      const [posts] = await pool.query(`
+//       SELECT
+//         p.id, p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color, p.likes_count, p.comments_count, p.views_count,
+//         p.created_at, p.status,
+//         u.username,
+//         GROUP_CONCAT(tg.label) as tags
+//       FROM posts p
+//       JOIN users u ON p.user_id = u.id
+//       LEFT JOIN post_tags pt ON pt.post_id = p.id 
+//       LEFT JOIN tags tg ON tg.id = pt.tag_id
+//       GROUP BY p.id
+//       ORDER BY p.created_at DESC
+//       LIMIT ? OFFSET ?
+//     `, [limit, offset]);
+
+//     if (!posts.length) {
+//       return res.status(200).json({ source: "db", data: [] });
+//     }
+
+//     // =====================
+//     // 3. SPLIT IDS BY TYPE
+//     // =====================
+//     const contentIds = [];
+//     const confessionIds = [];
+
+//     const questionIds = [];
+
+//     posts.forEach((p) => {
+
+//       if (p.post_type === "content") contentIds.push(p.id);
+//       if (p.post_type === "confession") confessionIds.push(p.id);
+//       if (p.post_type === "question") questionIds.push(p.id);
+
+//     });
+
+//     // =====================
+//     // 4. FETCH RELATED DATA
+//     // =====================
+//     const [contents] = contentIds.length
+//       ? await pool.query(`SELECT * FROM content WHERE post_id IN (?)`, [contentIds])
+//       : [[]];
+
+//     const [confessions] = confessionIds.length
+//       ? await pool.query(`SELECT * FROM confession WHERE post_id IN (?)`, [confessionIds])
+//       : [[]];
+
+//     const [questions] = questionIds.length
+//       ? await pool.query(`SELECT * FROM question WHERE post_id IN (?)`, [questionIds])
+//       : [[]];
+
+//     // get question ids
+//     const qIds = questions.map((q) => q.id);
+
+//     const [closed] = qIds.length
+//       ? await pool.query(`SELECT * FROM closedend WHERE question_id IN (?)`, [qIds])
+//       : [[]];
+
+//     const [ranges] = qIds.length
+//       ? await pool.query(`SELECT * FROM question_range WHERE question_id IN (?)`, [qIds])
+//       : [[]];
+
+//     const [ratings] = qIds.length
+//       ? await pool.query(`SELECT * FROM rating WHERE question_id IN (?)`, [qIds])
+//       : [[]];
+
+//     const [singleOptions] = qIds.length
+//       ? await pool.query(`
+//         SELECT sco.*, sc.question_id
+//         FROM singlechoice_option sco
+//         JOIN singlechoice sc ON sco.singlechoice_id = sc.id
+//         WHERE sc.question_id IN (?)
+//       `, [qIds])
+//       : [[]];
+
+//     const [multipleOptions] = qIds.length
+//       ? await pool.query(`
+//         SELECT mco.*, mc.question_id, mc.include_all_above
+//         FROM multiplechoice_option mco
+//         JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
+//         WHERE mc.question_id IN (?)
+//       `, [qIds])
+//       : [[]];
+
+//     const [rankingItems] = qIds.length
+//       ? await pool.query(`
+//         SELECT ri.*, ro.question_id
+//         FROM ranking_item ri
+//         JOIN rankingorder ro ON ri.ranking_id = ro.id
+//         WHERE ro.question_id IN (?)
+//       `, [qIds])
+//       : [[]];
+
+//     // =====================
+//     // 5. BUILD FINAL RESULT
+//     // =====================
+//     const final = posts.map((post) => {
+//       let data = null;
+
+//       // -------- CONTENT --------
+//       if (post.post_type === "content") {
+//         data = contents.find((c) => c.post_id === post.id) || null;
+//       }
+
+//       // -------- CONFESSION --------
+//       if (post.post_type === "confession") {
+//         data = confessions.find((c) => c.post_id === post.id) || null;
+//       }
+
+
+//       // -------- QUESTION --------
+//       if (post.post_type === "question") {
+//         const q = questions.find((q) => q.post_id === post.id);
+
+//         if (!q) return { ...post, data: null };
+
+//         let extra = {};
+
+//         switch (q.question_type) {
+//           case "closedend":
+//             extra = closed.find((c) => c.question_id === q.id) || {};
+//             break;
+
+//           case "range":
+//             extra = ranges.find((r) => r.question_id === q.id) || {};
+//             break;
+
+//           case "singlechoice":
+//             extra = {
+//               choice: singleOptions.filter((o) => o.question_id === q.id),
+//             };
+//             break;
+
+//           case "multiplechoice":
+//             extra = {
+//               include_all_above: multipleOptions.filter((o) => o.question_id === q.id)[0]?.include_all_above,
+//               choices: multipleOptions.filter((o) => o.question_id === q.id),
+//             };
+//             break;
+
+//           case "rankingorder":
+//             extra = {
+//               items: rankingItems.filter((i) => i.question_id === q.id),
+//             };
+//             break;
+
+//           case "rating":
+//             extra = ratings.find((r) => r.question_id === q.id) || {};
+//             break;
+//         }
+
+//         data = { ...q, ...extra };
+//       }
+
+//       return { 
+//         ...post, 
+//         created_at: timeAgo(post.created_at), 
+//         data };
+//     });
+
+//     // =====================
+//     // 6. CACHE RESULT
+//     // =====================
+//     await redisClient.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
+
+//     return res.status(200).json({
+//       source: "db",
+//       data: final,
+//     });
+
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
+
 const getAllPosts = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = 25;
     const offset = (page - 1) * limit;
-  
-    const CACHE_KEY = `posts:page:${page}`;
+
+    const PAGE_KEY = `posts:page:${page}`;
 
     // =====================
-    // 1. CHECK CACHE FIRST
+    // 1. CHECK PAGE CACHE
     // =====================
-    const cached = await redisClient.get(CACHE_KEY);
+    const cachedIds = await redisClient.get(PAGE_KEY);
+    if (cachedIds) {
+      const ids = JSON.parse(cachedIds);
 
-    if (cached) {
-      console.log("CACHE HIT");
-      return res.status(200).json({
-        source: "cache",
-        data: JSON.parse(cached),
+      // pipeline to fetch all post caches
+      const pipeline = redisClient.multi();
+      ids.forEach(id => pipeline.get(`post:${id}`));
+      const results = await pipeline.exec();
+
+      const posts = [];
+      const missingIds = [];
+
+      results.forEach((r, idx) => {
+        const val = r[1];
+        if (val) {
+          posts.push(JSON.parse(val));
+        } else {
+          missingIds.push(ids[idx]);
+        }
       });
+
+      // if all posts cached, return immediately
+      if (missingIds.length === 0) {
+        console.log("CACHE HIT (page + posts)");
+        return res.status(200).json({ source: "cache", data: posts });
+      }
+
+      // otherwise, fetch missing posts from DB and merge
+      console.log("PARTIAL CACHE HIT, hydrating missing posts...");
+      const hydrated = await hydratePostsFromDb(missingIds);
+      hydrated.forEach(p => {
+        posts.push(p);
+        redisClient.set(`post:${p.id}`, JSON.stringify(p), { EX: 300 });
+      });
+
+      return res.status(200).json({ source: "mixed", data: posts });
     }
 
-   
-
     // =====================
-    // 2. GET BASE POSTS
+    // 2. GET BASE POSTS FROM DB
     // =====================
-     const [posts] = await pool.query(`
+    const [posts] = await pool.query(`
       SELECT
-        p.id, p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color, p.likes_count, p.comments_count, p.views_count,
+        p.id, p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color,
+        p.likes_count, p.comments_count, p.views_count,
         p.created_at, p.status,
         u.username,
         GROUP_CONCAT(tg.label) as tags
@@ -355,155 +672,19 @@ const getAllPosts = async (req, res) => {
       return res.status(200).json({ source: "db", data: [] });
     }
 
-    // =====================
-    // 3. SPLIT IDS BY TYPE
-    // =====================
-    const contentIds = [];
-    const confessionIds = [];
-
-    const questionIds = [];
-
-    posts.forEach((p) => {
-
-      if (p.post_type === "content") contentIds.push(p.id);
-      if (p.post_type === "confession") confessionIds.push(p.id);
-      if (p.post_type === "question") questionIds.push(p.id);
-
-    });
+    // hydrate related data
+    const final = await hydratePostsFromDb(posts.map(p => p.id), posts);
 
     // =====================
-    // 4. FETCH RELATED DATA
+    // 3. CACHE PAGE IDS + POSTS
     // =====================
-    const [contents] = contentIds.length
-      ? await pool.query(`SELECT * FROM content WHERE post_id IN (?)`, [contentIds])
-      : [[]];
+    const ids = final.map(p => p.id);
+    await redisClient.set(PAGE_KEY, JSON.stringify(ids), { EX: 300 });
+    const pipeline = redisClient.multi();
+    final.forEach(p => pipeline.set(`post:${p.id}`, JSON.stringify(p), { EX: 300 }));
+    await pipeline.exec();
 
-    const [confessions] = confessionIds.length
-      ? await pool.query(`SELECT * FROM confession WHERE post_id IN (?)`, [confessionIds])
-      : [[]];
-
-    const [questions] = questionIds.length
-      ? await pool.query(`SELECT * FROM question WHERE post_id IN (?)`, [questionIds])
-      : [[]];
-
-    // get question ids
-    const qIds = questions.map((q) => q.id);
-
-    const [closed] = qIds.length
-      ? await pool.query(`SELECT * FROM closedend WHERE question_id IN (?)`, [qIds])
-      : [[]];
-
-    const [ranges] = qIds.length
-      ? await pool.query(`SELECT * FROM question_range WHERE question_id IN (?)`, [qIds])
-      : [[]];
-
-    const [ratings] = qIds.length
-      ? await pool.query(`SELECT * FROM rating WHERE question_id IN (?)`, [qIds])
-      : [[]];
-
-    const [singleOptions] = qIds.length
-      ? await pool.query(`
-        SELECT sco.*, sc.question_id
-        FROM singlechoice_option sco
-        JOIN singlechoice sc ON sco.singlechoice_id = sc.id
-        WHERE sc.question_id IN (?)
-      `, [qIds])
-      : [[]];
-
-    const [multipleOptions] = qIds.length
-      ? await pool.query(`
-        SELECT mco.*, mc.question_id, mc.include_all_above
-        FROM multiplechoice_option mco
-        JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
-        WHERE mc.question_id IN (?)
-      `, [qIds])
-      : [[]];
-
-    const [rankingItems] = qIds.length
-      ? await pool.query(`
-        SELECT ri.*, ro.question_id
-        FROM ranking_item ri
-        JOIN rankingorder ro ON ri.ranking_id = ro.id
-        WHERE ro.question_id IN (?)
-      `, [qIds])
-      : [[]];
-
-    // =====================
-    // 5. BUILD FINAL RESULT
-    // =====================
-    const final = posts.map((post) => {
-      let data = null;
-
-      // -------- CONTENT --------
-      if (post.post_type === "content") {
-        data = contents.find((c) => c.post_id === post.id) || null;
-      }
-
-      // -------- CONFESSION --------
-      if (post.post_type === "confession") {
-        data = confessions.find((c) => c.post_id === post.id) || null;
-      }
-
-
-      // -------- QUESTION --------
-      if (post.post_type === "question") {
-        const q = questions.find((q) => q.post_id === post.id);
-
-        if (!q) return { ...post, data: null };
-
-        let extra = {};
-
-        switch (q.question_type) {
-          case "closedend":
-            extra = closed.find((c) => c.question_id === q.id) || {};
-            break;
-
-          case "range":
-            extra = ranges.find((r) => r.question_id === q.id) || {};
-            break;
-
-          case "singlechoice":
-            extra = {
-              choice: singleOptions.filter((o) => o.question_id === q.id),
-            };
-            break;
-
-          case "multiplechoice":
-            extra = {
-              include_all_above: multipleOptions.filter((o) => o.question_id === q.id)[0]?.include_all_above,
-              choices: multipleOptions.filter((o) => o.question_id === q.id),
-            };
-            break;
-
-          case "rankingorder":
-            extra = {
-              items: rankingItems.filter((i) => i.question_id === q.id),
-            };
-            break;
-
-          case "rating":
-            extra = ratings.find((r) => r.question_id === q.id) || {};
-            break;
-        }
-
-        data = { ...q, ...extra };
-      }
-
-      return { 
-        ...post, 
-        created_at: timeAgo(post.created_at), 
-        data };
-    });
-
-    // =====================
-    // 6. CACHE RESULT
-    // =====================
-    await redisClient.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
-
-    return res.status(200).json({
-      source: "db",
-      data: final,
-    });
+    return res.status(200).json({ source: "db", data: final });
 
   } catch (err) {
     console.error(err);
@@ -511,12 +692,123 @@ const getAllPosts = async (req, res) => {
   }
 };
 
+// helper to hydrate posts with related data
+async function hydratePostsFromDb(ids, basePosts = null) {
+  // if basePosts not provided, fetch them
+  let posts = basePosts;
+  if (!posts) {
+    const [rows] = await pool.query(`SELECT * FROM posts WHERE id IN (?)`, [ids]);
+    posts = rows;
+  }
+
+  // split by type
+  const contentIds = posts.filter(p => p.post_type === "content").map(p => p.id);
+  const confessionIds = posts.filter(p => p.post_type === "confession").map(p => p.id);
+  const questionIds = posts.filter(p => p.post_type === "question").map(p => p.id);
+
+  const [contents] = contentIds.length
+    ? await pool.query(`SELECT * FROM content WHERE post_id IN (?)`, [contentIds])
+    : [[]];
+
+  const [confessions] = confessionIds.length
+    ? await pool.query(`SELECT * FROM confession WHERE post_id IN (?)`, [confessionIds])
+    : [[]];
+
+  const [questions] = questionIds.length
+    ? await pool.query(`SELECT * FROM question WHERE post_id IN (?)`, [questionIds])
+    : [[]];
+
+  const qIds = questions.map(q => q.id);
+
+  const [closed] = qIds.length
+    ? await pool.query(`SELECT * FROM closedend WHERE question_id IN (?)`, [qIds])
+    : [[]];
+
+  const [ranges] = qIds.length
+    ? await pool.query(`SELECT * FROM question_range WHERE question_id IN (?)`, [qIds])
+    : [[]];
+
+  const [ratings] = qIds.length
+    ? await pool.query(`SELECT * FROM rating WHERE question_id IN (?)`, [qIds])
+    : [[]];
+
+  const [singleOptions] = qIds.length
+    ? await pool.query(`
+      SELECT sco.*, sc.question_id
+      FROM singlechoice_option sco
+      JOIN singlechoice sc ON sco.singlechoice_id = sc.id
+      WHERE sc.question_id IN (?)
+    `, [qIds])
+    : [[]];
+
+  const [multipleOptions] = qIds.length
+    ? await pool.query(`
+      SELECT mco.*, mc.question_id, mc.include_all_above
+      FROM multiplechoice_option mco
+      JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
+      WHERE mc.question_id IN (?)
+    `, [qIds])
+    : [[]];
+
+  const [rankingItems] = qIds.length
+    ? await pool.query(`
+      SELECT ri.*, ro.question_id
+      FROM ranking_item ri
+      JOIN rankingorder ro ON ri.ranking_id = ro.id
+      WHERE ro.question_id IN (?)
+    `, [qIds])
+    : [[]];
+
+  // build final
+  return posts.map(post => {
+    let data = null;
+
+    if (post.post_type === "content") {
+      data = contents.find(c => c.post_id === post.id) || null;
+    }
+    if (post.post_type === "confession") {
+      data = confessions.find(c => c.post_id === post.id) || null;
+    }
+    if (post.post_type === "question") {
+      const q = questions.find(q => q.post_id === post.id);
+      if (!q) return { ...post, data: null };
+
+      let extra = {};
+      switch (q.question_type) {
+        case "closedend":
+          extra = closed.find(c => c.question_id === q.id) || {};
+          break;
+        case "range":
+          extra = ranges.find(r => r.question_id === q.id) || {};
+          break;
+        case "singlechoice":
+          extra = { choice: singleOptions.filter(o => o.question_id === q.id) };
+          break;
+        case "multiplechoice":
+          extra = {
+            include_all_above: multipleOptions.find(o => o.question_id === q.id)?.include_all_above,
+            choices: multipleOptions.filter(o => o.question_id === q.id),
+          };
+          break;
+        case "rankingorder":
+          extra = { items: rankingItems.filter(i => i.question_id === q.id) };
+          break;
+        case "rating":
+          extra = ratings.find(r => r.question_id === q.id) || {};
+          break;
+      }
+      data = { ...q, ...extra };
+    }
+
+    return { ...post, created_at: timeAgo(post.created_at), data };
+  });
+}
+
 const getPostsById = async(req, res)=>{
 
   try{
     const {id} = req.params;
-    const CACHE_KEY = `posts:id:${id}`;
-
+    const CACHE_KEY = `post:${id}`; // align with layered cache naming
     const cached = await redisClient.get(CACHE_KEY);
 
     if (cached) {
@@ -621,6 +913,7 @@ const getPostsById = async(req, res)=>{
     }
     const final = { ...post, ...data };
      
+    // cache hydrated post
     await redisClient.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
 
     return res.status(200).json({
