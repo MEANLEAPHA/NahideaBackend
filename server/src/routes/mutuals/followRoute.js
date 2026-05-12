@@ -18,7 +18,7 @@ const {
 router.post(
     "/:userId",
     protect,
-    followLimiter,
+    followerLimiter,
     followUser
 );
 
