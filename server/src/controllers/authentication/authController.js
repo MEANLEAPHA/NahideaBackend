@@ -624,7 +624,7 @@ const updateUser = async (
     // protect nickname duplicates
 
     const [nicknameExists] =
-      await db.query(
+      await pool.query(
         `
         SELECT id
         FROM users
@@ -647,7 +647,7 @@ const updateUser = async (
 
     // UPDATE USER
 
-    await db.query(
+    await pool.query(
       `
       UPDATE users
       SET
