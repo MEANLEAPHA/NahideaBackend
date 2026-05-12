@@ -11,7 +11,8 @@ const { register,
         newPassword,
         updateUser,
 
-        getUserInfo
+        getUserInfo,
+        getUserInfoById
       } = require("../../controllers/authentication/authController");
 
 const {protect} = require("../../middleware/authMiddleware");
@@ -35,5 +36,6 @@ router.put(
 );
 
 router.get("/me", protect, getUserInfo);
+router.get("/get-user-info/:userId", protect, getUserInfoById);
 
 module.exports = router;

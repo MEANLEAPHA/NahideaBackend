@@ -1,9 +1,57 @@
 const pool = require("../../config/db");
 
 const {createNotification} = require("../notifications/notificationController");
+
+const getFollowStatus =
+async (req, res) => {
+
+  try {
+
+    const currentUserId =
+      req.user.userId;
+
+    const targetUserId =
+      req.params.userId;
+
+    const [rows] =
+      await pool.query(
+        `
+        SELECT status
+        FROM follows
+        WHERE follower_id=?
+        AND following_id=?
+        LIMIT 1
+        `,
+        [
+          currentUserId,
+          targetUserId
+        ]
+      );
+
+    if (!rows.length) {
+
+      return res.json({
+        status: "none"
+      });
+
+    }
+
+    return res.json({
+      status: rows[0].status
+    });
+
+  } catch (err) {
+
+    return res.status(500).json({
+      message: "Server error"
+    });
+
+  }
+
+};
 const followUser = async (req, res) => {
 
-    const followerId = req.user.id;
+    const followerId = req.user.userId;
 
     const followingId = req.params.userId;
 
@@ -199,7 +247,7 @@ const followUser = async (req, res) => {
 
 const acceptFollowRequest = async (req, res) => {
 
-    const currentUserId = req.user.id;
+    const currentUserId = req.user.userId;
 
     const requestId = req.params.requestId;
 
@@ -328,7 +376,7 @@ const acceptFollowRequest = async (req, res) => {
 
 const unfollowUser = async (req, res) => {
 
-    const followerId = req.user.id;
+    const followerId = req.user.userId;
 
     const followingId = req.params.userId;
 
@@ -410,4 +458,4 @@ const unfollowUser = async (req, res) => {
 
 };
 
-module.exports = { followUser, acceptFollowRequest, unfollowUser};
+module.exports = { followUser, acceptFollowRequest, unfollowUser, getFollowStatus};
