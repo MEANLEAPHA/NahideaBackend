@@ -1,0 +1,413 @@
+const pool = require("../../config/db");
+
+const {createNotification} = require("../notifications/notificationController");
+const followUser = async (req, res) => {
+
+    const followerId = req.user.id;
+
+    const followingId = req.params.userId;
+
+    // prevent self follow
+    if (followerId == followingId) {
+
+        return res.status(400).json({
+            message: "Cannot follow yourself"
+        });
+
+    }
+
+    const connection = await pool.getConnection();
+
+    try {
+
+        await connection.beginTransaction();
+
+        /*
+        |--------------------------------------------------------------------------
+        | LOCK TARGET USER
+        |--------------------------------------------------------------------------
+        |
+        | Prevent race conditions
+        |
+        */
+
+        const [users] = await connection.query(
+            `
+            SELECT id, is_private
+            FROM users
+            WHERE id=?
+            FOR UPDATE
+            `,
+            [followingId]
+        );
+
+        if (!users.length) {
+
+            throw new Error("User not found");
+
+        }
+
+        const targetUser = users[0];
+
+        /*
+        |--------------------------------------------------------------------------
+        | CHECK EXISTING FOLLOW
+        |--------------------------------------------------------------------------
+        */
+
+        const [existing] = await connection.query(
+            `
+            SELECT *
+            FROM follows
+            WHERE follower_id=?
+            AND following_id=?
+            `,
+            [
+                followerId,
+                followingId
+            ]
+        );
+
+        if (existing.length) {
+
+            await connection.rollback();
+
+            return res.status(409).json({
+                message: "Already followed/requested"
+            });
+
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | PRIVATE ACCOUNT => pending
+        | PUBLIC ACCOUNT => accepted
+        |--------------------------------------------------------------------------
+        */
+
+        const status = targetUser.is_private
+            ? "pending"
+            : "accepted";
+
+        /*
+        |--------------------------------------------------------------------------
+        | INSERT FOLLOW ROW
+        |--------------------------------------------------------------------------
+        */
+
+        const [result] = await connection.query(
+            `
+            INSERT INTO follows (
+                follower_id,
+                following_id,
+                status,
+                accepted_at
+            )
+            VALUES (?, ?, ?, ?)
+            `,
+            [
+                followerId,
+                followingId,
+                status,
+                status === "accepted"
+                    ? new Date()
+                    : null
+            ]
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | UPDATE COUNTS ONLY IF ACCEPTED
+        |--------------------------------------------------------------------------
+        */
+
+        if (status === "accepted") {
+
+            await connection.query(
+                `
+                UPDATE users
+                SET following_count = following_count + 1
+                WHERE id=?
+                `,
+                [followerId]
+            );
+
+            await connection.query(
+                `
+                UPDATE users
+                SET followers_count = followers_count + 1
+                WHERE id=?
+                `,
+                [followingId]
+            );
+
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | CREATE NOTIFICATION
+        |--------------------------------------------------------------------------
+        */
+
+        await createNotification({
+
+            receiverId: followingId,
+
+            senderId: followerId,
+
+            type: "follow",
+
+            content:
+                status === "pending"
+                    ? "requested to follow you"
+                    : "started following you"
+
+        });
+
+        await connection.commit();
+
+        return res.status(201).json({
+
+            success: true,
+
+            status,
+
+            message:
+                status === "pending"
+                    ? "Follow request sent"
+                    : "Followed successfully"
+
+        });
+
+    } catch (err) {
+
+        await connection.rollback();
+
+        console.log(err);
+
+        return res.status(500).json({
+            message: "Server error"
+        });
+
+    } finally {
+
+        connection.release();
+
+    }
+
+};
+
+const acceptFollowRequest = async (req, res) => {
+
+    const currentUserId = req.user.id;
+
+    const requestId = req.params.requestId;
+
+    const connection = await pool.getConnection();
+
+    try {
+
+        await connection.beginTransaction();
+
+        /*
+        |--------------------------------------------------------------------------
+        | LOCK FOLLOW ROW
+        |--------------------------------------------------------------------------
+        */
+
+        const [rows] = await connection.query(
+            `
+            SELECT *
+            FROM follows
+            WHERE id=?
+            FOR UPDATE
+            `,
+            [requestId]
+        );
+
+        if (!rows.length) {
+
+            throw new Error("Request not found");
+
+        }
+
+        const request = rows[0];
+
+        /*
+        |--------------------------------------------------------------------------
+        | SECURITY CHECK
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            request.following_id !== currentUserId
+        ) {
+
+            throw new Error("Unauthorized");
+
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | UPDATE STATUS
+        |--------------------------------------------------------------------------
+        */
+
+        await connection.query(
+            `
+            UPDATE follows
+            SET status='accepted',
+                accepted_at=NOW()
+            WHERE id=?
+            `,
+            [requestId]
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | UPDATE COUNTS
+        |--------------------------------------------------------------------------
+        */
+
+        await connection.query(
+            `
+            UPDATE users
+            SET followers_count =
+                followers_count + 1
+            WHERE id=?
+            `,
+            [currentUserId]
+        );
+
+        await connection.query(
+            `
+            UPDATE users
+            SET following_count =
+                following_count + 1
+            WHERE id=?
+            `,
+            [request.follower_id]
+        );
+
+        await createNotification({
+
+            receiverId: request.follower_id,
+
+            senderId: currentUserId,
+
+            type: "follow",
+
+            content:
+                "accepted your follow request"
+
+        });
+
+        await connection.commit();
+
+        return res.json({
+            message: "Follow request accepted"
+        });
+
+    } catch (err) {
+
+        await connection.rollback();
+
+        console.log(err);
+
+        return res.status(500).json({
+            message: err.message
+        });
+
+    } finally {
+
+        connection.release();
+
+    }
+
+};
+
+const unfollowUser = async (req, res) => {
+
+    const followerId = req.user.id;
+
+    const followingId = req.params.userId;
+
+    const connection = await pool.getConnection();
+
+    try {
+
+        await connection.beginTransaction();
+
+        /*
+        |--------------------------------------------------------------------------
+        | DELETE FOLLOW
+        |--------------------------------------------------------------------------
+        */
+
+        const [result] = await connection.query(
+            `
+            DELETE FROM follows
+            WHERE follower_id=?
+            AND following_id=?
+            `,
+            [
+                followerId,
+                followingId
+            ]
+        );
+
+        if (!result.affectedRows) {
+
+            throw new Error("Not following");
+
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | DECREASE COUNTS
+        |--------------------------------------------------------------------------
+        */
+
+        await connection.query(
+            `
+            UPDATE users
+            SET following_count =
+                following_count - 1
+            WHERE id=?
+            `,
+            [followerId]
+        );
+
+        await connection.query(
+            `
+            UPDATE users
+            SET followers_count =
+                followers_count - 1
+            WHERE id=?
+            `,
+            [followingId]
+        );
+
+        await connection.commit();
+
+        return res.json({
+            message: "Unfollowed"
+        });
+
+    } catch (err) {
+
+        await connection.rollback();
+
+        return res.status(500).json({
+            message: err.message
+        });
+
+    } finally {
+
+        connection.release();
+
+    }
+
+};
+
+module.exports = { followUser, acceptFollowRequest, unfollowUser};

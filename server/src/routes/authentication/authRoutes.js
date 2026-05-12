@@ -9,6 +9,7 @@ const { register,
         setNewPassword,
         changePassword,
         newPassword,
+        updateUser,
 
         getUserInfo
       } = require("../../controllers/authentication/authController");
@@ -28,6 +29,10 @@ router.post("/set-new-password", setNewPassword);
 router.post("/change-password", changePassword);
 router.post("/new-password", newPassword);
 
+router.put(
+  "/update-user",
+  updateUser
+);
 
 router.get("/me", protect, getUserInfo);
 

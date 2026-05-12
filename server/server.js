@@ -27,6 +27,10 @@ app.use(express.json());
 const authRoutes = require("./src/routes/authentication/authRoutes");
 app.use("/api", authRoutes);
 
+// mutual logic
+const followRoutes = require("./src/routes/mutuals/followRoute");
+app.use("/api", followRoutes);
+
 // post
 const postRoutes = require("./src/routes/upload/postRoutes");
 app.use("/api", postRoutes);

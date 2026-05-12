@@ -78,11 +78,45 @@ const deleteAllNotification = async (req, res) => {
     }
 }
 
+const createNotification = async ({
+    receiverId,
+    senderId,
+    type,
+    content
+}) => {
+    try {
+
+        await pool.query(
+            `
+            INSERT INTO notifications (
+                receiver_id,
+                sender_id,
+                type,
+                content
+            )
+            VALUES (?, ?, ?, ?)
+            `,
+            [
+                receiverId,
+                senderId,
+                type,
+                content
+            ]
+        );
+
+    } catch (err) {
+
+        console.log(err);
+
+    }
+}
+
 
 module.exports = {
     getNotifications,
     markNotificationRead,
     markAllNotification,
     deleteNotification,
-    deleteAllNotification
+    deleteAllNotification,
+    createNotification
 }

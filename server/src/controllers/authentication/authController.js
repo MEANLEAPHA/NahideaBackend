@@ -210,7 +210,12 @@ const verifyEmail = async (req, res) => {
       [email]
     );
 
-    return res.status(200).json({ message: "Email verified Successfully" });
+    return res.status(200).json(
+      { message: "Email verified Successfully",
+        userId: user.id,
+        email: user.email
+       }
+    );
 
   } catch (error) {
     console.error(error);
@@ -582,6 +587,105 @@ const getUserInfo = async (req, res) => {
   }
 };
 
+const updateUser = async (
+  req,
+  res
+) => {
+  try {
+    const {
+      avatar,
+      profession,
+      location,
+      nickname,
+      userId,
+      email,
+      bio,
+    } = req.body;
+
+    // VALIDATION
+
+    if (
+      !avatar ||
+      !profession ||
+      !location ||
+      !nickname ||
+      !userId ||
+      !email ||
+      !bio
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Missing required fields",
+      });
+    }
+
+    // OPTIONAL:
+    // protect nickname duplicates
+
+    const [nicknameExists] =
+      await db.query(
+        `
+        SELECT id
+        FROM users
+        WHERE nickname = ?
+        AND id != ?
+        LIMIT 1
+        `,
+        [nickname, userId]
+      );
+
+    if (
+      nicknameExists.length > 0
+    ) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Nickname already taken",
+      });
+    }
+
+    // UPDATE USER
+
+    await db.query(
+      `
+      UPDATE users
+      SET
+        avatar_url = ?,
+        profession = ?,
+        work_place = ?,
+        nickname = ?,
+        bio = ?,
+        updated_at = NOW()
+      WHERE id = ?
+      AND email = ?
+      `,
+      [
+        avatar,
+        profession,
+        location,
+        nickname,
+        bio,
+        userId,
+        email,
+      ]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Profile updated successfully",
+    });
+  } catch (err) {
+    console.log(err);
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Internal server error",
+    });
+  }
+};
 
 module.exports = {
     login,
@@ -604,6 +708,7 @@ module.exports = {
       changePassword,
       newPassword,
 
+    updateUser,
 
     // get user info
     getUserInfo
