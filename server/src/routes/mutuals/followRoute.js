@@ -11,7 +11,7 @@ const {
 const {
     followUser,
     unfollowUser,
-    acceptFollowRequest,
+    // acceptFollowRequest,
     getFollowStatus
 } = require("../../controllers/mutuals/followController");
 
@@ -29,11 +29,11 @@ router.delete(
     unfollowUser
 );
 
-router.post(
-    "/follow/accept/:requestId",
-    protect,
-    acceptFollowRequest
-);
+// router.post(
+//     "/follow/accept/:requestId",
+//     protect,
+//     acceptFollowRequest
+// );
 
 router.get(
   "/follow-status/:userId",
