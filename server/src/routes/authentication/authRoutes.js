@@ -36,6 +36,6 @@ router.put(
 );
 
 router.get("/me", protect, getUserInfo);
-router.get("/get-user-info/:userId", protect, getUserInfoById);
+router.get("/get-user-info/:userId", getUserInfoById);
 
 module.exports = router;
