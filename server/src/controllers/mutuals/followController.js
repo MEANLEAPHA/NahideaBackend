@@ -548,7 +548,8 @@ const unfollowUser = async (req, res) => {
         await connection.commit();
 
         return res.json({
-            message: "Unfollowed"
+            message: "Unfollowed",
+             mutual: false
         });
 
     } catch (err) {
