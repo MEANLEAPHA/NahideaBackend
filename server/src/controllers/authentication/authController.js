@@ -587,22 +587,54 @@ const getUserInfo = async (req, res) => {
   }
 };
 const getUserInfoById = async (req, res) => {
-  try {
-    const userId = req.params;
-    const [rows] = await pool.query(
-      "SELECT username, avatar_url, id, nickname, profession, work_place, bio FROM users WHERE id = ?",
-      [userId]
-    );
 
-    if (rows.length === 0) {
-      return res.status(404).json({ message: "User not found" });
+  try {
+
+    const userId =
+      req.params.userId;
+
+    const [rows] =
+      await pool.query(
+        `
+        SELECT
+          username,
+          avatar_url,
+          id,
+          nickname,
+          profession,
+          work_place,
+          bio
+        FROM users
+        WHERE id = ?
+        `,
+        [userId]
+      );
+
+    if (!rows.length) {
+
+      return res.status(404).json({
+        message: "User not found"
+      });
+
     }
 
-    return res.status(200).json({ userData: rows[0] });
+    return res.status(200).json({
+      userData: rows[0]
+    });
+
   } catch (err) {
-    console.error("Error in getUserInfo:", err);
-    return res.status(500).json({ message: "Server error" });
+
+    console.error(
+      "Error in getUserInfo:",
+      err
+    );
+
+    return res.status(500).json({
+      message: "Server error"
+    });
+
   }
+
 };
 const updateUser = async (
   req,
