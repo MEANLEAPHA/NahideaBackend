@@ -2,7 +2,7 @@
 
 // module.exports = { uploadGif, getGifs, searchGif };
 const pool = require("../../config/db");
-const { redisClient } = require("../../config/redisClient");
+const { cachePost } = require("../../config/redisClient");
 
 const uploadGif = async (req, res) => {
   try {
@@ -16,7 +16,7 @@ const uploadGif = async (req, res) => {
       success: true,
       gif_url: gif_url,
     });
-     await redisClient.del("gifs:page:1");
+     await cachePost.del("gifs:page:1");
 
   } catch (err) {
     console.error("UPLOAD ERROR:", err);
@@ -33,7 +33,7 @@ const uploadGif = async (req, res) => {
 //     const CACHE_KEY = `gifs:page:${page}`;
 
 
-//     const cached = await redisClient.get(CACHE_KEY);
+//     const cached = await cachePost.get(CACHE_KEY);
 
 //     if(cached){
 //       console.log('cache hit on gif')
@@ -48,7 +48,7 @@ const uploadGif = async (req, res) => {
 //     if(!rows.length){
 //       return res.status(200).json({ source: "db", data: [] });
 //     }
-//     await redisClient.set(CACHE_KEY, JSON.stringify(rows));
+//     await cachePost.set(CACHE_KEY, JSON.stringify(rows));
 //     return res.status(200).json({
 //       data: rows
 //     })
@@ -67,7 +67,7 @@ const uploadGif = async (req, res) => {
 
 //     const CACHE_KEY = `gifs:${name}:page:${page}`;
 
-//     const cached = await redisClient.get(CACHE_KEY);
+//     const cached = await cachePost.get(CACHE_KEY);
 
 //     if (cached) {
 //       console.log("CACHE HIT");
@@ -94,7 +94,7 @@ const uploadGif = async (req, res) => {
 //       return res.status(200).json({ source: "db", data: [] });
 //     }
 
-//     await redisClient.set(CACHE_KEY, JSON.stringify(rows));
+//     await cachePost.set(CACHE_KEY, JSON.stringify(rows));
 
 //     return res.status(200).json({
 //       data: rows,
@@ -111,7 +111,7 @@ const getGifs = async (req, res) => {
     const offset = (page - 1) * limit;
 
     const CACHE_KEY = `gifs:page:${page}`;
-    const cached = await redisClient.get(CACHE_KEY);
+    const cached = await cachePost.get(CACHE_KEY);
 
     if (cached) {
       console.log("cache hit on gif");
@@ -127,7 +127,7 @@ const getGifs = async (req, res) => {
       return res.status(200).json({ source: "db", data: [] });
     }
 
-    await redisClient.set(CACHE_KEY, JSON.stringify(rows), {EX: 300});
+    await cachePost.set(CACHE_KEY, JSON.stringify(rows), {EX: 300});
        
     return res.status(200).json({ data: rows });
   } catch (err) {
@@ -144,7 +144,7 @@ const searchGif = async (req, res) => {
     const { name } = req.query;
 
     const CACHE_KEY = `gifs:${name}:page:${page}`;
-    const cached = await redisClient.get(CACHE_KEY);
+    const cached = await cachePost.get(CACHE_KEY);
 
     if (cached) {
       console.log("CACHE HIT");
@@ -167,7 +167,7 @@ const searchGif = async (req, res) => {
       return res.status(200).json({ source: "db", data: [] });
     }
 
-    await redisClient.set(CACHE_KEY, JSON.stringify(rows), {EX: 300});
+    await cachePost.set(CACHE_KEY, JSON.stringify(rows), {EX: 300});
     return res.status(200).json({ data: rows });
   } catch (err) {
     res.status(500).json({ error: "Fetch failed" });
@@ -183,7 +183,7 @@ const searchByCategory = async (req, res) => {
     const { category } = req.query;
 
     const CACHE_KEY = `gifs:category:${category}:page:${page}`;
-    const cached = await redisClient.get(CACHE_KEY);
+    const cached = await cachePost.get(CACHE_KEY);
 
     if (cached) {
       console.log("CACHE HIT (category)");
@@ -205,7 +205,7 @@ const searchByCategory = async (req, res) => {
       return res.status(200).json({ source: "db", data: [] });
     }
 
-    await redisClient.set(CACHE_KEY, JSON.stringify(rows), {EX: 300});
+    await cachePost.set(CACHE_KEY, JSON.stringify(rows), {EX: 300});
     return res.status(200).json({ data: rows });
   } catch (err) {
     res.status(500).json({ error: "Category fetch failed" });

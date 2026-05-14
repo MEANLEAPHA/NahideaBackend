@@ -6,7 +6,7 @@ const upload = multer({ dest: "temp/" });
 require("dotenv").config();
 
 // Redis Cache
-const {redisClient} = require("../../config/redisClient");
+const {cachePost} = require("../../config/redisClient");
 
 const createPost = async (req, res) => {
   try{
@@ -291,17 +291,17 @@ const hydratedPost = await hydratePostsFromDb(
 const finalPost = hydratedPost[0];
 
 // cache single post
-await redisClient.set(
+await cachePost.set(
   `post:${postId}`,
   JSON.stringify(finalPost),
   { EX: 300 }
 );
 
 // invalidate page caches
-const pageKeys = await redisClient.keys("posts:page:*");
+const pageKeys = await cachePost.keys("posts:page:*");
 
 if (pageKeys.length) {
-  await redisClient.del(pageKeys);
+  await cachePost.del(pageKeys);
 }
 
     
@@ -339,13 +339,13 @@ const deletePost = async (req, res) => {
     );
 
     // delete single post cache
-    await redisClient.del(`post:${postId}`);
+    await cachePost.del(`post:${postId}`);
 
     // invalidate all page caches
-    const pageKeys = await redisClient.keys("posts:page:*");
+    const pageKeys = await cachePost.keys("posts:page:*");
 
     if (pageKeys.length) {
-      await redisClient.del(pageKeys);
+      await cachePost.del(pageKeys);
     }
 
     return res.status(200).json({
@@ -372,7 +372,7 @@ const deletePost = async (req, res) => {
 //     // =====================
 //     // 1. CHECK CACHE FIRST
 //     // =====================
-//     const cached = await redisClient.get(CACHE_KEY);
+//     const cached = await cachePost.get(CACHE_KEY);
 
 //     if (cached) {
 //       console.log("CACHE HIT");
@@ -549,7 +549,7 @@ const deletePost = async (req, res) => {
 //     // =====================
 //     // 6. CACHE RESULT
 //     // =====================
-//     await redisClient.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
+//     await cachePost.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
 
 //     return res.status(200).json({
 //       source: "db",
@@ -589,7 +589,7 @@ const getAllPosts = async (req, res) => {
     // ====================================
     // 1. CHECK PAGE IDS CACHE
     // ====================================
-    const cachedIds = await redisClient.get(PAGE_KEY);
+    const cachedIds = await cachePost.get(PAGE_KEY);
 
     if (cachedIds) {
       const ids = safeJsonParse(cachedIds) || [];
@@ -597,7 +597,7 @@ const getAllPosts = async (req, res) => {
       if (ids.length) {
 
         // fetch all cached posts
-        const pipeline = redisClient.multi();
+        const pipeline = cachePost.multi();
 
         ids.forEach(id => {
           pipeline.get(`post:${id}`);
@@ -650,7 +650,7 @@ const getAllPosts = async (req, res) => {
         const hydrated = await hydratePostsFromDb(missingIds);
 
         // cache hydrated posts
-        const hydratePipeline = redisClient.multi();
+        const hydratePipeline = cachePost.multi();
 
         hydrated.forEach(post => {
 
@@ -721,13 +721,13 @@ const getAllPosts = async (req, res) => {
     // ====================================
     const ids = final.map(p => p.id);
 
-    await redisClient.set(
+    await cachePost.set(
       PAGE_KEY,
       JSON.stringify(ids),
       { EX: 300 }
     );
 
-    const pipeline = redisClient.multi();
+    const pipeline = cachePost.multi();
 
     final.forEach(post => {
       pipeline.set(
@@ -1019,15 +1019,15 @@ const updatePostBodyContent = async (req, res) => {
     // ====================================
     // INVALIDATE POST CACHE
     // ====================================
-    await redisClient.del(`post:${postId}`);
+    await cachePost.del(`post:${postId}`);
 
     // ====================================
     // INVALIDATE PAGE CACHE
     // ====================================
-    const pageKeys = await redisClient.keys("posts:page:*");
+    const pageKeys = await cachePost.keys("posts:page:*");
 
     if (pageKeys.length) {
-      await redisClient.del(pageKeys);
+      await cachePost.del(pageKeys);
     }
 
     return res.status(200).json({
@@ -1049,7 +1049,7 @@ const getPostsById = async(req, res)=>{
   try{
     const {id} = req.params;
     const CACHE_KEY = `post:${id}`; // align with layered cache naming
-    const cached = await redisClient.get(CACHE_KEY);
+    const cached = await cachePost.get(CACHE_KEY);
 
    const parsed = safeJsonParse(cached);
 
@@ -1160,7 +1160,7 @@ const getPostsById = async(req, res)=>{
     // const final = { ...post, ...data };
      
     // cache hydrated post
-    await redisClient.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
+    await cachePost.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
 
     return res.status(200).json({
       source: "db",
