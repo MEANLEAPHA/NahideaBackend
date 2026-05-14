@@ -7,10 +7,10 @@ const cachePost = createClient({
 
 cachePost.on("error", (err) => console.error("Redis Error:", err));
 
-const Ranking = createClient({
-  url: process.env.REDIS_NAHIDEA_RANKING
+const ranking = createClient({
+  url: process.env.REDIS_NAHIDEA_RANKING,
 });
-Ranking.on("error", (err) => console.error("Nahidea Redis Rankinf Error:", err))
+ranking.on("error", (err) => console.error("Nahidea Redis Rankinf Error:", err))
 
 
 
@@ -21,11 +21,11 @@ const connectRedis = async () => {
     console.log("Redis Cache-Post connected");
   }
 
-  if (!Ranking.isOpen) {
-    await Ranking.connect();
-    console.log("Redis Ranking connected");
+  if (!ranking.isOpen) {
+    await ranking.connect();
+    console.log("Redis ranking connected");
   }
 
 };
 
-module.exports = { connectRedis, cachePost, Ranking };
+module.exports = { connectRedis, cachePost, ranking };
