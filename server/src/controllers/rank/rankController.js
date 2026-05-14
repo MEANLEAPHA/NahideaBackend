@@ -47,8 +47,8 @@ const getHallOfFame = async (req, res) => {
     const currentMonth = today.slice(0, 7).replace("-", "");
     const redisKey = `hof:month:${currentMonth}`;
 
-    // Get top 10 users from Redis
-    const topUsers = await ranking.zRevRangeWithScores(redisKey, 0, 9);
+    // Get top 10 users from Redis (descending order)
+    const topUsers = await ranking.zRangeWithScores(redisKey, 0, 9, { REV: true });
 
     if (topUsers.length === 0) {
       return res.json({ items: [] });
@@ -84,6 +84,8 @@ const getHallOfFame = async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 };
+
+
 
 // const recordLogin = async (req, res) => {
 //   try {
