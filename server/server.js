@@ -108,6 +108,8 @@ const { connectRedis } = require("./src/config/redisClient");
 
 // require("./src/workers/hydrateViewsToDB");
 
+require("./src/workers/rankStoreToDB");
+
 // app.use(cor());
 app.use(cors({
   origin: process.env.ORIGIN_URL,

@@ -40,6 +40,51 @@ const recordLogin = async (req, res) => {
   }
 };
 
+
+const getHallOfFame = async (req, res) => {
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    const currentMonth = today.slice(0, 7).replace("-", "");
+    const redisKey = `hof:month:${currentMonth}`;
+
+    // Get top 10 users from Redis
+    const topUsers = await ranking.zRevRangeWithScores(redisKey, 0, 9);
+
+    if (topUsers.length === 0) {
+      return res.json({ items: [] });
+    }
+
+    // Collect userIds
+    const userIds = topUsers.map(u => parseInt(u.value, 10));
+
+    // Fetch user info from DB
+    const [rows] = await pool.query(
+      `SELECT id, username, avatar_url, profession
+       FROM users
+       WHERE id IN (?)`,
+      [userIds]
+    );
+
+    // Map results back to Redis order
+    const items = topUsers.map((u, index) => {
+      const user = rows.find(r => r.id === parseInt(u.value, 10));
+      return {
+        userId: parseInt(u.value, 10),
+        username: user?.username || "Unknown",
+        avatar_url: user?.avatar_url || null,
+        profession: user?.profession || "N/A",
+        score: u.score,
+        rank: index + 1,
+      };
+    });
+
+    res.json({ items });
+  } catch (err) {
+    console.error("Error fetching Hall of Fame:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
 // const recordLogin = async (req, res) => {
 //   try {
 //     const userId = req.user.userId;
@@ -73,4 +118,4 @@ const recordLogin = async (req, res) => {
 // };
 
 
-module.exports = { recordLogin };
+module.exports = { recordLogin, getHallOfFame };
