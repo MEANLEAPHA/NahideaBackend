@@ -276,6 +276,11 @@ app.use("/api/gifs", gifRoutes);
 const notificationRoutes = require("./src/routes/notification/notificationRoute");
 app.use("/api", notificationRoutes);
 
+
+// ranking
+const rankRoutes = require("./src/routes/rank/rankRoute");
+app.use("/api", rankRoutes);
+
 // history recorder post
 // const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
 // app.use("/api", postHistoryRoutes);
