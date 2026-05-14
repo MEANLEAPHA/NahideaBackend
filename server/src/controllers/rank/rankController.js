@@ -2,37 +2,6 @@ const { ranking } = require("../../config/redisClient");
 
 
 // track login and add score
-// const recordLogin = async (req, res) => {
-//   try {
-//     const userId = req.user.userId;
-//     const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-//     const currentMonth = today.slice(0, 7).replace("-", ""); // YYYYMM
-//     const redisLoginKey = `login:day:${userId}:${today}`;
-
-//     // Check if already logged today
-//     const alreadyLogged = await ranking.exists(redisLoginKey);
-//     if (!alreadyLogged) {
-//       // Mark login for today
-//       await ranking.set(redisLoginKey, 1, { EX: 86400 });
-
-//       // Increment Hall of Fame score
-//       await ranking.zIncrBy(`hof:month:${currentMonth}`, 2, userId);
-
-//       // Persist to DB
-//       await pool.query(
-//         `INSERT INTO user_logins (user_id, login_date)
-//          VALUES (?, ?)
-//          ON DUPLICATE KEY UPDATE login_date = VALUES(login_date)`,
-//         [userId, today]
-//       );
-//     }
-
-//     res.json({ success: true });
-//   } catch (err) {
-//     console.error("Error recording login:", err);
-//     res.status(500).json({ success: false });
-//   }
-// };
 const recordLogin = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -49,21 +18,58 @@ const recordLogin = async (req, res) => {
       // Increment Hall of Fame score
       await ranking.zIncrBy(`hof:month:${currentMonth}`, 2, userId.toString());
 
-      // Persist to DB
-      await pool.query(
-        `INSERT INTO user_logins (user_id, login_date)
-         VALUES (?, ?)
-         ON DUPLICATE KEY UPDATE login_date = VALUES(login_date)`,
-        [userId, today]
-      );
+      // Persist to DB with its own try/catch
+      try {
+        await pool.query(
+          `INSERT INTO user_logins (user_id, login_date)
+           VALUES (?, ?)
+           ON DUPLICATE KEY UPDATE login_date = VALUES(login_date)`,
+          [userId, today]
+        );
+        console.log(`DB insert success for user ${userId} on ${today}`);
+      } catch (dbErr) {
+        console.error("DB insert failed:", dbErr.sqlMessage || dbErr.message);
+      }
     }
 
     res.json({ success: true });
   } catch (err) {
-    console.error("Error recording login:", err);
-    res.status(500).json({ success: false });
+    console.error("Error recording login:", err.message);
+    res.status(500).json({ success: false, error: err.message });
   }
 };
+
+// const recordLogin = async (req, res) => {
+//   try {
+//     const userId = req.user.userId;
+//     const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+//     const currentMonth = today.slice(0, 7).replace("-", ""); // YYYYMM
+//     const redisLoginKey = `login:day:${userId}:${today}`;
+
+//     // Check if already logged today
+//     const alreadyLogged = await ranking.exists(redisLoginKey);
+//     if (!alreadyLogged) {
+//       // Mark login for today (value must be string)
+//       await ranking.set(redisLoginKey, "1", { EX: 86400 });
+
+//       // Increment Hall of Fame score
+//       await ranking.zIncrBy(`hof:month:${currentMonth}`, 2, userId.toString());
+
+//       // Persist to DB
+//       await pool.query(
+//         `INSERT INTO user_logins (user_id, login_date)
+//          VALUES (?, ?)
+//          ON DUPLICATE KEY UPDATE login_date = VALUES(login_date)`,
+//         [userId, today]
+//       );
+//     }
+
+//     res.json({ success: true });
+//   } catch (err) {
+//     console.error("Error recording login:", err);
+//     res.status(500).json({ success: false });
+//   }
+// };
 
 
 module.exports = { recordLogin };
