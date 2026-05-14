@@ -1,4 +1,5 @@
 const { ranking } = require("../../config/redisClient");
+const pool = require("../../config/db");
 
 
 // track login and add score
