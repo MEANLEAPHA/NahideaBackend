@@ -15,13 +15,13 @@ const createPost = async (req, res) => {
               post_type, tags = [], isAnonymous,
 
                 // content
-                content_title, content_type,text_body,
+                content_title, content_type, text_body, content_type_icon,
 
                 // confession
-                confession_title, confession_type,
+                confession_title, confession_type, confession_type_icon,
 
                 // question 
-                question_type, question_title, question_related_to,
+                question_type, question_title, question_related_to, question_related_to_icon,
 
                 // repost 
                 repost_title
@@ -103,9 +103,9 @@ const createPost = async (req, res) => {
             mediaType = results.map(r => r.type);
 
             await pool.query(
-              `INSERT INTO content(user_id, post_id, type, title, text_body, media_type, media_url)
-                    VALUES(?, ?, ?, ?, ?, ?, ?)`,
-                    [userId, postId, content_type, content_title, text_body,JSON.stringify(mediaType), JSON.stringify(mediaUrl)]
+              `INSERT INTO content(user_id, post_id, type, cate_icon, title, text_body, media_type, media_url)
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [userId, postId, content_type, content_type_icon, content_title, text_body,JSON.stringify(mediaType), JSON.stringify(mediaUrl)]
             );
         },
         confession: async() => {
@@ -122,9 +122,9 @@ const createPost = async (req, res) => {
             const media_type = mediaType || null;
 
             await pool.query(
-                `INSERT INTO confession(user_id, post_id, type, title, media_type, media_url) 
-                VALUE(?, ?, ?, ?, ?, ?)`,
-                [userId, postId, confession_type, confession_title, media_type, media_url]
+                `INSERT INTO confession(user_id, post_id, type, cate_icon, title, media_type, media_url) 
+                VALUE(?, ?, ?, ?, ?, ?, ?)`,
+                [userId, postId, confession_type, confession_type_icon, confession_title, media_type, media_url]
             );
         },
         question: async() => {
@@ -137,8 +137,8 @@ const createPost = async (req, res) => {
             const media_url = questionMediaUrl || null;
             
             const [questionResult] = await pool.query(
-                "INSERT INTO question(post_id, question_type, title, media_url, question_related_to) VALUES (?, ?, ?, ?, ?)",
-                [postId, question_type, question_title, media_url, question_related_to]
+                "INSERT INTO question(post_id, question_type, title, media_url, question_related_to, question_related_to_icon) VALUES (?, ?, ?, ?, ?, ?)",
+                [postId, question_type, question_title, media_url, question_related_to, question_related_to_icon]
             );
 
               const questionId = questionResult.insertId;
@@ -693,6 +693,8 @@ const getAllPosts = async (req, res) => {
         p.created_at,
         p.status,
         u.username,
+        u.avatar_url,
+        u.id as user_id,
         GROUP_CONCAT(tg.label) as tags
       FROM posts p
       JOIN users u ON p.user_id = u.id
