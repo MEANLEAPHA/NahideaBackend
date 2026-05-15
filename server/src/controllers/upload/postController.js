@@ -137,7 +137,7 @@ const createPost = async (req, res) => {
             const media_url = questionMediaUrl || null;
             
             const [questionResult] = await pool.query(
-                "INSERT INTO question(post_id, question_type, title, media_url, question_related_to, question_related_to_icon) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO question(post_id, question_type, title, media_url, type, question_related_to_icon) VALUES (?, ?, ?, ?, ?, ?)",
                 [postId, question_type, question_title, media_url, question_related_to, question_related_to_icon]
             );
 
