@@ -6,7 +6,8 @@ const {
   markSolved,
   getAllPosts,
   getPostsById,
-  updatePostBodyContent
+  updatePostBodyContent,
+  deletePost
 
 
 } = require("../../controllers/upload/postController");
@@ -38,6 +39,8 @@ router.post("/create-posts", protect,
   router.get("/get-post/:id", getPostsById);
 
   router.put("/update-post-body-content/:contentId/:postId", protect, updatePostBodyContent);
+  
+  router.delete("/delete-post/:postId", protect, deletePost);
 
 
 

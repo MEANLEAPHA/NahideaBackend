@@ -283,6 +283,11 @@ app.use("/api", notificationRoutes);
 const rankRoutes = require("./src/routes/rank/rankRoute");
 app.use("/api", rankRoutes);
 
+
+// reports
+const reportRoutes = require("./src/routes/report/reportPostRoute");
+app.use("/api", reportRoutes);
+
 // history recorder post
 // const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
 // app.use("/api", postHistoryRoutes);

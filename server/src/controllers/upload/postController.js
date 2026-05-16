@@ -153,10 +153,10 @@ const createPost = async (req, res) => {
 
                 case "closedend":
 
-                  await pool.query(
-                    // "INSERT INTO closedend (question_id, yes_title, no_title) VALUES (?, ?, ?)",
-                    // [questionId, req.body.yesTitle, req.body.noTitle]
-                  );
+                  // await pool.query(
+                  //   "INSERT INTO closedend (question_id, yes_title, no_title) VALUES (?, ?, ?)",
+                  //   [questionId, req.body.yesTitle, req.body.noTitle]
+                  // );
                   break;
 
                 case "range":
@@ -361,210 +361,7 @@ const deletePost = async (req, res) => {
     });
   }
 };
-// const getAllPosts = async (req, res) => {
-//   try {
-//     const page = parseInt(req.query.page) || 1;
-//     const limit = 25;
-//     const offset = (page - 1) * limit;
-  
-//     const CACHE_KEY = `posts:page:${page}`;
 
-//     // =====================
-//     // 1. CHECK CACHE FIRST
-//     // =====================
-//     const cached = await cachePost.get(CACHE_KEY);
-
-//     if (cached) {
-//       console.log("CACHE HIT");
-//       return res.status(200).json({
-//         source: "cache",
-//         data: JSON.parse(cached),
-//       });
-//     }
-
-   
-
-//     // =====================
-//     // 2. GET BASE POSTS
-//     // =====================
-//      const [posts] = await pool.query(`
-//       SELECT
-//         p.id, p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color, p.likes_count, p.comments_count, p.views_count,
-//         p.created_at, p.status,
-//         u.username,
-//         GROUP_CONCAT(tg.label) as tags
-//       FROM posts p
-//       JOIN users u ON p.user_id = u.id
-//       LEFT JOIN post_tags pt ON pt.post_id = p.id 
-//       LEFT JOIN tags tg ON tg.id = pt.tag_id
-//       GROUP BY p.id
-//       ORDER BY p.created_at DESC
-//       LIMIT ? OFFSET ?
-//     `, [limit, offset]);
-
-//     if (!posts.length) {
-//       return res.status(200).json({ source: "db", data: [] });
-//     }
-
-//     // =====================
-//     // 3. SPLIT IDS BY TYPE
-//     // =====================
-//     const contentIds = [];
-//     const confessionIds = [];
-
-//     const questionIds = [];
-
-//     posts.forEach((p) => {
-
-//       if (p.post_type === "content") contentIds.push(p.id);
-//       if (p.post_type === "confession") confessionIds.push(p.id);
-//       if (p.post_type === "question") questionIds.push(p.id);
-
-//     });
-
-//     // =====================
-//     // 4. FETCH RELATED DATA
-//     // =====================
-//     const [contents] = contentIds.length
-//       ? await pool.query(`SELECT * FROM content WHERE post_id IN (?)`, [contentIds])
-//       : [[]];
-
-//     const [confessions] = confessionIds.length
-//       ? await pool.query(`SELECT * FROM confession WHERE post_id IN (?)`, [confessionIds])
-//       : [[]];
-
-//     const [questions] = questionIds.length
-//       ? await pool.query(`SELECT * FROM question WHERE post_id IN (?)`, [questionIds])
-//       : [[]];
-
-//     // get question ids
-//     const qIds = questions.map((q) => q.id);
-
-//     const [closed] = qIds.length
-//       ? await pool.query(`SELECT * FROM closedend WHERE question_id IN (?)`, [qIds])
-//       : [[]];
-
-//     const [ranges] = qIds.length
-//       ? await pool.query(`SELECT * FROM question_range WHERE question_id IN (?)`, [qIds])
-//       : [[]];
-
-//     const [ratings] = qIds.length
-//       ? await pool.query(`SELECT * FROM rating WHERE question_id IN (?)`, [qIds])
-//       : [[]];
-
-//     const [singleOptions] = qIds.length
-//       ? await pool.query(`
-//         SELECT sco.*, sc.question_id
-//         FROM singlechoice_option sco
-//         JOIN singlechoice sc ON sco.singlechoice_id = sc.id
-//         WHERE sc.question_id IN (?)
-//       `, [qIds])
-//       : [[]];
-
-//     const [multipleOptions] = qIds.length
-//       ? await pool.query(`
-//         SELECT mco.*, mc.question_id, mc.include_all_above
-//         FROM multiplechoice_option mco
-//         JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
-//         WHERE mc.question_id IN (?)
-//       `, [qIds])
-//       : [[]];
-
-//     const [rankingItems] = qIds.length
-//       ? await pool.query(`
-//         SELECT ri.*, ro.question_id
-//         FROM ranking_item ri
-//         JOIN rankingorder ro ON ri.ranking_id = ro.id
-//         WHERE ro.question_id IN (?)
-//       `, [qIds])
-//       : [[]];
-
-//     // =====================
-//     // 5. BUILD FINAL RESULT
-//     // =====================
-//     const final = posts.map((post) => {
-//       let data = null;
-
-//       // -------- CONTENT --------
-//       if (post.post_type === "content") {
-//         data = contents.find((c) => c.post_id === post.id) || null;
-//       }
-
-//       // -------- CONFESSION --------
-//       if (post.post_type === "confession") {
-//         data = confessions.find((c) => c.post_id === post.id) || null;
-//       }
-
-
-//       // -------- QUESTION --------
-//       if (post.post_type === "question") {
-//         const q = questions.find((q) => q.post_id === post.id);
-
-//         if (!q) return { ...post, data: null };
-
-//         let extra = {};
-
-//         switch (q.question_type) {
-//           case "closedend":
-//             extra = closed.find((c) => c.question_id === q.id) || {};
-//             break;
-
-//           case "range":
-//             extra = ranges.find((r) => r.question_id === q.id) || {};
-//             break;
-
-//           case "singlechoice":
-//             extra = {
-//               choice: singleOptions.filter((o) => o.question_id === q.id),
-//             };
-//             break;
-
-//           case "multiplechoice":
-//             extra = {
-//               include_all_above: multipleOptions.filter((o) => o.question_id === q.id)[0]?.include_all_above,
-//               choices: multipleOptions.filter((o) => o.question_id === q.id),
-//             };
-//             break;
-
-//           case "rankingorder":
-//             extra = {
-//               items: rankingItems.filter((i) => i.question_id === q.id),
-//             };
-//             break;
-
-//           case "rating":
-//             extra = ratings.find((r) => r.question_id === q.id) || {};
-//             break;
-//         }
-
-//         data = { ...q, ...extra };
-//       }
-
-//       return { 
-//         ...post, 
-//         created_at: timeAgo(post.created_at), 
-//         data };
-//     });
-
-//     // =====================
-//     // 6. CACHE RESULT
-//     // =====================
-//     await cachePost.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
-
-//     return res.status(200).json({
-//       source: "db",
-//       data: final,
-//     });
-
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Server error" });
-//   }
-// };
-
-// ================================
-// SAFE JSON PARSER
-// ================================
 
 function safeJsonParse(str) {
   try {
@@ -1226,3 +1023,209 @@ module.exports = {
  
 
 };
+
+
+// const getAllPosts = async (req, res) => {
+//   try {
+//     const page = parseInt(req.query.page) || 1;
+//     const limit = 25;
+//     const offset = (page - 1) * limit;
+  
+//     const CACHE_KEY = `posts:page:${page}`;
+
+//     // =====================
+//     // 1. CHECK CACHE FIRST
+//     // =====================
+//     const cached = await cachePost.get(CACHE_KEY);
+
+//     if (cached) {
+//       console.log("CACHE HIT");
+//       return res.status(200).json({
+//         source: "cache",
+//         data: JSON.parse(cached),
+//       });
+//     }
+
+   
+
+//     // =====================
+//     // 2. GET BASE POSTS
+//     // =====================
+//      const [posts] = await pool.query(`
+//       SELECT
+//         p.id, p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color, p.likes_count, p.comments_count, p.views_count,
+//         p.created_at, p.status,
+//         u.username,
+//         GROUP_CONCAT(tg.label) as tags
+//       FROM posts p
+//       JOIN users u ON p.user_id = u.id
+//       LEFT JOIN post_tags pt ON pt.post_id = p.id 
+//       LEFT JOIN tags tg ON tg.id = pt.tag_id
+//       GROUP BY p.id
+//       ORDER BY p.created_at DESC
+//       LIMIT ? OFFSET ?
+//     `, [limit, offset]);
+
+//     if (!posts.length) {
+//       return res.status(200).json({ source: "db", data: [] });
+//     }
+
+//     // =====================
+//     // 3. SPLIT IDS BY TYPE
+//     // =====================
+//     const contentIds = [];
+//     const confessionIds = [];
+
+//     const questionIds = [];
+
+//     posts.forEach((p) => {
+
+//       if (p.post_type === "content") contentIds.push(p.id);
+//       if (p.post_type === "confession") confessionIds.push(p.id);
+//       if (p.post_type === "question") questionIds.push(p.id);
+
+//     });
+
+//     // =====================
+//     // 4. FETCH RELATED DATA
+//     // =====================
+//     const [contents] = contentIds.length
+//       ? await pool.query(`SELECT * FROM content WHERE post_id IN (?)`, [contentIds])
+//       : [[]];
+
+//     const [confessions] = confessionIds.length
+//       ? await pool.query(`SELECT * FROM confession WHERE post_id IN (?)`, [confessionIds])
+//       : [[]];
+
+//     const [questions] = questionIds.length
+//       ? await pool.query(`SELECT * FROM question WHERE post_id IN (?)`, [questionIds])
+//       : [[]];
+
+//     // get question ids
+//     const qIds = questions.map((q) => q.id);
+
+//     const [closed] = qIds.length
+//       ? await pool.query(`SELECT * FROM closedend WHERE question_id IN (?)`, [qIds])
+//       : [[]];
+
+//     const [ranges] = qIds.length
+//       ? await pool.query(`SELECT * FROM question_range WHERE question_id IN (?)`, [qIds])
+//       : [[]];
+
+//     const [ratings] = qIds.length
+//       ? await pool.query(`SELECT * FROM rating WHERE question_id IN (?)`, [qIds])
+//       : [[]];
+
+//     const [singleOptions] = qIds.length
+//       ? await pool.query(`
+//         SELECT sco.*, sc.question_id
+//         FROM singlechoice_option sco
+//         JOIN singlechoice sc ON sco.singlechoice_id = sc.id
+//         WHERE sc.question_id IN (?)
+//       `, [qIds])
+//       : [[]];
+
+//     const [multipleOptions] = qIds.length
+//       ? await pool.query(`
+//         SELECT mco.*, mc.question_id, mc.include_all_above
+//         FROM multiplechoice_option mco
+//         JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
+//         WHERE mc.question_id IN (?)
+//       `, [qIds])
+//       : [[]];
+
+//     const [rankingItems] = qIds.length
+//       ? await pool.query(`
+//         SELECT ri.*, ro.question_id
+//         FROM ranking_item ri
+//         JOIN rankingorder ro ON ri.ranking_id = ro.id
+//         WHERE ro.question_id IN (?)
+//       `, [qIds])
+//       : [[]];
+
+//     // =====================
+//     // 5. BUILD FINAL RESULT
+//     // =====================
+//     const final = posts.map((post) => {
+//       let data = null;
+
+//       // -------- CONTENT --------
+//       if (post.post_type === "content") {
+//         data = contents.find((c) => c.post_id === post.id) || null;
+//       }
+
+//       // -------- CONFESSION --------
+//       if (post.post_type === "confession") {
+//         data = confessions.find((c) => c.post_id === post.id) || null;
+//       }
+
+
+//       // -------- QUESTION --------
+//       if (post.post_type === "question") {
+//         const q = questions.find((q) => q.post_id === post.id);
+
+//         if (!q) return { ...post, data: null };
+
+//         let extra = {};
+
+//         switch (q.question_type) {
+//           case "closedend":
+//             extra = closed.find((c) => c.question_id === q.id) || {};
+//             break;
+
+//           case "range":
+//             extra = ranges.find((r) => r.question_id === q.id) || {};
+//             break;
+
+//           case "singlechoice":
+//             extra = {
+//               choice: singleOptions.filter((o) => o.question_id === q.id),
+//             };
+//             break;
+
+//           case "multiplechoice":
+//             extra = {
+//               include_all_above: multipleOptions.filter((o) => o.question_id === q.id)[0]?.include_all_above,
+//               choices: multipleOptions.filter((o) => o.question_id === q.id),
+//             };
+//             break;
+
+//           case "rankingorder":
+//             extra = {
+//               items: rankingItems.filter((i) => i.question_id === q.id),
+//             };
+//             break;
+
+//           case "rating":
+//             extra = ratings.find((r) => r.question_id === q.id) || {};
+//             break;
+//         }
+
+//         data = { ...q, ...extra };
+//       }
+
+//       return { 
+//         ...post, 
+//         created_at: timeAgo(post.created_at), 
+//         data };
+//     });
+
+//     // =====================
+//     // 6. CACHE RESULT
+//     // =====================
+//     await cachePost.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
+
+//     return res.status(200).json({
+//       source: "db",
+//       data: final,
+//     });
+
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
+
+// ================================
+// SAFE JSON PARSER
+// ================================
