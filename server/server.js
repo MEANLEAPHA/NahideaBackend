@@ -303,6 +303,12 @@ app.get("/", (req, res) => {
 | START SERVER
 |--------------------------------------------------------------------------
 */
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({
+    message: err.message
+  });
+});
 
 async function startServer() {
 
