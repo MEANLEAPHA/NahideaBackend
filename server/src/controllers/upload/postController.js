@@ -328,7 +328,7 @@ const deletePost = async (req, res) => {
     const { postId } = req.params;
 
     // delete from DB
-    await pool.query(
+    const [result] = await pool.query(
       `
       DELETE FROM posts
       WHERE id = ?
@@ -337,6 +337,11 @@ const deletePost = async (req, res) => {
       `,
       [postId, userId]
     );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Post not found or already deleted" });
+    }
+
 
     // delete single post cache
     await cachePost.del(`post:${postId}`);
