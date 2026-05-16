@@ -324,8 +324,8 @@ if (pageKeys.length) {
 const deletePost = async (req, res) => {
   try {
 
-    const userId = req.user.id;
-    const { postId } = req.params;
+    const userId = req.user.userId;
+    const { postId } = req.params ;
 
     // delete from DB
     const [result] = await pool.query(
