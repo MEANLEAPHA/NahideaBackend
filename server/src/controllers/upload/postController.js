@@ -495,7 +495,6 @@ const getAllPosts = async (req, res) => {
         p.created_at,
         p.status,
         u.username,
-        u.id as owner_id,
         u.avatar_url,
         u.id as user_id,
         GROUP_CONCAT(tg.label) as tags
