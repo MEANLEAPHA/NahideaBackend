@@ -3,12 +3,12 @@ const { protect } = require("../../middleware/authMiddleware");
 
 const {
   createPost,
-  markSolved,
+  // markSolved,
   getAllPosts,
   getPostsById,
   updatePostBodyContent,
   deletePost,
-  likePost,
+  likePost
 
 
 } = require("../../controllers/upload/postController");
@@ -18,7 +18,7 @@ const {
 } = require("../../controllers/upload/contentController");
 
 // const { addComment } = require("../../controllers/upload/commentController");
-const { vote } = require("../../controllers/upload/voteController");
+// const { vote } = require("../../controllers/upload/voteController");
 
 const { likeLimiter } = require("../../middleware/rateLimiter");
 
@@ -36,7 +36,7 @@ router.post("/create-posts", protect,
   ]),
   createPost);
 
-  router.get("/all-posts", getAllPosts);
+  router.get("/all-posts", protect ,getAllPosts);
 
   router.get("/get-post/:id", getPostsById);
 
@@ -44,7 +44,7 @@ router.post("/create-posts", protect,
   
   router.delete("/delete-post/:postId", protect, deletePost);
 
-  router.post("/posts/:postId/:ownerId/like", likeLimiter, protect, likePost);
+  router.post("/posts/:postId/:ownerId/like", protect, likeLimiter, likePost);
 
 
 

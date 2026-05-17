@@ -497,27 +497,6 @@ const getAllPosts = async (req, res) => {
           .map(id => cachedPostMap.get(String(id)))
           .filter(Boolean);
 
-          // const postIds = orderedPosts.map(p => p.id);
-          //   const [likedRows] = postIds.length
-          //     ? await pool.query(
-          //         `
-          //         SELECT post_id
-          //         FROM post_likes
-          //         WHERE user_id = ?
-          //         AND post_id IN (?)
-          //         `,
-          //         [userId, postIds]
-          //       )
-          //     : [[]];
-
-          //   const likedSet = new Set(
-          //     likedRows.map(row => row.post_id)
-          //   );
-
-          //   const personalized = orderedPosts.map(post => ({
-          //     ...post,
-          //     is_liked: likedSet.has(post.id)
-          //   }));
             const personalized = await attachLikeState(orderedPosts, userId);
 
         return res.status(200).json({
@@ -568,23 +547,6 @@ const getAllPosts = async (req, res) => {
       posts
     );
 
-    // const postIds = final.map(p => p.id);
-    // const [likedRows] = postIds.length
-    // ? await pool.query(
-    //     `
-    //     SELECT post_id
-    //     FROM post_likes
-    //     WHERE user_id = ?
-    //     AND post_id IN (?)
-    //     `,
-    //     [userId, postIds]
-    //   )
-    // : [[]];
-
-    // const likedSet = new Set(
-    //   likedRows.map(row => row.post_id)
-    // );
-
     // ====================================
     // 3. CACHE PAGE IDS + POSTS
     // ====================================
@@ -609,10 +571,6 @@ const getAllPosts = async (req, res) => {
 
     await pipeline.exec();
 
-    // const personalized = final.map(post => ({
-    //   ...post,
-    //   is_liked: likedSet.has(post.id)
-    // }));
     const personalized =
   await attachLikeState(final, userId);
 
@@ -632,6 +590,31 @@ const getAllPosts = async (req, res) => {
     });
   }
 };
+async function attachLikeState(posts, userId) {
+
+  const postIds = posts.map(p => p.id);
+
+  const [likedRows] = postIds.length
+    ? await pool.query(
+        `
+        SELECT post_id
+        FROM post_likes
+        WHERE user_id = ?
+        AND post_id IN (?)
+        `,
+        [userId, postIds]
+      )
+    : [[]];
+
+  const likedSet = new Set(
+    likedRows.map(row => row.post_id)
+  );
+
+  return posts.map(post => ({
+    ...post,
+    is_liked: likedSet.has(post.id)
+  }));
+}
 
 // ================================
 // HYDRATE POSTS
@@ -1077,16 +1060,16 @@ function timeAgo(date){
 }
 
 
-const markSolved = async (req, res) => {
-  const { id } = req.params;
+// const markSolved = async (req, res) => {
+//   const { id } = req.params;
 
-  await pool.query(
-    "UPDATE posts SET status='solved' WHERE id=? AND user_id=?",
-    [id, req.user.id]
-  );
+//   await pool.query(
+//     "UPDATE posts SET status='solved' WHERE id=? AND user_id=?",
+//     [id, req.user.id]
+//   );
 
-  res.json({ message: "Marked as solved" });
-};
+//   res.json({ message: "Marked as solved" });
+// };
 
 
 const likePost = async (req, res) => {
@@ -1351,42 +1334,18 @@ const likePost = async (req, res) => {
 
 };
 
-async function attachLikeState(posts, userId) {
 
-  const postIds = posts.map(p => p.id);
-
-  const [likedRows] = postIds.length
-    ? await pool.query(
-        `
-        SELECT post_id
-        FROM post_likes
-        WHERE user_id = ?
-        AND post_id IN (?)
-        `,
-        [userId, postIds]
-      )
-    : [[]];
-
-  const likedSet = new Set(
-    likedRows.map(row => row.post_id)
-  );
-
-  return posts.map(post => ({
-    ...post,
-    is_liked: likedSet.has(post.id)
-  }));
-}
 
 module.exports = {
 
   createPost,
-  markSolved,
+  // markSolved,
   upload,
   getAllPosts,
   getPostsById,
   updatePostBodyContent,
   deletePost,
-  likePost,
+  likePost
  
 };
 

@@ -133,8 +133,8 @@ const followRoutes = require("./src/routes/mutuals/followRoute");
 app.use("/api", followRoutes);
 
 // post
-// const postRoutes = require("./src/routes/upload/postRoutes");
-// app.use("/api", postRoutes);
+const postRoutes = require("./src/routes/upload/postRoutes");
+app.use("/api", postRoutes);
 
 // answer question
 const answerQARoutes = require("./src/routes/upload/answerQAroute");
