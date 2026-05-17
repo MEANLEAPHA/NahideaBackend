@@ -114,7 +114,7 @@ io.on("connection", (socket) => {
 
 // rate limit
 
-app.use(globalLimiter); // global rate limit
+// app.use(globalLimiter); // global rate limit
 
 
 
