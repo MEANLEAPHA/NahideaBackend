@@ -383,7 +383,11 @@ function safeJsonParse(str) {
 const getAllPosts = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const page = parseInt(req.query.page) || 1;
+    // const page = parseInt(req.query.page) || 1;
+    const page = Math.max(
+      1,
+      Math.min(parseInt(req.query.page) || 1, 1000)
+    );
     const limit = 25;
     const offset = (page - 1) * limit;
 
@@ -437,27 +441,25 @@ const getAllPosts = async (req, res) => {
             .map(id => cachedPostMap.get(String(id)))
             .filter(Boolean);
 
-            const postIds = orderedPosts.map(p => p.id);
-            const [likedRows] = postIds.length
-              ? await pool.query(
-                  `
-                  SELECT post_id
-                  FROM post_likes
-                  WHERE user_id = ?
-                  AND post_id IN (?)
-                  `,
-                  [userId, postIds]
-                )
-              : [[]];
+            // const postIds = orderedPosts.map(p => p.id);
+            // const [likedRows] = postIds.length
+            //   ? await pool.query(
+            //       `
+            //       SELECT post_id
+            //       FROM post_likes
+            //       WHERE user_id = ?
+            //       AND post_id IN (?)
+            //       `,
+            //       [userId, postIds]
+            //     )
+            //   : [[]];
 
-            const likedSet = new Set(
-              likedRows.map(row => row.post_id)
-            );
+            // const likedSet = new Set(
+            //   likedRows.map(row => row.post_id)
+            // );
 
-            const personalized = orderedPosts.map(post => ({
-              ...post,
-              is_liked: likedSet.has(post.id)
-            }));
+            const personalized =
+  await attachLikeState(orderedPosts, userId);
 
           console.log("CACHE HIT (page + posts)");
 
@@ -494,27 +496,29 @@ const getAllPosts = async (req, res) => {
         const orderedPosts = ids
           .map(id => cachedPostMap.get(String(id)))
           .filter(Boolean);
-          const postIds = orderedPosts.map(p => p.id);
-            const [likedRows] = postIds.length
-              ? await pool.query(
-                  `
-                  SELECT post_id
-                  FROM post_likes
-                  WHERE user_id = ?
-                  AND post_id IN (?)
-                  `,
-                  [userId, postIds]
-                )
-              : [[]];
 
-            const likedSet = new Set(
-              likedRows.map(row => row.post_id)
-            );
+          // const postIds = orderedPosts.map(p => p.id);
+          //   const [likedRows] = postIds.length
+          //     ? await pool.query(
+          //         `
+          //         SELECT post_id
+          //         FROM post_likes
+          //         WHERE user_id = ?
+          //         AND post_id IN (?)
+          //         `,
+          //         [userId, postIds]
+          //       )
+          //     : [[]];
 
-            const personalized = orderedPosts.map(post => ({
-              ...post,
-              is_liked: likedSet.has(post.id)
-            }));
+          //   const likedSet = new Set(
+          //     likedRows.map(row => row.post_id)
+          //   );
+
+          //   const personalized = orderedPosts.map(post => ({
+          //     ...post,
+          //     is_liked: likedSet.has(post.id)
+          //   }));
+            const personalized = await attachLikeState(orderedPosts, userId);
 
         return res.status(200).json({
           source: "mixed",
@@ -564,22 +568,22 @@ const getAllPosts = async (req, res) => {
       posts
     );
 
-    const postIds = final.map(p => p.id);
-    const [likedRows] = postIds.length
-    ? await pool.query(
-        `
-        SELECT post_id
-        FROM post_likes
-        WHERE user_id = ?
-        AND post_id IN (?)
-        `,
-        [userId, postIds]
-      )
-    : [[]];
+    // const postIds = final.map(p => p.id);
+    // const [likedRows] = postIds.length
+    // ? await pool.query(
+    //     `
+    //     SELECT post_id
+    //     FROM post_likes
+    //     WHERE user_id = ?
+    //     AND post_id IN (?)
+    //     `,
+    //     [userId, postIds]
+    //   )
+    // : [[]];
 
-    const likedSet = new Set(
-      likedRows.map(row => row.post_id)
-    );
+    // const likedSet = new Set(
+    //   likedRows.map(row => row.post_id)
+    // );
 
     // ====================================
     // 3. CACHE PAGE IDS + POSTS
@@ -605,10 +609,12 @@ const getAllPosts = async (req, res) => {
 
     await pipeline.exec();
 
-    const personalized = final.map(post => ({
-      ...post,
-      is_liked: likedSet.has(post.id)
-    }));
+    // const personalized = final.map(post => ({
+    //   ...post,
+    //   is_liked: likedSet.has(post.id)
+    // }));
+    const personalized =
+  await attachLikeState(final, userId);
 
     console.log("DB HIT");
 
@@ -1205,7 +1211,9 @@ const likePost = async (req, res) => {
       // success baby
 
       await connection.commit();
-      await cachePost.del(`post:${postId}`);
+
+      cachePost.del(`post:${postId}`)
+        .catch(console.error);
 
       return res.json({
         liked: false
@@ -1319,23 +1327,56 @@ const likePost = async (req, res) => {
     }
     // success baby
     await connection.commit();
-    await cachePost.del(`post:${postId}`);
+
+    cachePost.del(`post:${postId}`)
+      .catch(console.error);
+
     return res.json({
-        liked: true
+      liked: true
     });
   }
   catch(err){
+
+    await connection.rollback();
+
     console.error(err);
 
-        return res.status(500).json({
-            message: "Server error"
+    return res.status(500).json({
+        message: "Server error"
     });
-  }
+}
   finally{
     connection.release();
   }
 
+};
+
+async function attachLikeState(posts, userId) {
+
+  const postIds = posts.map(p => p.id);
+
+  const [likedRows] = postIds.length
+    ? await pool.query(
+        `
+        SELECT post_id
+        FROM post_likes
+        WHERE user_id = ?
+        AND post_id IN (?)
+        `,
+        [userId, postIds]
+      )
+    : [[]];
+
+  const likedSet = new Set(
+    likedRows.map(row => row.post_id)
+  );
+
+  return posts.map(post => ({
+    ...post,
+    is_liked: likedSet.has(post.id)
+  }));
 }
+
 module.exports = {
 
   createPost,

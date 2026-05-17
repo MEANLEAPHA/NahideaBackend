@@ -1,6 +1,4 @@
 
-
-// module.exports = { uploadGif, getGifs, searchGif };
 const pool = require("../../config/db");
 const { cachePost } = require("../../config/redisClient");
 
