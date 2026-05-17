@@ -1089,7 +1089,7 @@ const likePost = async (req, res) => {
 
     await connection.beginTransaction();
     const userId = req.user.userId;
-    const username = req.user.username;
+    const username = 'test';
 
     const postId = req.params.postId;
     const ownerId = req.params.ownerId;
