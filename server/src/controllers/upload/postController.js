@@ -1182,11 +1182,11 @@ const likePost = async (req, res) => {
 
         if(totalLikes === 1){
           notificationContent = 
-          `${latestLiker.username} liked your post` ;
+          `${latestLiker?.username} liked your post` ;
         }
         else{
           notificationContent =
-          `${latestLiker.username} and ${totalLikes - 1} others liked your post`;
+          `${latestLiker?.username} and ${totalLikes - 1} others liked your post`;
         }
 
         // update notification
