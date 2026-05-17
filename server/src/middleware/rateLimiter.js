@@ -8,7 +8,7 @@ const followerLimiter = rateLimiter({
     }
 });
 
-const globalLimiter = rateLimit({
+const globalLimiter = rateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 300,
   standardHeaders: true,
@@ -18,7 +18,7 @@ const globalLimiter = rateLimit({
   }
 });
 
-const likeLimiter = rateLimit({
+const likeLimiter = rateLimiter({
   windowMs: 60 * 1000,
   max: 60,
   message: {
