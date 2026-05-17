@@ -8,4 +8,22 @@ const followerLimiter = rateLimiter({
     }
 });
 
-module.exports = { followerLimiter };
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    message: "Too many requests"
+  }
+});
+
+const likeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: {
+    message: "Too many likes"
+  }
+});
+
+module.exports = { followerLimiter, globalLimiter, likeLimiter };

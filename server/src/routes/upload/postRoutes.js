@@ -43,7 +43,7 @@ router.post("/create-posts", protect,
   
   router.delete("/delete-post/:postId", protect, deletePost);
 
-  router.post("/posts/:postId/:ownerId/like", protect, likePost);
+  router.post("/posts/:postId/:ownerId/like", likeLimiter, protect, likePost);
 
 
 

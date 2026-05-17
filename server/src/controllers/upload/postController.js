@@ -382,6 +382,7 @@ function safeJsonParse(str) {
 // ================================
 const getAllPosts = async (req, res) => {
   try {
+    const userId = req.user.userId;
     const page = parseInt(req.query.page) || 1;
     const limit = 25;
     const offset = (page - 1) * limit;
@@ -436,11 +437,33 @@ const getAllPosts = async (req, res) => {
             .map(id => cachedPostMap.get(String(id)))
             .filter(Boolean);
 
+            const postIds = orderedPosts.map(p => p.id);
+            const [likedRows] = postIds.length
+              ? await pool.query(
+                  `
+                  SELECT post_id
+                  FROM post_likes
+                  WHERE user_id = ?
+                  AND post_id IN (?)
+                  `,
+                  [userId, postIds]
+                )
+              : [[]];
+
+            const likedSet = new Set(
+              likedRows.map(row => row.post_id)
+            );
+
+            const personalized = orderedPosts.map(post => ({
+              ...post,
+              is_liked: likedSet.has(post.id)
+            }));
+
           console.log("CACHE HIT (page + posts)");
 
           return res.status(200).json({
             source: "cache",
-            data: orderedPosts
+            data: personalized
           });
         }
 
@@ -471,10 +494,31 @@ const getAllPosts = async (req, res) => {
         const orderedPosts = ids
           .map(id => cachedPostMap.get(String(id)))
           .filter(Boolean);
+          const postIds = orderedPosts.map(p => p.id);
+            const [likedRows] = postIds.length
+              ? await pool.query(
+                  `
+                  SELECT post_id
+                  FROM post_likes
+                  WHERE user_id = ?
+                  AND post_id IN (?)
+                  `,
+                  [userId, postIds]
+                )
+              : [[]];
+
+            const likedSet = new Set(
+              likedRows.map(row => row.post_id)
+            );
+
+            const personalized = orderedPosts.map(post => ({
+              ...post,
+              is_liked: likedSet.has(post.id)
+            }));
 
         return res.status(200).json({
           source: "mixed",
-          data: orderedPosts
+          data: personalized
         });
       }
     }
@@ -520,6 +564,23 @@ const getAllPosts = async (req, res) => {
       posts
     );
 
+    const postIds = final.map(p => p.id);
+    const [likedRows] = postIds.length
+    ? await pool.query(
+        `
+        SELECT post_id
+        FROM post_likes
+        WHERE user_id = ?
+        AND post_id IN (?)
+        `,
+        [userId, postIds]
+      )
+    : [[]];
+
+    const likedSet = new Set(
+      likedRows.map(row => row.post_id)
+    );
+
     // ====================================
     // 3. CACHE PAGE IDS + POSTS
     // ====================================
@@ -541,13 +602,20 @@ const getAllPosts = async (req, res) => {
       );
     });
 
+
     await pipeline.exec();
+
+    const personalized = final.map(post => ({
+      ...post,
+      is_liked: likedSet.has(post.id)
+    }));
 
     console.log("DB HIT");
 
     return res.status(200).json({
       source: "db",
-      data: final
+      data: personalized
+      // data: final
     });
 
   } catch (err) {
@@ -1120,7 +1188,7 @@ const likePost = async (req, res) => {
           `
           UPDATE notifications
           SET 
-            sender_id = ?
+            sender_id = ?,
             content = ?,
             is_viewed = 0,
             created_at = NOW()
@@ -1137,6 +1205,7 @@ const likePost = async (req, res) => {
       // success baby
 
       await connection.commit();
+      await cachePost.del(`post:${postId}`);
 
       return res.json({
         liked: false
@@ -1167,7 +1236,7 @@ const likePost = async (req, res) => {
     // notification like sent
 
     // no self noti logic
-    if(ownerId !== userId){
+    if(Number(ownerId) !== Number(userId)){
       const [[likeData]] = await connection.query(
         `
         SELECT COUNT(*) AS totalLikes
@@ -1240,7 +1309,7 @@ const likePost = async (req, res) => {
                     [
                         ownerId,
                         userId,
-                        'comment_like',
+                        'post_like',
                         notificationContent,
                         postId,
                         aggregateKey
@@ -1250,6 +1319,7 @@ const likePost = async (req, res) => {
     }
     // success baby
     await connection.commit();
+    await cachePost.del(`post:${postId}`);
     return res.json({
         liked: true
     });
