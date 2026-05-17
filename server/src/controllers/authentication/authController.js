@@ -49,6 +49,7 @@ const login = async (req, res) => {
 
     const token = createToken({
       userId: user.id,
+      username: user.username
     });
 
     return res.status(200).json({

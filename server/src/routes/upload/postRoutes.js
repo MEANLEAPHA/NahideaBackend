@@ -7,7 +7,8 @@ const {
   getAllPosts,
   getPostsById,
   updatePostBodyContent,
-  deletePost
+  deletePost,
+  likePost,
 
 
 } = require("../../controllers/upload/postController");
@@ -42,6 +43,7 @@ router.post("/create-posts", protect,
   
   router.delete("/delete-post/:postId", protect, deletePost);
 
+  router.post("/posts/:postId/:ownerId/like", protect, likePost);
 
 
 

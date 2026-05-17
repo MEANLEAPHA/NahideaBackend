@@ -495,6 +495,7 @@ const getAllPosts = async (req, res) => {
         p.created_at,
         p.status,
         u.username,
+        u.id as owner_id,
         u.avatar_url,
         u.id as user_id,
         GROUP_CONCAT(tg.label) as tags
@@ -1003,8 +1004,6 @@ function timeAgo(date){
 }
 
 
-
-
 const markSolved = async (req, res) => {
   const { id } = req.params;
 
@@ -1016,6 +1015,258 @@ const markSolved = async (req, res) => {
   res.json({ message: "Marked as solved" });
 };
 
+
+const likePost = async (req, res) => {
+  const connection = await pool.getConnection();
+  try{
+
+    await connection.beginTransacrion();
+    const userId = req.user.userId;
+    const username = req.user.username;
+
+    const postId = req.params.postId;
+    const ownerId = req.params.ownerId;
+
+    // check if like already
+    const [existingLike] = await connection.query(
+      `
+      SELECT id 
+      FROM post_likes
+      WHERE post_id = ?
+      AND user_id = ?
+      `,
+      [postId, userId]
+    );
+
+    // setup aggregateKey
+    const aggregateKey = `post_like_${ownerId}_${postId}`;
+
+    // unlike cuz post alr like
+    if(existingLike.length > 0){
+
+
+      // remove like
+      await connection.query(
+        `
+        DELETE FROM post_likes
+        WHERE post_id = ? 
+        AND user_id = ?
+        `,
+        [postId, userId]
+      );
+
+      // decrease like count 
+      await connection.query(
+        `
+        UPDATE posts
+        SET likes_count = GREATEST(likes_count - 1, 0)
+        WHERE id = ?
+        `,
+        [postId]
+      );
+
+      //get updated total likes
+      const [[likeData]] = await connection.query(
+        `
+        SELECT COUNT(*) AS totalLikes
+        FROM post_likes
+        WHERE post_id = ?
+        `,
+        [postId]
+      );
+
+      const totalLikes = likeData.totalLikes;
+
+      // if no like left delete notification
+      if(totalLikes === 0){
+        await connection.query(
+          `
+          DELETE FROM notifications
+          WHERE aggregate_key = ?
+          `,
+          [aggregateKey]
+        );
+      }
+      else{
+
+        // get newest liker
+                const [[latestLiker]] = await connection.query(
+                    `
+                    SELECT
+                        cl.user_id,
+                        u.username
+                    FROM post_likes cl
+                    JOIN users u
+                        ON u.id = cl.user_id
+                    WHERE cl.post_id = ?
+                    ORDER BY cl.id DESC
+                    LIMIT 1
+                    `,
+                    [postId]
+                );
+
+        let notificationContent;
+
+        if(totalLikes === 1){
+          notificationContent = 
+          `${latestLiker.username} liked your post` ;
+        }
+        else{
+          notificationContent =
+          `${latestLiker.username} and ${totalLikes - 1} others liked your post`;
+        }
+
+        // update notification
+        await connection.query(
+          `
+          UPDATE notifications
+          SET 
+            sender_id = ?
+            content = ?,
+            is_viewed = 0,
+            created_at = NOW()
+          WHERE aggregate_key = ?
+          `,
+          [
+            latestLiker.user_id,
+            notificationContent,
+            aggregateKey
+          ]
+        );
+      }
+
+      // success baby
+
+      await connection.commit();
+
+      return res.json({
+        liked: false
+      });
+    }
+
+    // like logic start here
+    await connection.query(
+      `
+      INSERT INTO post_likes
+      (post_id, user_id)
+      VALUES (?, ?)
+      `,
+      [postId, userId]
+    );
+
+    // increase post like count
+
+    await connection.query(
+      `
+      UPDATE posts
+      SET likes_count = likes_count + 1
+      WHERE id = ?
+      `,
+      [postId]
+    );
+
+    // notification like sent
+
+    // no self noti logic
+    if(ownerId !== userId){
+      const [[likeData]] = await connection.query(
+        `
+        SELECT COUNT(*) AS totalLikes
+        FROM post_likes
+        WHERE post_id = ?
+        `,
+        [postId]
+      );
+
+      const totalLikes = likeData.totalLikes;
+
+      let notificationContent;
+      if(totalLikes === 1){
+        notificationContent =
+              `${username} liked your post`;
+      }
+      else{
+         notificationContent =
+              `${username} and ${totalLikes - 1} other${totalLikes - 1 > 1 ? 's' : ''} liked your post`;
+      }
+
+      // find exist aggregated noti
+      const [existingNotification] = await connection.query(
+          `
+          SELECT id
+          FROM notifications
+          WHERE aggregate_key = ?
+          LIMIT 1
+          `,
+          [aggregateKey]
+      );
+     
+
+      // update existing noti
+      if (existingNotification.length > 0) {
+
+          await connection.query(
+              `
+              UPDATE notifications
+              SET
+                  sender_id = ?,
+                  content = ?,
+                  is_viewed = 0,
+                  created_at = NOW()
+              WHERE aggregate_key = ?
+              `,
+              [
+                  userId,
+                  notificationContent,
+                  aggregateKey
+              ]
+          );
+      }
+      // create new noti
+      else{
+         await connection.query(
+                    `
+                    INSERT INTO notifications
+                    (
+                        receiver_id,
+                        sender_id,
+                        type,
+                        content,
+                        post_id,
+                        aggregate_key,
+                        is_viewed
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, 0)
+                    `,
+                    [
+                        ownerId,
+                        userId,
+                        'comment_like',
+                        notificationContent,
+                        postId,
+                        aggregateKey
+                    ]
+                );
+      }
+    }
+    // success baby
+    await connection.commit();
+    return res.json({
+        liked: true
+    });
+  }
+  catch(err){
+    console.error(err);
+
+        return res.status(500).json({
+            message: "Server error"
+    });
+  }
+  finally{
+    connection.release();
+  }
+
+}
 module.exports = {
 
   createPost,
@@ -1024,9 +1275,9 @@ module.exports = {
   getAllPosts,
   getPostsById,
   updatePostBodyContent,
-  deletePost
+  deletePost,
+  likePost,
  
-
 };
 
 
