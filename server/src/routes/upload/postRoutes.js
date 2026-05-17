@@ -20,6 +20,7 @@ const {
 // const { addComment } = require("../../controllers/upload/commentController");
 const { vote } = require("../../controllers/upload/voteController");
 
+const { likeLimiter } = require("../../middleware/rateLimiter");
 
 // post with multiple media and signle media
 router.post("/create-posts", protect, 
