@@ -1019,7 +1019,7 @@ const likePost = async (req, res) => {
   const connection = await pool.getConnection();
   try{
 
-    await connection.beginTransacrion();
+    await connection.beginTransaction();
     const userId = req.user.userId;
     const username = req.user.username;
 
