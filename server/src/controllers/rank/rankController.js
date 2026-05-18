@@ -86,6 +86,15 @@ const getHallOfFame = async (req, res) => {
 };
 
 
+const getTrendingPost = async (req, res) => {
+   try{
+    
+   }
+   catch(err){
+    console.error("Error fetching Hall of Fame:", err.message);
+    res.status(500).json({ error: "Server error" });
+   }
+}
 
 // const recordLogin = async (req, res) => {
 //   try {

@@ -8,6 +8,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 
 const app = express();
+app.set("trust proxy", 1);
 
 const { connectRedis } = require("./src/config/redisClient");
 const {globalLimiter} = require("./src/middleware/rateLimiter");
@@ -136,6 +137,11 @@ app.use("/api", followRoutes);
 const postRoutes = require("./src/routes/upload/postRoutes");
 app.use("/api", postRoutes);
 
+// view recorder post
+const viewPostRoutes = require("./src/routes/view/viewPostRoute");
+app.use("/api", viewPostRoutes);
+
+
 // answer question
 const answerQARoutes = require("./src/routes/upload/answerQAroute");
 app.use("/api", answerQARoutes);
@@ -166,9 +172,6 @@ app.use("/api", reportRoutes);
 // const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
 // app.use("/api", postHistoryRoutes);
 
-// view recorder post
-// const viewPostRoutes = require("./src/routes/view/viewPostRoute");
-// app.use("/api", viewPostRoutes);
 
 // const postArchiveRoutes = require("./src/routes/upload/postArchiveRoute");
 // app.use("/api", postArchiveRoutes);
