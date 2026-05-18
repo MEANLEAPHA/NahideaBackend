@@ -57,33 +57,33 @@
 // };
 
 // // Get total views
-// const getTotalViewsByPost = async (req, res) => {
-//   try {
-//     const { postId } = req.params;
-//     const postKey = `views:post:${postId}`;
+const getTotalViewsByPost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const postKey = `views:post:${postId}`;
 
-//     try {
-//       // Redis first (always holds real total)
-//       const count = await cachePost.get(postKey);
-//       if (count !== null) {
-//         return res.status(200).json({ success: true, total_views: parseInt(count, 10) });
-//       }
-//     } catch (redisErr) {
-//       console.error("Redis error, fallback to DB:", redisErr);
-//     }
+    try {
+      // Redis first (always holds real total)
+      const count = await cachePost.get(postKey);
+      if (count !== null) {
+        return res.status(200).json({ success: true, total_views: parseInt(count, 10) });
+      }
+    } catch (redisErr) {
+      console.error("Redis error, fallback to DB:", redisErr);
+    }
 
-//     // Fallback to DB
-//     const [rows] = await pool.query(
-//       `SELECT views_count AS total_views FROM posts WHERE id = ?`,
-//       [postId]
-//     );
+    // Fallback to DB
+    const [rows] = await pool.query(
+      `SELECT views_count AS total_views FROM posts WHERE id = ?`,
+      [postId]
+    );
 
-//     res.status(200).json({ success: true, total_views: rows[0].total_views, fallback: true });
-//   } catch (error) {
-//     console.error("Error fetching total views:", error);
-//     res.status(500).json({ success: false, error: "Internal server error" });
-//   }
-// };
+    res.status(200).json({ success: true, total_views: rows[0].total_views, fallback: true });
+  } catch (error) {
+    console.error("Error fetching total views:", error);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+};
 
 // module.exports = { recordViewPost, getTotalViewsByPost };
 const pool = require("../../config/db");
@@ -148,3 +148,5 @@ const recordViewPost = async (req, res) => {
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 };
+
+module.exports = { recordViewPost, getTotalViewsByPost };
