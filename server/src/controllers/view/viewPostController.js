@@ -55,7 +55,8 @@
 //     res.status(500).json({ success: false, error: "Internal server error" });
 //   }
 // };
-
+const pool = require("../../config/db");
+const { cachePost, ranking } = require("../../config/redisClient");
 // // Get total views
 const getTotalViewsByPost = async (req, res) => {
   try {
@@ -85,9 +86,8 @@ const getTotalViewsByPost = async (req, res) => {
   }
 };
 
-// module.exports = { recordViewPost, getTotalViewsByPost };
-const pool = require("../../config/db");
-const { cachePost, ranking } = require("../../config/redisClient");
+
+
 
 // Record a view + trending
 const recordViewPost = async (req, res) => {
