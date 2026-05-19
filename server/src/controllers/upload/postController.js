@@ -441,25 +441,8 @@ const getAllPosts = async (req, res) => {
             .map(id => cachedPostMap.get(String(id)))
             .filter(Boolean);
 
-            // const postIds = orderedPosts.map(p => p.id);
-            // const [likedRows] = postIds.length
-            //   ? await pool.query(
-            //       `
-            //       SELECT post_id
-            //       FROM post_likes
-            //       WHERE user_id = ?
-            //       AND post_id IN (?)
-            //       `,
-            //       [userId, postIds]
-            //     )
-            //   : [[]];
-
-            // const likedSet = new Set(
-            //   likedRows.map(row => row.post_id)
-            // );
-
             const personalized =
-  await attachLikeState(orderedPosts, userId);
+            await attachLikeState(orderedPosts, userId);
 
           console.log("CACHE HIT (page + posts)");
 
@@ -625,12 +608,41 @@ async function hydratePostsFromDb(ids, basePosts = null) {
 
   // fetch posts if not supplied
   if (!posts) {
-
     const [rows] = await pool.query(`
-      SELECT *
-      FROM posts
-      WHERE id IN (?)
-      ORDER BY FIELD(id, ?)
+      SELECT
+        p.id,
+        p.post_type,
+        p.is_anonymous,
+        p.anonymous_name,
+        p.anonymous_bg_color,
+        p.likes_count,
+        p.comments_count,
+        p.views_count,
+        p.created_at,
+        p.status,
+        p.user_id,
+
+        u.username,
+        u.avatar_url,
+
+        GROUP_CONCAT(tg.label) as tags
+
+      FROM posts p
+
+      JOIN users u
+        ON p.user_id = u.id
+
+      LEFT JOIN post_tags pt
+        ON pt.post_id = p.id
+
+      LEFT JOIN tags tg
+        ON tg.id = pt.tag_id
+
+      WHERE p.id IN (?)
+
+      GROUP BY p.id
+
+      ORDER BY FIELD(p.id, ?)
     `, [ids, ids]);
 
     posts = rows;
