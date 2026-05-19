@@ -138,8 +138,8 @@ const postRoutes = require("./src/routes/upload/postRoutes");
 app.use("/api", postRoutes);
 
 // view recorder post
-// const viewPostRoutes = require("./src/routes/view/viewPostRoute");
-// app.use("/api", viewPostRoutes);
+const viewPostRoutes = require("./src/routes/view/viewPostRoute");
+app.use("/api", viewPostRoutes);
 
 
 // answer question
