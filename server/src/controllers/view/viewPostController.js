@@ -59,6 +59,7 @@ const pool = require("../../config/db");
 const { cachePost, ranking } = require("../../config/redisClient");
 // // Get total views
 const getTotalViewsByPost = async (req, res) => {
+
   try {
     const { postId } = req.params;
     const postKey = `views:post:${postId}`;
@@ -91,6 +92,7 @@ const getTotalViewsByPost = async (req, res) => {
 
 // Record a view + trending
 const recordViewPost = async (req, res) => {
+  
   try {
     const userId = req.user.userId;
     const { postId } = req.params;
@@ -147,6 +149,7 @@ const recordViewPost = async (req, res) => {
     console.error("Error recording view post:", error);
     res.status(500).json({ success: false, error: "Internal server error" });
   }
+
 };
 
 module.exports = { recordViewPost, getTotalViewsByPost };

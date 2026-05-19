@@ -15,7 +15,7 @@ const {globalLimiter} = require("./src/middleware/rateLimiter");
 
 // worker
 require("./src/workers/rankStoreToDB");
-// require("./src/workers/hydrateViewsToDB");
+require("./src/workers/hydrateViewsToDB");
 
 // cor
 app.use(cors({
@@ -169,8 +169,8 @@ const reportRoutes = require("./src/routes/report/reportPostRoute");
 app.use("/api", reportRoutes);
 
 // history recorder post
-// const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
-// app.use("/api", postHistoryRoutes);
+const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
+app.use("/api", postHistoryRoutes);
 
 
 // const postArchiveRoutes = require("./src/routes/upload/postArchiveRoute");
