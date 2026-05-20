@@ -62,14 +62,79 @@
 // });
 
 
+// const cron = require("node-cron");
+// const pool = require("../config/db");
+// const { cachePost } = require("../config/redisClient");
+
+// const hydrateViewsToDB = async () => {
+//   try {
+//      // Scan Redis per-user/day keys
+//     const keys = await cachePost.keys("view:*");
+
+//     for (const key of keys) {
+//       // key format: view:{postId}:{userId}:{date}
+//       const [, postId, userId, viewDate] = key.split(":");
+
+//       // Insert row if not exists
+//       await pool.query(
+//         `INSERT INTO view_post (user_id, post_id, view_date, created_at)
+//          VALUES (?, ?, ?, NOW())
+//          ON DUPLICATE KEY UPDATE view_date = VALUES(view_date)`,
+//         [userId, postId, viewDate]
+//       );
+
+//       // Delete per-user/day key after flush
+//       await cachePost.del(key);
+
+//       // Pause between inserts to avoid DB overload
+//       await new Promise(resolve => setTimeout(resolve, 200));
+//     }
+
+//     // 🔄 Sync aggregate counters
+//     const postKeys = await cachePost.keys("views:post:*");
+//     for (const postKey of postKeys) {
+//       const postId = postKey.split(":")[2];
+//       const redisCount = await cachePost.get(postKey);
+
+//       if (redisCount) {
+//         // Update DB aggregate by adding Redis delta
+//         await pool.query(
+//           `UPDATE posts SET views_count = views_count + ? WHERE id = ?`,
+//           [parseInt(redisCount, 10), postId]
+//         );
+
+//         // Fetch authoritative DB total
+//         const [rows] = await pool.query(
+//           `SELECT views_count FROM posts WHERE id = ?`,
+//           [postId]
+//         );
+//         const dbTotal = rows[0].views_count;
+
+//         // Reset Redis counter to DB total (so frontend always sees real cumulative)
+//         await cachePost.set(postKey, dbTotal);
+//       }
+
+//       // Pause between updates to avoid DB overload
+//       await new Promise(resolve => setTimeout(resolve, 200));
+//     }
+//   } catch (err) {
+//     console.error("Error hydrating views:", err);
+//   }
+// };
+
+// // Schedule every 15 minutes
+// cron.schedule("*/5 * * * *", async () => {
+//   console.log("Hydrating Redis views into DB...");
+//   await hydrateViewsToDB();
+// });
+
 const cron = require("node-cron");
 const pool = require("../config/db");
 const { cachePost } = require("../config/redisClient");
 
 const hydrateViewsToDB = async () => {
   try {
-     // Scan Redis per-user/day keys
-    const keys = await cachePost.keys("view:*");
+ const keys = await cachePost.keys("view:*");
 
     for (const key of keys) {
       // key format: view:{postId}:{userId}:{date}
@@ -97,9 +162,9 @@ const hydrateViewsToDB = async () => {
       const redisCount = await cachePost.get(postKey);
 
       if (redisCount) {
-        // Update DB aggregate by adding Redis delta
+        // Overwrite DB aggregate with Redis count (not +=)
         await pool.query(
-          `UPDATE posts SET views_count = views_count + ? WHERE id = ?`,
+          `UPDATE posts SET views_count = ? WHERE id = ?`,
           [parseInt(redisCount, 10), postId]
         );
 
@@ -110,7 +175,7 @@ const hydrateViewsToDB = async () => {
         );
         const dbTotal = rows[0].views_count;
 
-        // Reset Redis counter to DB total (so frontend always sees real cumulative)
+        // Reset Redis counter to DB total (so frontend continues from real value)
         await cachePost.set(postKey, dbTotal);
       }
 
@@ -122,7 +187,7 @@ const hydrateViewsToDB = async () => {
   }
 };
 
-// Schedule every 15 minutes
+// Schedule every 5 minutes
 cron.schedule("*/5 * * * *", async () => {
   console.log("Hydrating Redis views into DB...");
   await hydrateViewsToDB();
