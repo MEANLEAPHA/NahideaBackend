@@ -1,15 +1,73 @@
 
+// const cron = require("node-cron");
+// const pool = require("../config/db");
+// const { cachePost } = require("../config/redisClient");
+
+// const hydrateViewsToDB = async () => {
+
+//   try {
+//  const keys = await cachePost.keys("view:*");
+
+//     for (const key of keys) {
+
+//       // key format: view:{postId}:{userId}:{date}
+//       const [, postId, userId, viewDate] = key.split(":");
+
+//       // Insert row if not exists
+//       await pool.query(
+//         `INSERT INTO view_post (user_id, post_id, view_date, created_at)
+//          VALUES (?, ?, ?, NOW())
+//          ON DUPLICATE KEY UPDATE view_date = VALUES(view_date)`,
+//         [userId, postId, viewDate]
+//       );
+  
+//       // Pause between inserts to avoid DB overload
+//       await new Promise(resolve => setTimeout(resolve, 200));
+//     }
+
+//     // 🔄 Sync aggregate counters
+//     const postKeys = await cachePost.keys("views:post:*");
+
+//     for (const postKey of postKeys) {
+
+//       const postId = postKey.split(":")[2];
+//       const redisCount = await cachePost.get(postKey);
+
+//       if (redisCount) {
+        
+//         // update new value to DB
+//         await pool.query(
+//           `UPDATE posts SET views_count = ? WHERE id = ?`,
+//           [parseInt(redisCount, 10), postId]
+//         );
+
+//         // add continues value no need to fetch back
+//         await cachePost.set(postKey, parseInt(redisCount, 10));
+//       }
+
+//       // Pause between updates to avoid DB overload
+//       await new Promise(resolve => setTimeout(resolve, 200));
+//     }
+//   } catch (err) {
+//     console.error("Error hydrating views:", err);
+//   }
+// };
+
+// // Schedule every 5 minutes
+// cron.schedule("*/5 * * * *", async () => {
+//   console.log("Hydrating Redis views into DB...");
+//   await hydrateViewsToDB();
+// });
+
 const cron = require("node-cron");
 const pool = require("../config/db");
 const { cachePost } = require("../config/redisClient");
 
 const hydrateViewsToDB = async () => {
-
   try {
- const keys = await cachePost.keys("view:*");
+    const keys = await cachePost.keys("view:*");
 
     for (const key of keys) {
-
       // key format: view:{postId}:{userId}:{date}
       const [, postId, userId, viewDate] = key.split(":");
 
@@ -20,7 +78,7 @@ const hydrateViewsToDB = async () => {
          ON DUPLICATE KEY UPDATE view_date = VALUES(view_date)`,
         [userId, postId, viewDate]
       );
-  
+
       // Pause between inserts to avoid DB overload
       await new Promise(resolve => setTimeout(resolve, 200));
     }
@@ -29,20 +87,18 @@ const hydrateViewsToDB = async () => {
     const postKeys = await cachePost.keys("views:post:*");
 
     for (const postKey of postKeys) {
-
       const postId = postKey.split(":")[2];
       const redisCount = await cachePost.get(postKey);
 
       if (redisCount) {
-        
         // update new value to DB
         await pool.query(
           `UPDATE posts SET views_count = ? WHERE id = ?`,
           [parseInt(redisCount, 10), postId]
         );
 
-        // add continues value no need to fetch back
-        await cachePost.set(postKey, parseInt(redisCount, 10));
+        // reset Redis counter to DB value with TTL 3 minutes
+        await cachePost.set(postKey, parseInt(redisCount, 10), { EX: 60 * 3 });
       }
 
       // Pause between updates to avoid DB overload

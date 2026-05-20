@@ -25,7 +25,7 @@ router.put(
 );
 
 router.delete(
-    "/comments/:commentId",
+    "/comments/:commentId/:postId",
     protect,
     deleteComment
 );

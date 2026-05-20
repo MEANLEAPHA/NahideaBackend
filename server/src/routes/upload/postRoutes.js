@@ -8,8 +8,8 @@ const {
   getPostsById,
   updatePostBodyContent,
   deletePost,
-  likePost
-
+  likePost,
+  favoritePost,
 
 } = require("../../controllers/upload/postController");
 const {
@@ -46,6 +46,11 @@ router.post("/create-posts", protect,
 
   router.post("/posts/:postId/:ownerId/like", protect, likeLimiter, likePost);
 
+  router.post(
+    "/posts/:postId/favorite",
+    protect,
+    favoritePost
+  );
 
 
 // router.post("/:id/comments", protect, addComment);

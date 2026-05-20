@@ -442,7 +442,7 @@ const getAllPosts = async (req, res) => {
             .filter(Boolean);
 
             const personalized =
-            await attachLikeState(orderedPosts, userId);
+            await attachUserStates(orderedPosts, userId);
 
           console.log("CACHE HIT (page + posts)");
 
@@ -480,7 +480,7 @@ const getAllPosts = async (req, res) => {
           .map(id => cachedPostMap.get(String(id)))
           .filter(Boolean);
 
-            const personalized = await attachLikeState(orderedPosts, userId);
+            const personalized = await attachUserStates(orderedPosts, userId);
 
         return res.status(200).json({
           source: "mixed",
@@ -555,7 +555,7 @@ const getAllPosts = async (req, res) => {
     await pipeline.exec();
 
     const personalized =
-  await attachLikeState(final, userId);
+  await attachUserStates(final, userId);
 
     console.log("DB HIT");
 
@@ -573,10 +573,11 @@ const getAllPosts = async (req, res) => {
     });
   }
 };
-async function attachLikeState(posts, userId) {
+async function attachUserStates(posts, userId) {
 
   const postIds = posts.map(p => p.id);
 
+  // likes
   const [likedRows] = postIds.length
     ? await pool.query(
         `
@@ -589,16 +590,37 @@ async function attachLikeState(posts, userId) {
       )
     : [[]];
 
+  // favorites
+  const [favoriteRows] = postIds.length
+    ? await pool.query(
+        `
+        SELECT post_id
+        FROM post_favorites
+        WHERE user_id = ?
+        AND post_id IN (?)
+        `,
+        [userId, postIds]
+      )
+    : [[]];
+
   const likedSet = new Set(
     likedRows.map(row => row.post_id)
   );
 
+  const favoriteSet = new Set(
+    favoriteRows.map(row => row.post_id)
+  );
+
   return posts.map(post => ({
     ...post,
-    is_liked: likedSet.has(post.id)
+
+    is_liked:
+      likedSet.has(post.id),
+
+    is_favorited:
+      favoriteSet.has(post.id)
   }));
 }
-
 // ================================
 // HYDRATE POSTS
 // ================================
@@ -864,6 +886,338 @@ async function hydratePostsFromDb(ids, basePosts = null) {
     };
   });
 }
+const likePost = async (req, res) => {
+  const connection = await pool.getConnection();
+  try{
+
+    await connection.beginTransaction();
+    const userId = req.user.userId;
+    const username = 'test';
+
+    const postId = req.params.postId;
+    const ownerId = req.params.ownerId;
+
+    // check if like already
+    const [existingLike] = await connection.query(
+      `
+      SELECT id 
+      FROM post_likes
+      WHERE post_id = ?
+      AND user_id = ?
+      `,
+      [postId, userId]
+    );
+
+    // setup aggregateKey
+    const aggregateKey = `post_like_${ownerId}_${postId}`;
+
+    // unlike cuz post alr like
+    if(existingLike.length > 0){
+
+
+      // remove like
+      await connection.query(
+        `
+        DELETE FROM post_likes
+        WHERE post_id = ? 
+        AND user_id = ?
+        `,
+        [postId, userId]
+      );
+
+      // decrease like count 
+      await connection.query(
+        `
+        UPDATE posts
+        SET likes_count = GREATEST(likes_count - 1, 0)
+        WHERE id = ?
+        `,
+        [postId]
+      );
+
+      //get updated total likes
+      const [[likeData]] = await connection.query(
+        `
+        SELECT COUNT(*) AS totalLikes
+        FROM post_likes
+        WHERE post_id = ?
+        `,
+        [postId]
+      );
+
+      const totalLikes = likeData.totalLikes;
+
+      // if no like left delete notification
+      if(totalLikes === 0){
+        await connection.query(
+          `
+          DELETE FROM notifications
+          WHERE aggregate_key = ?
+          `,
+          [aggregateKey]
+        );
+      }
+      else{
+
+        // get newest liker
+                const [[latestLiker]] = await connection.query(
+                    `
+                    SELECT
+                        cl.user_id,
+                        u.username
+                    FROM post_likes cl
+                    JOIN users u
+                        ON u.id = cl.user_id
+                    WHERE cl.post_id = ?
+                    ORDER BY cl.id DESC
+                    LIMIT 1
+                    `,
+                    [postId]
+                );
+
+        let notificationContent;
+
+        if(totalLikes === 1){
+          notificationContent = 
+          `${latestLiker?.username} liked your post` ;
+        }
+        else{
+          notificationContent =
+          `${latestLiker?.username} and ${totalLikes - 1} others liked your post`;
+        }
+
+        // update notification
+        await connection.query(
+          `
+          UPDATE notifications
+          SET 
+            sender_id = ?,
+            content = ?,
+            is_viewed = 0,
+            created_at = NOW()
+          WHERE aggregate_key = ?
+          `,
+          [
+            latestLiker.user_id,
+            notificationContent,
+            aggregateKey
+          ]
+        );
+      }
+
+      // success baby
+
+      await connection.commit();
+
+   
+      return res.json({
+        liked: false
+      });
+    }
+
+    // like logic start here
+    await connection.query(
+      `
+      INSERT INTO post_likes
+      (post_id, user_id)
+      VALUES (?, ?)
+      `,
+      [postId, userId]
+    );
+
+    // increase post like count
+
+    await connection.query(
+      `
+      UPDATE posts
+      SET likes_count = likes_count + 1
+      WHERE id = ?
+      `,
+      [postId]
+    );
+
+    // notification like sent
+
+    // no self noti logic
+    if(Number(ownerId) !== Number(userId)){
+      const [[likeData]] = await connection.query(
+        `
+        SELECT COUNT(*) AS totalLikes
+        FROM post_likes
+        WHERE post_id = ?
+        `,
+        [postId]
+      );
+
+      const totalLikes = likeData.totalLikes;
+
+      let notificationContent;
+      if(totalLikes === 1){
+        notificationContent =
+              `${username} liked your post`;
+      }
+      else{
+         notificationContent =
+              `${username} and ${totalLikes - 1} other${totalLikes - 1 > 1 ? 's' : ''} liked your post`;
+      }
+
+      // find exist aggregated noti
+      const [existingNotification] = await connection.query(
+          `
+          SELECT id
+          FROM notifications
+          WHERE aggregate_key = ?
+          LIMIT 1
+          `,
+          [aggregateKey]
+      );
+     
+
+      // update existing noti
+      if (existingNotification.length > 0) {
+
+          await connection.query(
+              `
+              UPDATE notifications
+              SET
+                  sender_id = ?,
+                  content = ?,
+                  is_viewed = 0,
+                  created_at = NOW()
+              WHERE aggregate_key = ?
+              `,
+              [
+                  userId,
+                  notificationContent,
+                  aggregateKey
+              ]
+          );
+      }
+      // create new noti
+      else{
+         await connection.query(
+                    `
+                    INSERT INTO notifications
+                    (
+                        receiver_id,
+                        sender_id,
+                        type,
+                        content,
+                        post_id,
+                        aggregate_key,
+                        is_viewed
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, 0)
+                    `,
+                    [
+                        ownerId,
+                        userId,
+                        'post_like',
+                        notificationContent,
+                        postId,
+                        aggregateKey
+                    ]
+                );
+      }
+    }
+    // success baby
+    await connection.commit();
+
+
+    return res.json({
+      liked: true
+    });
+  }
+  catch(err){
+
+    await connection.rollback();
+
+    console.error(err);
+
+    return res.status(500).json({
+        message: "Server error"
+    });
+}
+  finally{
+    connection.release();
+  }
+
+};
+
+// favorite toggle
+const favoritePost = async (req, res) => {
+
+  const connection = await pool.getConnection();
+
+  try {
+
+    await connection.beginTransaction();
+
+    const userId = req.user.userId;
+
+    const postId = req.params.postId;
+
+    const [existing] = await connection.query(
+      `
+      SELECT id
+      FROM post_favorites
+      WHERE post_id = ?
+      AND user_id = ?
+      `,
+      [postId, userId]
+    );
+
+    // REMOVE FAVORITE
+    if (existing.length > 0) {
+
+      await connection.query(
+        `
+        DELETE FROM post_favorites
+        WHERE post_id = ?
+        AND user_id = ?
+        `,
+        [postId, userId]
+      );
+
+      await connection.commit();
+
+      return res.json({
+        favorited: false
+      });
+    }
+
+    // ADD FAVORITE
+    await connection.query(
+      `
+      INSERT INTO post_favorites
+      (post_id, user_id)
+      VALUES (?, ?)
+      `,
+      [postId, userId]
+    );
+
+    await connection.commit();
+
+    return res.json({
+      favorited: true
+    });
+
+  } catch (err) {
+
+    await connection.rollback();
+
+    console.error(err);
+
+    return res.status(500).json({
+      message: "Server error"
+    });
+
+  } finally {
+
+    connection.release();
+
+  }
+};
 
 // ================================
 // UPDATE CONTENT
@@ -1084,267 +1438,7 @@ function timeAgo(date){
 // };
 
 
-const likePost = async (req, res) => {
-  const connection = await pool.getConnection();
-  try{
 
-    await connection.beginTransaction();
-    const userId = req.user.userId;
-    const username = 'test';
-
-    const postId = req.params.postId;
-    const ownerId = req.params.ownerId;
-
-    // check if like already
-    const [existingLike] = await connection.query(
-      `
-      SELECT id 
-      FROM post_likes
-      WHERE post_id = ?
-      AND user_id = ?
-      `,
-      [postId, userId]
-    );
-
-    // setup aggregateKey
-    const aggregateKey = `post_like_${ownerId}_${postId}`;
-
-    // unlike cuz post alr like
-    if(existingLike.length > 0){
-
-
-      // remove like
-      await connection.query(
-        `
-        DELETE FROM post_likes
-        WHERE post_id = ? 
-        AND user_id = ?
-        `,
-        [postId, userId]
-      );
-
-      // decrease like count 
-      await connection.query(
-        `
-        UPDATE posts
-        SET likes_count = GREATEST(likes_count - 1, 0)
-        WHERE id = ?
-        `,
-        [postId]
-      );
-
-      //get updated total likes
-      const [[likeData]] = await connection.query(
-        `
-        SELECT COUNT(*) AS totalLikes
-        FROM post_likes
-        WHERE post_id = ?
-        `,
-        [postId]
-      );
-
-      const totalLikes = likeData.totalLikes;
-
-      // if no like left delete notification
-      if(totalLikes === 0){
-        await connection.query(
-          `
-          DELETE FROM notifications
-          WHERE aggregate_key = ?
-          `,
-          [aggregateKey]
-        );
-      }
-      else{
-
-        // get newest liker
-                const [[latestLiker]] = await connection.query(
-                    `
-                    SELECT
-                        cl.user_id,
-                        u.username
-                    FROM post_likes cl
-                    JOIN users u
-                        ON u.id = cl.user_id
-                    WHERE cl.post_id = ?
-                    ORDER BY cl.id DESC
-                    LIMIT 1
-                    `,
-                    [postId]
-                );
-
-        let notificationContent;
-
-        if(totalLikes === 1){
-          notificationContent = 
-          `${latestLiker?.username} liked your post` ;
-        }
-        else{
-          notificationContent =
-          `${latestLiker?.username} and ${totalLikes - 1} others liked your post`;
-        }
-
-        // update notification
-        await connection.query(
-          `
-          UPDATE notifications
-          SET 
-            sender_id = ?,
-            content = ?,
-            is_viewed = 0,
-            created_at = NOW()
-          WHERE aggregate_key = ?
-          `,
-          [
-            latestLiker.user_id,
-            notificationContent,
-            aggregateKey
-          ]
-        );
-      }
-
-      // success baby
-
-      await connection.commit();
-
-      cachePost.del(`post:${postId}`)
-        .catch(console.error);
-
-      return res.json({
-        liked: false
-      });
-    }
-
-    // like logic start here
-    await connection.query(
-      `
-      INSERT INTO post_likes
-      (post_id, user_id)
-      VALUES (?, ?)
-      `,
-      [postId, userId]
-    );
-
-    // increase post like count
-
-    await connection.query(
-      `
-      UPDATE posts
-      SET likes_count = likes_count + 1
-      WHERE id = ?
-      `,
-      [postId]
-    );
-
-    // notification like sent
-
-    // no self noti logic
-    if(Number(ownerId) !== Number(userId)){
-      const [[likeData]] = await connection.query(
-        `
-        SELECT COUNT(*) AS totalLikes
-        FROM post_likes
-        WHERE post_id = ?
-        `,
-        [postId]
-      );
-
-      const totalLikes = likeData.totalLikes;
-
-      let notificationContent;
-      if(totalLikes === 1){
-        notificationContent =
-              `${username} liked your post`;
-      }
-      else{
-         notificationContent =
-              `${username} and ${totalLikes - 1} other${totalLikes - 1 > 1 ? 's' : ''} liked your post`;
-      }
-
-      // find exist aggregated noti
-      const [existingNotification] = await connection.query(
-          `
-          SELECT id
-          FROM notifications
-          WHERE aggregate_key = ?
-          LIMIT 1
-          `,
-          [aggregateKey]
-      );
-     
-
-      // update existing noti
-      if (existingNotification.length > 0) {
-
-          await connection.query(
-              `
-              UPDATE notifications
-              SET
-                  sender_id = ?,
-                  content = ?,
-                  is_viewed = 0,
-                  created_at = NOW()
-              WHERE aggregate_key = ?
-              `,
-              [
-                  userId,
-                  notificationContent,
-                  aggregateKey
-              ]
-          );
-      }
-      // create new noti
-      else{
-         await connection.query(
-                    `
-                    INSERT INTO notifications
-                    (
-                        receiver_id,
-                        sender_id,
-                        type,
-                        content,
-                        post_id,
-                        aggregate_key,
-                        is_viewed
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, 0)
-                    `,
-                    [
-                        ownerId,
-                        userId,
-                        'post_like',
-                        notificationContent,
-                        postId,
-                        aggregateKey
-                    ]
-                );
-      }
-    }
-    // success baby
-    await connection.commit();
-
-    cachePost.del(`post:${postId}`)
-      .catch(console.error);
-
-    return res.json({
-      liked: true
-    });
-  }
-  catch(err){
-
-    await connection.rollback();
-
-    console.error(err);
-
-    return res.status(500).json({
-        message: "Server error"
-    });
-}
-  finally{
-    connection.release();
-  }
-
-};
 
 
 
@@ -1357,11 +1451,36 @@ module.exports = {
   getPostsById,
   updatePostBodyContent,
   deletePost,
-  likePost
+  likePost,
+  favoritePost
  
 };
 
+// async function attachLikeState(posts, userId) {
 
+//   const postIds = posts.map(p => p.id);
+
+//   const [likedRows] = postIds.length
+//     ? await pool.query(
+//         `
+//         SELECT post_id
+//         FROM post_likes
+//         WHERE user_id = ?
+//         AND post_id IN (?)
+//         `,
+//         [userId, postIds]
+//       )
+//     : [[]];
+
+//   const likedSet = new Set(
+//     likedRows.map(row => row.post_id)
+//   );
+
+//   return posts.map(post => ({
+//     ...post,
+//     is_liked: likedSet.has(post.id)
+//   }));
+// }
 // const getAllPosts = async (req, res) => {
 //   try {
 //     const page = parseInt(req.query.page) || 1;

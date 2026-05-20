@@ -1,5 +1,6 @@
 
 const db = require("../../config/db");
+const { cachePost, ranking } = require("../../config/redisClient");
 
 const generateAnonymousName = () => {
 
@@ -184,6 +185,10 @@ const addComment = async (req, res) => {
     await connection.beginTransaction();
 
     const userId = req.user.userId;
+    const today = new Date().toISOString().split("T")[0]; //  YYYY-MM-DD
+    const currentDate = today; // keep full YYYY-MM-DD
+    const currentMonth = today.slice(0, 7).replace("-", "");
+    const { postId } = req.params;
 
     const {
       username,
@@ -195,7 +200,6 @@ const addComment = async (req, res) => {
       is_anonymous
     } = req.body;
 
-    const { postId } = req.params;
 
     // =========================
     // VALIDATION
@@ -551,6 +555,13 @@ const addComment = async (req, res) => {
     // SUCCESS
     // =========================
 
+    await connection.query(
+        `UPDATE posts SET comments_count = comments_count + 1 WHERE id = ?`,
+        [postId]
+    )
+    await ranking.zIncrBy(`trendingPost:day:${currentDate}`, 5, postId.toString());
+    await ranking.zIncrBy(`hof:month:${currentMonth}`, 3, userId.toString());
+
     await connection.commit();
 
     return res.status(201).json({
@@ -621,25 +632,73 @@ const updateComment = async (req, res) => {
     }
 };
 const deleteComment = async (req, res) => {
-    try{
-        const userId = req.user.userId;
-        const { commentId } = req.params;
+  try {
+    const today = new Date().toISOString().split("T")[0]; // "2026-05-20"
+    const currentDate = today; // keep full YYYY-MM-DD
+    const currentMonth = today.slice(0, 7).replace("-", "");
+    const userId = req.user.userId;
+    const commentId = req.params.commentId;
+    const postId = req.params.postId;
 
-        const [result] = await db.query(
-            "UPDATE comments SET is_deleted = 1, content = '[deleted]' WHERE id = ? AND user_id = ? AND is_deleted = 0",
-            [commentId, userId]
-        );
+    const [result] = await db.query(
+      "UPDATE comments SET is_deleted = 1, content = '[deleted]' WHERE id = ? AND user_id = ? AND is_deleted = 0",
+      [commentId, userId]
+    );
 
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: "Comment not found" });
-        }
-
-        res.status(200).json({ message: "Comment deleted" });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: "Server error" });
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Comment not found" });
     }
+
+
+    await db.query(
+      "UPDATE posts SET comments_count = comments_count - 1 WHERE id = ?",
+      [postId]
+    )
+    // Build today's trending key
+    const todayTrendingKey = `trendingPost:day:${currentDate}`;
+
+    // Check if today's trending key exists
+    const exists = await ranking.exists(todayTrendingKey);
+    if (exists) {
+      // Only decrement if the key is for today
+      await ranking.zIncrBy(todayTrendingKey, -5, postId.toString());
+    }
+    await ranking.zIncrBy(`hof:month:${currentMonth}`, 3, userId.toString());
+
+
+    res.status(200).json({ message: "Comment deleted" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
 };
+
+// const deleteComment = async (req, res) => {
+//     try{
+
+//         const today = new Date().toISOString().split("T")[0]; // "2026-05-20"
+//         const currentDate = today; // keep full YYYY-MM-DD
+//         const userId = req.user.userId;
+//         const commentId= req.params.commentId;
+//         const postId = req.params.postId;
+
+//         const [result] = await db.query(
+//             "UPDATE comments SET is_deleted = 1, content = '[deleted]' WHERE id = ? AND user_id = ? AND is_deleted = 0",
+//             [commentId, userId]
+//         );
+
+//         if (result.affectedRows === 0) {
+//             return res.status(404).json({ message: "Comment not found" });
+//         }
+
+//         await ranking.zIncrBy(`trendingPost:day:${currentDate}`, -5, commentId.toString());
+        
+//         res.status(200).json({ message: "Comment deleted" });
+//     } catch (err) {
+//         console.error(err);
+//         res.status(500).json({ message: "Server error" });
+//     }
+// };
 
 const getCommentsByPostId = async (req, res) => {
 
