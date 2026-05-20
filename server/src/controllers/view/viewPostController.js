@@ -96,8 +96,8 @@ const recordViewPost = async (req, res) => {
   try {
     const userId = req.user.userId;
     const { postId } = req.params;
-    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-    const currentDate = today.slice(0, 7).replace("-", ""); // YYYYMMDD
+    const today = new Date().toISOString().split("T")[0]; // "2026-05-20"
+    const currentDate = today; // keep full YYYY-MM-DD
     const userKey = `view:${postId}:${userId}:${today}`;
     const postKey = `views:post:${postId}`;
 
