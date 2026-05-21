@@ -6,10 +6,12 @@ const upload = multer({ dest: "temp/" });
 require("dotenv").config();
 
 // Redis Cache
-const {cachePost} = require("../../config/redisClient");
+const {cachePost, ranking} = require("../../config/redisClient");
 
 const createPost = async (req, res) => {
   try{
+      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+      const currentMonth = today.slice(0, 7).replace("-", ""); // YYYYMM
       const { 
               // post based
               post_type, tags = [], isAnonymous,
@@ -297,19 +299,16 @@ await cachePost.set(
   { EX: 300 }
 );
 
-// invalidate page caches
-const pageKeys = await cachePost.keys("posts:page:*");
+    // invalidate page caches
+    const pageKeys = await cachePost.keys("posts:page:*");
 
-if (pageKeys.length) {
-  await cachePost.del(pageKeys);
-}
+    if (pageKeys.length) {
+      await cachePost.del(pageKeys);
+    }
 
-    
+    await ranking.zIncrBy(`hof:month:${currentMonth}`, 5, userId.toString());
     const postTypeRes = post_type.slice(0, 1).toUpperCase() + post_type.slice(1);
     res.status(200).json({ message: `${postTypeRes} uploaded successfully`, postId });
-
-
-
 
     }
     catch(error){
@@ -323,7 +322,9 @@ if (pageKeys.length) {
 // all post type
 const deletePost = async (req, res) => {
   try {
-
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const currentMonth = today.slice(0, 7).replace("-", ""); // YYYYMM
+     
     const userId = req.user.userId;
     const { postId } = req.params ;
 
@@ -353,6 +354,7 @@ const deletePost = async (req, res) => {
       await cachePost.del(pageKeys);
     }
 
+    await ranking.zIncrBy(`hof:month:${currentMonth}`, -5, userId.toString());
     return res.status(200).json({
       message: "Post deleted successfully"
     });
@@ -620,6 +622,40 @@ async function attachUserStates(posts, userId) {
     is_favorited:
       favoriteSet.has(post.id)
   }));
+}
+async function updateCachedPostLike(postId, isLike) {
+
+  try {
+
+    const cached = await cachePost.get(`post:${postId}`);
+
+    if (!cached) return;
+
+    const parsed = safeJsonParse(cached);
+
+    if (!parsed) return;
+
+    parsed.likes_count = isLike
+      ? parsed.likes_count + 1
+      : Math.max(parsed.likes_count - 1, 0);
+
+      console.log("TTL:", ttl);
+      console.log("Before:", parsed.likes_count);
+
+    const ttl = await cachePost.ttl(`post:${postId}`);
+
+    const result = await cachePost.set(
+      `post:${postId}`,
+      JSON.stringify(parsed),
+      ttl > 0 ? { EX: ttl } : {}
+    );
+        console.log(result);
+
+  } catch (err) {
+
+    console.error("updateCachedPostLike error:", err);
+
+  }
 }
 // ================================
 // HYDRATE POSTS
@@ -897,6 +933,10 @@ const likePost = async (req, res) => {
     const postId = req.params.postId;
     const ownerId = req.params.ownerId;
 
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const currentDay = today;
+    const currentMonth = today.slice(0, 7).replace("-", ""); // YYYYMM
+
     // check if like already
     const [existingLike] = await connection.query(
       `
@@ -1007,6 +1047,18 @@ const likePost = async (req, res) => {
 
       // success baby
 
+      await updateCachedPostLike(postId, false);
+
+       // Build today's trending key
+      const todayTrendingKey = `trendingPost:day:${currentDay}`;
+
+      // Check if today's trending key exists
+      const exists = await ranking.exists(todayTrendingKey);
+      if (exists) {
+        // Only decrement if the key is for today
+        await ranking.zIncrBy(todayTrendingKey, -2, postId.toString());
+      }
+      await ranking.zIncrBy(`hof:month:${currentMonth}`, -1, userId.toString());
       await connection.commit();
 
    
@@ -1040,16 +1092,24 @@ const likePost = async (req, res) => {
 
     // no self noti logic
     if(Number(ownerId) !== Number(userId)){
-      const [[likeData]] = await connection.query(
+      // const [[likeData]] = await connection.query(
+      //   `
+      //   SELECT COUNT(*) AS totalLikes
+      //   FROM post_likes
+      //   WHERE post_id = ?
+      //   `,
+      //   [postId]
+      // );
+       const [[likeData]] = await connection.query(
         `
-        SELECT COUNT(*) AS totalLikes
-        FROM post_likes
-        WHERE post_id = ?
+        SELECT likes_count
+        FROM posts
+        WHERE id = ?
         `,
         [postId]
       );
 
-      const totalLikes = likeData.totalLikes;
+      const totalLikes = likeData.likes_count;
 
       let notificationContent;
       if(totalLikes === 1){
@@ -1121,6 +1181,9 @@ const likePost = async (req, res) => {
       }
     }
     // success baby
+    await updateCachedPostLike(postId, true);
+    await ranking.zIncrBy(`trendingPost:day:${currentDay}`, 2, postId.toString());
+    await ranking.zIncrBy(`hof:month:${currentMonth}`, 0.5, userId.toString());
     await connection.commit();
 
 
