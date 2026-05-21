@@ -623,11 +623,47 @@ async function attachUserStates(posts, userId) {
       favoriteSet.has(post.id)
   }));
 }
+// async function updateCachedPostLike(postId, isLike) {
+
+//   try {
+
+//     const cached = await cachePost.get(`post:${postId}`);
+
+//     if (!cached) return;
+
+//     const parsed = safeJsonParse(cached);
+
+//     if (!parsed) return;
+
+//     parsed.likes_count = isLike
+//       ? parsed.likes_count + 1
+//       : Math.max(parsed.likes_count - 1, 0);
+
+//       console.log("TTL:", ttl);
+//       console.log("Before:", parsed.likes_count);
+
+//     const ttl = await cachePost.ttl(`post:${postId}`);
+
+//     const result = await cachePost.set(
+//       `post:${postId}`,
+//       JSON.stringify(parsed),
+//       ttl > 0 ? { EX: ttl } : {}
+//     );
+//         console.log(result);
+
+//   } catch (err) {
+
+//     console.error("updateCachedPostLike error:", err);
+
+//   }
+// }
 async function updateCachedPostLike(postId, isLike) {
 
   try {
 
-    const cached = await cachePost.get(`post:${postId}`);
+    const key = `post:${postId}`;
+
+    const cached = await cachePost.get(key);
 
     if (!cached) return;
 
@@ -635,21 +671,27 @@ async function updateCachedPostLike(postId, isLike) {
 
     if (!parsed) return;
 
+    // update count
     parsed.likes_count = isLike
       ? parsed.likes_count + 1
       : Math.max(parsed.likes_count - 1, 0);
 
-      console.log("TTL:", ttl);
-      console.log("Before:", parsed.likes_count);
+    // get current ttl
+    const ttl = await cachePost.ttl(key);
 
-    const ttl = await cachePost.ttl(`post:${postId}`);
+    console.log("TTL:", ttl);
+    console.log("Updated likes_count:", parsed.likes_count);
 
+    // preserve remaining ttl
     const result = await cachePost.set(
-      `post:${postId}`,
+      key,
       JSON.stringify(parsed),
-      ttl > 0 ? { EX: ttl } : {}
+      ttl > 0
+        ? { EX: ttl }
+        : {}
     );
-        console.log(result);
+
+    console.log("Redis SET result:", result);
 
   } catch (err) {
 
