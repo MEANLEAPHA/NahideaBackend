@@ -10,8 +10,8 @@ const getMutuals= async (req, res) => {
       FROM users u
       WHERE u.id IN (
         SELECT f1.following_id
-        FROM follow f1
-        JOIN follow f2
+        FROM follows f1
+        JOIN follows f2
           ON f1.following_id = f2.follower_id
         WHERE f1.follower_id = ?
           AND f2.following_id = ?
