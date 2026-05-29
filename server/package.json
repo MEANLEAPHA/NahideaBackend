@@ -8,6 +8,7 @@
     "@aws-sdk/lib-storage": "^3.887.0",
     "@socket.io/admin-ui": "^0.5.1",
     "aws-sdk": "^2.1692.0",
+    "axios": "^1.16.1",
     "basic-ftp": "^5.2.0",
     "bcrypt": "^6.0.0",
     "body-parser": "^2.2.0",

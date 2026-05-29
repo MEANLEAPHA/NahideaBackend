@@ -141,7 +141,6 @@ app.use("/api", postRoutes);
 const viewPostRoutes = require("./src/routes/view/viewPostRoute");
 app.use("/api", viewPostRoutes);
 
-
 // answer question
 const answerQARoutes = require("./src/routes/upload/answerQAroute");
 app.use("/api", answerQARoutes);
@@ -158,11 +157,9 @@ app.use("/api/gifs", gifRoutes);
 const notificationRoutes = require("./src/routes/notification/notificationRoute");
 app.use("/api", notificationRoutes);
 
-
 // ranking
 const rankRoutes = require("./src/routes/rank/rankRoute");
 app.use("/api", rankRoutes);
-
 
 // reports
 const reportRoutes = require("./src/routes/report/reportPostRoute");
@@ -171,6 +168,10 @@ app.use("/api", reportRoutes);
 // history recorder post
 const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
 app.use("/api", postHistoryRoutes);
+
+// mutual
+const mutualRoutes = require("./src/routes/friend/mutualRoute");
+app.use("/api", mutualRoutes);
 
 
 // const postArchiveRoutes = require("./src/routes/upload/postArchiveRoute");
