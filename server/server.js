@@ -257,11 +257,8 @@ app.use("/api", mutualRoutes);
 // chat 
 // ---------- GET MUTUAL FOLLOWERS (users you can chat with) ----------
 const userChatRoute = require("./src/routes/chat/getChatUserRoute");
-app.get('/api', userChatRoute);
+app.use('/api', userChatRoute);
 
-app.get('/api/messages/:userId', authenticateToken, async (req, res) => {
-   
-});
 
 
 
