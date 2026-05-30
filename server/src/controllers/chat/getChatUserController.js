@@ -1,26 +1,58 @@
 const db = require("../../config/db");
 
+// const getChatUser = async (req, res) => {
+//     const userId = req.user.userId;
+//     try {
+//         const [rows] = await db.execute(`
+//             SELECT u.id, u.username, u.avatar_url,
+//                    (SELECT content FROM messages m 
+//                     WHERE m.conversation_id = c.id 
+//                     ORDER BY m.created_at DESC LIMIT 1) AS last_message,
+//                    (SELECT COUNT(*) FROM messages m 
+//                     WHERE m.conversation_id = c.id AND m.sender_id != ? AND m.status != 'seen') AS unread_count
+//             FROM users u
+//             JOIN follows f1 ON f1.following_id = u.id AND f1.follower_id = ?
+//             JOIN follows f2 ON f2.following_id = ? AND f2.follower_id = u.id
+//             LEFT JOIN conversations c ON (c.user1_id = ? AND c.user2_id = u.id) OR (c.user1_id = u.id AND c.user2_id = ?)
+//             WHERE u.id != ?
+//         `, [userId, userId, userId, userId, userId, userId]);
+//         res.json(rows);
+//     } catch (err) {
+//         res.status(500).json({ error: err.message });
+//     }
+// }
 const getChatUser = async (req, res) => {
     const userId = req.user.userId;
     try {
         const [rows] = await db.execute(`
             SELECT u.id, u.username, u.avatar_url,
-                   (SELECT content FROM messages m 
+                   (SELECT m.content 
+                    FROM messages m
                     WHERE m.conversation_id = c.id 
-                    ORDER BY m.created_at DESC LIMIT 1) AS last_message,
-                   (SELECT COUNT(*) FROM messages m 
-                    WHERE m.conversation_id = c.id AND m.sender_id != ? AND m.status != 'seen') AS unread_count
+                      AND NOT (m.deleted_by_sender = 1 AND m.sender_id = ?)
+                      AND NOT (m.deleted_by_recipient = 1 AND m.sender_id != ?)
+                    ORDER BY m.created_at DESC 
+                    LIMIT 1) AS last_message,
+                   (SELECT COUNT(*)
+                    FROM messages m
+                    WHERE m.conversation_id = c.id 
+                      AND m.sender_id != ? 
+                      AND m.status != 'seen'
+                      AND NOT (m.deleted_by_recipient = 1 AND m.sender_id != ?)
+                   ) AS unread_count
             FROM users u
             JOIN follows f1 ON f1.following_id = u.id AND f1.follower_id = ?
             JOIN follows f2 ON f2.following_id = ? AND f2.follower_id = u.id
-            LEFT JOIN conversations c ON (c.user1_id = ? AND c.user2_id = u.id) OR (c.user1_id = u.id AND c.user2_id = ?)
+            LEFT JOIN conversations c ON (c.user1_id = ? AND c.user2_id = u.id) 
+                                      OR (c.user1_id = u.id AND c.user2_id = ?)
             WHERE u.id != ?
-        `, [userId, userId, userId, userId, userId, userId]);
+        `, [userId, userId, userId, userId, userId, userId, userId, userId, userId]);
+        
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
-}
+};
 
 
 const getMessage = async (req, res) => {
