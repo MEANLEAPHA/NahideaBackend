@@ -4,6 +4,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
+const db = require("./src/config/db");
 
 const { Server } = require("socket.io");
 
@@ -195,6 +196,10 @@ app.use(globalLimiter); // global rate limit
 |--------------------------------------------------------------------------
 */
 
+// chat 
+const userChatRoute = require("./src/routes/chat/getChatUserRoute");
+app.use('/api', userChatRoute);
+
 // user authentication
 const authRoutes = require("./src/routes/authentication/authRoutes");
 app.use("/api", authRoutes);
@@ -246,26 +251,6 @@ app.use("/api", mutualRoutes);
 
 // const postArchiveRoutes = require("./src/routes/upload/postArchiveRoute");
 // app.use("/api", postArchiveRoutes);
-
-
-
-
-
-
-
-
-// chat 
-// ---------- GET MUTUAL FOLLOWERS (users you can chat with) ----------
-const userChatRoute = require("./src/routes/chat/getChatUserRoute");
-app.use('/api', userChatRoute);
-
-
-
-
-
-
-
-
 
 
 app.get("/", (req, res) => {
