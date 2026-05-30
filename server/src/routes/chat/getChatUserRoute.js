@@ -12,6 +12,6 @@ router.get("/get-message/:userId", protect, getMessage);
 router.delete("/delete-conversation/:userId", protect, deleteConversation);
 router.delete("/delete-message/:messageId", protect, deleteMessage);
 router.post("/report-message", protect, reportMessage);
-router.get("/search-gif", protect, searchGif);
+router.get("/search-gif", searchGif);
 
 module.exports = router;
