@@ -143,7 +143,6 @@ socket.on('send_message', async (data) => {
 
     // Emit to receiver (user room) and to conversation room
     io.to(`user_${receiverId}`).emit('new_message', newMessage);
-    io.to(`conv_${conversationId}`).emit('new_message', newMessage);
     socket.emit('message_sent', newMessage);
   } catch (err) {
     socket.emit('error', err.message);
