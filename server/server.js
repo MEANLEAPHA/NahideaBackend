@@ -220,7 +220,7 @@ socket.on('send_message', async (data) => {
   }
 });
 
-  // Edit message
+// Edit message (with reply preview updates)
 socket.on('edit_message', async ({ messageId, newContent, newGifId, newGifUrl }) => {
   try {
     const [rows] = await db.execute('SELECT sender_id, conversation_id FROM messages WHERE id = ?', [messageId]);
@@ -231,33 +231,36 @@ socket.on('edit_message', async ({ messageId, newContent, newGifId, newGifUrl })
       `UPDATE messages SET content = ?, gif_id = ?, gif_url = ?, is_edited = 1 WHERE id = ?`,
       [newContent || null, newGifId || null, newGifUrl || null, messageId]
     );
+    // Fetch updated message
     const [updated] = await db.execute(`
       SELECT m.*, u.username, u.avatar_url
       FROM messages m JOIN users u ON m.sender_id = u.id 
       WHERE m.id = ?
     `, [messageId]);
-    io.to(`conv_${rows[0].conversation_id}`).emit('message_edited', updated[0]);
-    
-    // NEW: Also notify any messages that replied to this one to update their reply preview
-    const [replies] = await db.execute('SELECT id FROM messages WHERE reply_to_id = ?', [messageId]);
-    for (const reply of replies) {
-      // Re-fetch the reply with updated preview
-      const [replyRows] = await db.execute(`
-        SELECT m.*, u.username, u.avatar_url,
-          (SELECT CASE WHEN content IS NOT NULL THEN content WHEN gif_url IS NOT NULL THEN '[GIF]' ELSE NULL END FROM messages WHERE id = m.reply_to_id) AS reply_preview,
-          (SELECT gif_url FROM messages WHERE id = m.reply_to_id) AS reply_gif_preview
-        FROM messages m JOIN users u ON m.sender_id = u.id
-        WHERE m.id = ?
-      `, [reply.id]);
-      if (replyRows.length) {
-        io.to(`conv_${rows[0].conversation_id}`).emit('message_edited', replyRows[0]);
-      }
+    const updatedMsg = updated[0];
+    io.to(`conv_${rows[0].conversation_id}`).emit('message_edited', updatedMsg);
+
+    // Update reply previews for messages that reply to this one
+    const [replyRows] = await db.execute(
+      'SELECT id FROM messages WHERE reply_to_id = ?',
+      [messageId]
+    );
+    const replyPreviewText = newContent || (newGifUrl ? '[GIF]' : null);
+    const replyGifPreview = newGifUrl || null;
+    for (const row of replyRows) {
+      io.to(`conv_${rows[0].conversation_id}`).emit('reply_preview_update', {
+        replyMessageId: row.id,
+        newReplyPreview: replyPreviewText,
+        newReplyGifPreview: replyGifPreview,
+        deleted: false,
+      });
     }
   } catch (err) {
     socket.emit('error', err.message);
   }
 });
-  // Delete message (soft delete for sender, hard if both deleted)
+
+// Delete message (with reply preview updates)
 socket.on('delete_message', async ({ messageId }) => {
   try {
     const [rows] = await db.execute('SELECT sender_id, conversation_id, deleted_by_sender, deleted_by_recipient FROM messages WHERE id = ?', [messageId]);
@@ -269,23 +272,19 @@ socket.on('delete_message', async ({ messageId }) => {
     } else {
       await db.execute('UPDATE messages SET deleted_by_recipient = 1 WHERE id = ?', [messageId]);
     }
+    // Check if both deleted
     const [updated] = await db.execute('SELECT deleted_by_sender, deleted_by_recipient FROM messages WHERE id = ?', [messageId]);
     const m = updated[0];
     if (m.deleted_by_sender && m.deleted_by_recipient) {
       await db.execute('DELETE FROM messages WHERE id = ?', [messageId]);
       io.to(`conv_${msg.conversation_id}`).emit('message_deleted', { messageId, permanentlyDeleted: true });
-      // Also notify replies that the parent is gone (they will show generic reply)
-      const [replies] = await db.execute('SELECT id FROM messages WHERE reply_to_id = ?', [messageId]);
-      for (const reply of replies) {
-        const [replyRows] = await db.execute(`
-          SELECT m.*, u.username, u.avatar_url,
-            NULL as reply_preview, NULL as reply_gif_preview
-          FROM messages m JOIN users u ON m.sender_id = u.id
-          WHERE m.id = ?
-        `, [reply.id]);
-        if (replyRows.length) {
-          io.to(`conv_${msg.conversation_id}`).emit('message_edited', replyRows[0]);
-        }
+      // Also notify replies that original is gone
+      const [replyRows] = await db.execute('SELECT id FROM messages WHERE reply_to_id = ?', [messageId]);
+      for (const row of replyRows) {
+        io.to(`conv_${msg.conversation_id}`).emit('reply_preview_update', {
+          replyMessageId: row.id,
+          deleted: true,
+        });
       }
     } else {
       const [msgRows] = await db.execute(`SELECT m.*, u.username, u.avatar_url FROM messages m JOIN users u ON m.sender_id = u.id WHERE m.id = ?`, [messageId]);
