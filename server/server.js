@@ -272,6 +272,7 @@ socket.on('send_message', async (data) => {
 
   // Mark message as seen (triggered when user opens chat)
   socket.on('mark_seen', async ({ conversationId, messageIds }) => {
+      console.log('mark_seen received for conversation', conversationId);
     try {
       await db.execute(
           `UPDATE messages SET status = 'seen' 
@@ -293,6 +294,7 @@ socket.on('send_message', async (data) => {
 
   // Mark message as delivered
   socket.on('message_delivered', async ({ messageId }) => {
+      console.log('message_delivered received for', messageId);
     try {
       await db.execute('UPDATE messages SET status = "delivered" WHERE id = ? AND status = "sent"', [messageId]);
       const [rows] = await db.execute('SELECT sender_id FROM messages WHERE id = ?', [messageId]);
