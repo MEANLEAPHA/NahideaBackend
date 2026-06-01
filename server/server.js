@@ -228,14 +228,57 @@ socket.on('edit_message', async ({ messageId, newContent, newGifId, newGifUrl })
     if (rows[0].sender_id !== parseInt(userId)) return socket.emit('error', 'Not your message');
     
     await db.execute(
-      `UPDATE messages SET content = ?, gif_id = ?, gif_url = ?, is_edited = 1 WHERE id = ?`,
-      [newContent || null, newGifId || null, newGifUrl || null, messageId]
-    );
+      `
+      UPDATE messages
+      SET
+      content = ?,
+      gif_id = ?,
+      gif_url = ?,
+      is_edited = 1
+      WHERE id = ?
+      `,
+      [
+        newContent || null,
+        newGifId || null,
+        newGifUrl || null,
+        messageId
+      ]
+      );
     // Fetch updated message
-    const [updated] = await db.execute(`
-      SELECT m.*, u.username, u.avatar_url
-      FROM messages m JOIN users u ON m.sender_id = u.id 
-      WHERE m.id = ?
+   const [updated] = await db.execute(`
+    SELECT
+        m.*,
+        u.username,
+        u.avatar_url,
+
+        (
+          SELECT CASE
+            WHEN r.deleted_by_sender = 1
+            THEN 'Original message deleted'
+            WHEN r.content IS NOT NULL
+            THEN r.content
+            WHEN r.gif_url IS NOT NULL
+            THEN '[GIF]'
+            ELSE NULL
+          END
+          FROM messages r
+          WHERE r.id = m.reply_to_id
+        ) AS reply_preview,
+
+        (
+          SELECT CASE
+            WHEN r.deleted_by_sender = 1
+            THEN NULL
+            ELSE r.gif_url
+          END
+          FROM messages r
+          WHERE r.id = m.reply_to_id
+        ) AS reply_gif_preview
+
+    FROM messages m
+    JOIN users u ON u.id = m.sender_id
+
+    WHERE m.id = ?
     `, [messageId]);
     const updatedMsg = updated[0];
     io.to(`conv_${rows[0].conversation_id}`).emit('message_edited', updatedMsg);
@@ -269,6 +312,22 @@ socket.on('delete_message', async ({ messageId }) => {
     const isSender = msg.sender_id === parseInt(userId);
     if (isSender) {
       await db.execute('UPDATE messages SET deleted_by_sender = 1 WHERE id = ?', [messageId]);
+      const [replyRows] = await db.execute(
+        'SELECT id FROM messages WHERE reply_to_id = ?',
+        [messageId]
+      );
+
+      for (const row of replyRows) {
+        io.to(`conv_${msg.conversation_id}`).emit(
+          'reply_preview_update',
+          {
+            replyMessageId: row.id,
+            newReplyPreview: 'Original message deleted',
+            newReplyGifPreview: null,
+            deleted: true,
+          }
+        );
+      }
     } else {
       await db.execute('UPDATE messages SET deleted_by_recipient = 1 WHERE id = ?', [messageId]);
     }
@@ -287,7 +346,41 @@ socket.on('delete_message', async ({ messageId }) => {
         });
       }
     } else {
-      const [msgRows] = await db.execute(`SELECT m.*, u.username, u.avatar_url FROM messages m JOIN users u ON m.sender_id = u.id WHERE m.id = ?`, [messageId]);
+      const [msgRows] = await db.execute(`
+        SELECT
+            m.*,
+            u.username,
+            u.avatar_url,
+
+            (
+              SELECT CASE
+                WHEN r.deleted_by_sender = 1
+                THEN 'Original message deleted'
+                WHEN r.content IS NOT NULL
+                THEN r.content
+                WHEN r.gif_url IS NOT NULL
+                THEN '[GIF]'
+                ELSE NULL
+              END
+              FROM messages r
+              WHERE r.id = m.reply_to_id
+            ) AS reply_preview,
+
+            (
+              SELECT CASE
+                WHEN r.deleted_by_sender = 1
+                THEN NULL
+                ELSE r.gif_url
+              END
+              FROM messages r
+              WHERE r.id = m.reply_to_id
+            ) AS reply_gif_preview
+
+        FROM messages m
+        JOIN users u ON u.id = m.sender_id
+
+        WHERE m.id = ?
+        `, [messageId]);
       io.to(`conv_${msg.conversation_id}`).emit('message_deleted', { messageId, updatedMessage: msgRows[0], permanentlyDeleted: false });
     }
   } catch (err) {

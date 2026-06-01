@@ -118,27 +118,43 @@ const getMessage = async (req, res) => {
     }
 
     // Base query with pagination (older messages before the given message ID)
-    let query = `
-      SELECT 
-        m.*, 
-        u.username, 
-        u.avatar_url,
-        (SELECT 
-          CASE 
-            WHEN content IS NOT NULL THEN content 
-            WHEN gif_url IS NOT NULL THEN '[GIF]' 
-            ELSE NULL 
-          END
-         FROM messages 
-         WHERE id = m.reply_to_id
-        ) AS reply_preview,
-        (SELECT gif_url FROM messages WHERE id = m.reply_to_id) AS reply_gif_preview
-      FROM messages m
-      JOIN users u ON m.sender_id = u.id
-      WHERE m.conversation_id = ? 
+   let query = `
+        SELECT
+            m.*,
+            u.username,
+            u.avatar_url,
+
+            (
+            SELECT CASE
+                WHEN r.deleted_by_sender = 1
+                THEN 'Original message deleted'
+                WHEN r.content IS NOT NULL
+                THEN r.content
+                WHEN r.gif_url IS NOT NULL
+                THEN '[GIF]'
+                ELSE NULL
+            END
+            FROM messages r
+            WHERE r.id = m.reply_to_id
+            ) AS reply_preview,
+
+            (
+            SELECT CASE
+                WHEN r.deleted_by_sender = 1
+                THEN NULL
+                ELSE r.gif_url
+            END
+            FROM messages r
+            WHERE r.id = m.reply_to_id
+            ) AS reply_gif_preview
+
+        FROM messages m
+        JOIN users u ON u.id = m.sender_id
+
+        WHERE m.conversation_id = ?
         AND NOT (m.deleted_by_sender = 1 AND m.sender_id = ?)
         AND NOT (m.deleted_by_recipient = 1 AND m.sender_id != ?)
-    `;
+        `;
     const params = [conversationId, currentUserId, currentUserId];
 
     if (beforeId) {
