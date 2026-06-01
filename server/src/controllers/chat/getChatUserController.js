@@ -55,44 +55,121 @@ const getChatUser = async (req, res) => {
 };
 
 
+// const getMessage = async (req, res) => {
+//     const currentUserId = req.user.userId;
+//     const otherUserId = req.params.userId;
+//     try {
+//         let [convRows] = await db.execute(
+//             `SELECT id FROM conversations 
+//              WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)`,
+//             [currentUserId, otherUserId, otherUserId, currentUserId]
+//         );
+//         let conversationId;
+//         if (convRows.length === 0) {
+//             const [result] = await db.execute(
+//                 'INSERT INTO conversations (user1_id, user2_id) VALUES (?, ?)',
+//                 [currentUserId, otherUserId]
+//             );
+//             conversationId = result.insertId;
+//         } else {
+//             conversationId = convRows[0].id;
+//         }
+//         const [messages] = await db.execute(`
+//             SELECT m.*, u.username, u.avatar_url 
+//             FROM messages m
+//             JOIN users u ON m.sender_id = u.id
+//             WHERE m.conversation_id = ? 
+//               AND NOT (m.deleted_by_sender = 1 AND m.sender_id = ?)
+//               AND NOT (m.deleted_by_recipient = 1 AND m.sender_id != ?)
+//             ORDER BY m.created_at ASC
+//         `, [conversationId, currentUserId, currentUserId]);
+//         await db.execute(
+//             `UPDATE messages SET status = 'seen' 
+//              WHERE conversation_id = ? AND sender_id != ? AND status != 'seen'`,
+//             [conversationId, currentUserId]
+//         );
+//         res.json({ conversationId, messages });
+//     } catch (err) {
+//         res.status(500).json({ error: err.message });
+//     }
+// }
+
 const getMessage = async (req, res) => {
-    const currentUserId = req.user.userId;
-    const otherUserId = req.params.userId;
-    try {
-        let [convRows] = await db.execute(
-            `SELECT id FROM conversations 
-             WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)`,
-            [currentUserId, otherUserId, otherUserId, currentUserId]
-        );
-        let conversationId;
-        if (convRows.length === 0) {
-            const [result] = await db.execute(
-                'INSERT INTO conversations (user1_id, user2_id) VALUES (?, ?)',
-                [currentUserId, otherUserId]
-            );
-            conversationId = result.insertId;
-        } else {
-            conversationId = convRows[0].id;
-        }
-        const [messages] = await db.execute(`
-            SELECT m.*, u.username, u.avatar_url 
-            FROM messages m
-            JOIN users u ON m.sender_id = u.id
-            WHERE m.conversation_id = ? 
-              AND NOT (m.deleted_by_sender = 1 AND m.sender_id = ?)
-              AND NOT (m.deleted_by_recipient = 1 AND m.sender_id != ?)
-            ORDER BY m.created_at ASC
-        `, [conversationId, currentUserId, currentUserId]);
-        await db.execute(
-            `UPDATE messages SET status = 'seen' 
-             WHERE conversation_id = ? AND sender_id != ? AND status != 'seen'`,
-            [conversationId, currentUserId]
-        );
-        res.json({ conversationId, messages });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+  const currentUserId = req.user.userId;
+  const otherUserId = req.params.userId;
+  const limit = parseInt(req.query.limit) || 30;
+  const beforeId = req.query.beforeId ? parseInt(req.query.beforeId) : null;
+
+  try {
+    let [convRows] = await db.execute(
+      `SELECT id FROM conversations 
+       WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)`,
+      [currentUserId, otherUserId, otherUserId, currentUserId]
+    );
+    let conversationId;
+    if (convRows.length === 0) {
+      const [result] = await db.execute(
+        'INSERT INTO conversations (user1_id, user2_id) VALUES (?, ?)',
+        [currentUserId, otherUserId]
+      );
+      conversationId = result.insertId;
+    } else {
+      conversationId = convRows[0].id;
     }
-}
+
+    // Base query with pagination (older messages before the given message ID)
+    let query = `
+      SELECT 
+        m.*, 
+        u.username, 
+        u.avatar_url,
+        (SELECT 
+          CASE 
+            WHEN content IS NOT NULL THEN content 
+            WHEN gif_url IS NOT NULL THEN '[GIF]' 
+            ELSE NULL 
+          END
+         FROM messages 
+         WHERE id = m.reply_to_id
+        ) AS reply_preview,
+        (SELECT gif_url FROM messages WHERE id = m.reply_to_id) AS reply_gif_preview
+      FROM messages m
+      JOIN users u ON m.sender_id = u.id
+      WHERE m.conversation_id = ? 
+        AND NOT (m.deleted_by_sender = 1 AND m.sender_id = ?)
+        AND NOT (m.deleted_by_recipient = 1 AND m.sender_id != ?)
+    `;
+    const params = [conversationId, currentUserId, currentUserId];
+
+    if (beforeId) {
+      query += ` AND m.id < ?`;
+      params.push(beforeId);
+    }
+
+    query += ` ORDER BY m.created_at DESC LIMIT ?`;
+    params.push(limit);
+
+    const [messages] = await db.execute(query, params);
+    // Reverse to chronological order for frontend
+    const orderedMessages = messages.reverse();
+
+    // Mark messages as seen (only when fetching latest, not when scrolling older)
+    // For pagination, we should mark seen only on initial load – but let's keep as is
+    await db.execute(
+      `UPDATE messages SET status = 'seen' 
+       WHERE conversation_id = ? AND sender_id != ? AND status != 'seen'`,
+      [conversationId, currentUserId]
+    );
+
+    res.json({ 
+      conversationId, 
+      messages: orderedMessages,
+      hasMore: messages.length === limit // if we got exactly limit, there might be more
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
 
 const deleteConversation = async (req,res) => {
     const currentUserId = req.user.userId;
@@ -162,20 +239,20 @@ const reportMessage = async (req,res)=>{
 
 
 const searchGif = async (req, res) => {
-     const { q } = req.query;
-    try {
-        let query = 'SELECT * FROM gifs';
-        let params = [];
-        if (q) {
-            query += ' WHERE gif_label LIKE ? OR gif_name LIKE ?';
-            params = [`%${q}%`, `%${q}%`];
-        }
-        const [rows] = await db.execute(query, params);
-        res.json(rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+  const { q } = req.query;
+  try {
+    let query = 'SELECT * FROM gifs';
+    let params = [];
+    if (q) {
+      query += ' WHERE gif_label LIKE ? OR gif_name LIKE ?';
+      params = [`%${q}%`, `%${q}%`];
     }
-}
-
+    query += ' ORDER BY id DESC LIMIT 50';   // Add limit and order
+    const [rows] = await db.execute(query, params);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
 
 module.exports = { getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage, searchGif };

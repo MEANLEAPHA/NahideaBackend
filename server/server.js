@@ -88,6 +88,66 @@ io.on("connection", (socket) => {
   });
 
   // Send message
+// socket.on('send_message', async (data) => {
+//   const { toUserId, content, gifId, gifUrl, replyToId } = data;
+//   const senderId = parseInt(userId);
+//   const receiverId = parseInt(toUserId);
+//   try {
+//     // Get or create conversation
+//     let [convRows] = await db.execute(
+//       `SELECT id FROM conversations 
+//        WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)`,
+//       [senderId, receiverId, receiverId, senderId]
+//     );
+//     let conversationId;
+//     if (convRows.length === 0) {
+//       const [result] = await db.execute(
+//         'INSERT INTO conversations (user1_id, user2_id) VALUES (?, ?)',
+//         [senderId, receiverId]
+//       );
+//       conversationId = result.insertId;
+//     } else {
+//       conversationId = convRows[0].id;
+//     }
+
+//     // Insert message – only DB write, no SELECT
+//     const [result] = await db.execute(
+//       `INSERT INTO messages (conversation_id, sender_id, content, gif_id, gif_url, reply_to_id, status, created_at) 
+//        VALUES (?, ?, ?, ?, ?, ?, 'sent', NOW())`,
+//       [conversationId, senderId, content || null, gifId || null, gifUrl || null, replyToId || null]
+//     );
+//     const messageId = result.insertId;
+
+//     // Build message object from known data (no DB fetch)
+//     const newMessage = {
+//       id: messageId,
+//       conversation_id: conversationId,
+//       sender_id: senderId,
+//       content: content || null,
+//       gif_id: gifId || null,
+//       gif_url: gifUrl || null,
+//       status: 'sent',
+//       created_at: 'Just now',
+//       username: username || 'Guest',
+//       avatar_url: avatar_url || 'https://via.placeholder.com/40',
+//       deleted_by_sender: 0,
+//       deleted_by_recipient: 0,
+//       is_edited: 0,
+//       reply_to_id: replyToId || null,
+//       reply_preview: null, 
+//       reply_gif_preview: null,
+//     };
+
+//     // Join sender to conversation room for future edits/deletes
+//     socket.join(`conv_${conversationId}`);
+
+//     // Emit to receiver (user room) and to conversation room
+//     io.to(`user_${receiverId}`).emit('new_message', newMessage);
+//     socket.emit('message_sent', newMessage);
+//   } catch (err) {
+//     socket.emit('error', err.message);
+//   }
+// });
 socket.on('send_message', async (data) => {
   const { toUserId, content, gifId, gifUrl, replyToId } = data;
   const senderId = parseInt(userId);
@@ -110,7 +170,7 @@ socket.on('send_message', async (data) => {
       conversationId = convRows[0].id;
     }
 
-    // Insert message – only DB write, no SELECT
+    // Insert message
     const [result] = await db.execute(
       `INSERT INTO messages (conversation_id, sender_id, content, gif_id, gif_url, reply_to_id, status, created_at) 
        VALUES (?, ?, ?, ?, ?, ?, 'sent', NOW())`,
@@ -118,7 +178,21 @@ socket.on('send_message', async (data) => {
     );
     const messageId = result.insertId;
 
-    // Build message object from known data (no DB fetch)
+    // Fetch reply preview if replying to another message
+    let replyPreview = null;
+    let replyGifPreview = null;
+    if (replyToId) {
+      const [replyRows] = await db.execute(
+        'SELECT content, gif_url FROM messages WHERE id = ?',
+        [replyToId]
+      );
+      if (replyRows.length) {
+        replyPreview = replyRows[0].content || (replyRows[0].gif_url ? '[GIF]' : null);
+        replyGifPreview = replyRows[0].gif_url || null;
+      }
+    }
+
+    // Build message object
     const newMessage = {
       id: messageId,
       conversation_id: conversationId,
@@ -129,19 +203,16 @@ socket.on('send_message', async (data) => {
       status: 'sent',
       created_at: 'Just now',
       username: username || 'Guest',
-      avatar: avatar_url || 'https://via.placeholder.com/40',
+      avatar_url: avatar_url || 'https://via.placeholder.com/40',
       deleted_by_sender: 0,
       deleted_by_recipient: 0,
       is_edited: 0,
       reply_to_id: replyToId || null,
-      reply_preview: null,   // no extra query – frontend will show generic
-      reply_gif_preview: null,
+      reply_preview: replyPreview,      // <-- now set
+      reply_gif_preview: replyGifPreview, // <-- now set
     };
 
-    // Join sender to conversation room for future edits/deletes
     socket.join(`conv_${conversationId}`);
-
-    // Emit to receiver (user room) and to conversation room
     io.to(`user_${receiverId}`).emit('new_message', newMessage);
     socket.emit('message_sent', newMessage);
   } catch (err) {
