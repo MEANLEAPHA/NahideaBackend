@@ -306,11 +306,11 @@ socket.on('send_message', async (data) => {
     }
   });
 
-  // realtime typing
-  socket.on('typing', ({ toUserId, isTyping }) => {
-    socket.to(`user_${toUserId}`).emit('user_typing', { userId, isTyping });
-  });
-
+socket.on('typing', ({ toUserId, isTyping }) => {
+  console.log(`🔵 Received typing: from ${userId} to ${toUserId}, isTyping=${isTyping}`);
+  socket.to(`user_${toUserId}`).emit('user_typing', { userId, isTyping });
+  console.log(`🟢 Emitted user_typing to user_${toUserId}`);
+});
 
 
   /*Disconnect*/
