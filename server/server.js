@@ -221,54 +221,80 @@ socket.on('send_message', async (data) => {
 });
 
   // Edit message
-  socket.on('edit_message', async ({ messageId, newContent, newGifId, newGifUrl }) => {
-    try {
-      const [rows] = await db.execute('SELECT sender_id, conversation_id FROM messages WHERE id = ?', [messageId]);
-      if (rows.length === 0) return socket.emit('error', 'Message not found');
-      if (rows[0].sender_id !== parseInt(userId)) return socket.emit('error', 'Not your message');
-      
-      await db.execute(
-        `UPDATE messages SET content = ?, gif_id = ?, gif_url = ?, is_edited = 1 WHERE id = ?`,
-        [newContent || null, newGifId || null, newGifUrl || null, messageId]
-      );
-      // Fetch updated message
-      const [updated] = await db.execute(`
-        SELECT m.*, u.username, u.avatar_url
-        FROM messages m JOIN users u ON m.sender_id = u.id 
+socket.on('edit_message', async ({ messageId, newContent, newGifId, newGifUrl }) => {
+  try {
+    const [rows] = await db.execute('SELECT sender_id, conversation_id FROM messages WHERE id = ?', [messageId]);
+    if (rows.length === 0) return socket.emit('error', 'Message not found');
+    if (rows[0].sender_id !== parseInt(userId)) return socket.emit('error', 'Not your message');
+    
+    await db.execute(
+      `UPDATE messages SET content = ?, gif_id = ?, gif_url = ?, is_edited = 1 WHERE id = ?`,
+      [newContent || null, newGifId || null, newGifUrl || null, messageId]
+    );
+    const [updated] = await db.execute(`
+      SELECT m.*, u.username, u.avatar_url
+      FROM messages m JOIN users u ON m.sender_id = u.id 
+      WHERE m.id = ?
+    `, [messageId]);
+    io.to(`conv_${rows[0].conversation_id}`).emit('message_edited', updated[0]);
+    
+    // NEW: Also notify any messages that replied to this one to update their reply preview
+    const [replies] = await db.execute('SELECT id FROM messages WHERE reply_to_id = ?', [messageId]);
+    for (const reply of replies) {
+      // Re-fetch the reply with updated preview
+      const [replyRows] = await db.execute(`
+        SELECT m.*, u.username, u.avatar_url,
+          (SELECT CASE WHEN content IS NOT NULL THEN content WHEN gif_url IS NOT NULL THEN '[GIF]' ELSE NULL END FROM messages WHERE id = m.reply_to_id) AS reply_preview,
+          (SELECT gif_url FROM messages WHERE id = m.reply_to_id) AS reply_gif_preview
+        FROM messages m JOIN users u ON m.sender_id = u.id
         WHERE m.id = ?
-      `, [messageId]);
-      io.to(`conv_${rows[0].conversation_id}`).emit('message_edited', updated[0]);
-    } catch (err) {
-      socket.emit('error', err.message);
+      `, [reply.id]);
+      if (replyRows.length) {
+        io.to(`conv_${rows[0].conversation_id}`).emit('message_edited', replyRows[0]);
+      }
     }
-  });
-
+  } catch (err) {
+    socket.emit('error', err.message);
+  }
+});
   // Delete message (soft delete for sender, hard if both deleted)
-  socket.on('delete_message', async ({ messageId }) => {
-    try {
-      const [rows] = await db.execute('SELECT sender_id, conversation_id, deleted_by_sender, deleted_by_recipient FROM messages WHERE id = ?', [messageId]);
-      if (rows.length === 0) return;
-      const msg = rows[0];
-      const isSender = msg.sender_id === parseInt(userId);
-      if (isSender) {
-        await db.execute('UPDATE messages SET deleted_by_sender = 1 WHERE id = ?', [messageId]);
-      } else {
-        await db.execute('UPDATE messages SET deleted_by_recipient = 1 WHERE id = ?', [messageId]);
-      }
-      // Check if both deleted
-      const [updated] = await db.execute('SELECT deleted_by_sender, deleted_by_recipient FROM messages WHERE id = ?', [messageId]);
-      const m = updated[0];
-      if (m.deleted_by_sender && m.deleted_by_recipient) {
-        await db.execute('DELETE FROM messages WHERE id = ?', [messageId]);
-        io.to(`conv_${msg.conversation_id}`).emit('message_deleted', { messageId, permanentlyDeleted: true });
-      } else {
-        const [msgRows] = await db.execute(`SELECT m.*, u.username, u.avatar_url FROM messages m JOIN users u ON m.sender_id = u.id WHERE m.id = ?`, [messageId]);
-        io.to(`conv_${msg.conversation_id}`).emit('message_deleted', { messageId, updatedMessage: msgRows[0], permanentlyDeleted: false });
-      }
-    } catch (err) {
-      socket.emit('error', err.message);
+socket.on('delete_message', async ({ messageId }) => {
+  try {
+    const [rows] = await db.execute('SELECT sender_id, conversation_id, deleted_by_sender, deleted_by_recipient FROM messages WHERE id = ?', [messageId]);
+    if (rows.length === 0) return;
+    const msg = rows[0];
+    const isSender = msg.sender_id === parseInt(userId);
+    if (isSender) {
+      await db.execute('UPDATE messages SET deleted_by_sender = 1 WHERE id = ?', [messageId]);
+    } else {
+      await db.execute('UPDATE messages SET deleted_by_recipient = 1 WHERE id = ?', [messageId]);
     }
-  });
+    const [updated] = await db.execute('SELECT deleted_by_sender, deleted_by_recipient FROM messages WHERE id = ?', [messageId]);
+    const m = updated[0];
+    if (m.deleted_by_sender && m.deleted_by_recipient) {
+      await db.execute('DELETE FROM messages WHERE id = ?', [messageId]);
+      io.to(`conv_${msg.conversation_id}`).emit('message_deleted', { messageId, permanentlyDeleted: true });
+      // Also notify replies that the parent is gone (they will show generic reply)
+      const [replies] = await db.execute('SELECT id FROM messages WHERE reply_to_id = ?', [messageId]);
+      for (const reply of replies) {
+        const [replyRows] = await db.execute(`
+          SELECT m.*, u.username, u.avatar_url,
+            NULL as reply_preview, NULL as reply_gif_preview
+          FROM messages m JOIN users u ON m.sender_id = u.id
+          WHERE m.id = ?
+        `, [reply.id]);
+        if (replyRows.length) {
+          io.to(`conv_${msg.conversation_id}`).emit('message_edited', replyRows[0]);
+        }
+      }
+    } else {
+      const [msgRows] = await db.execute(`SELECT m.*, u.username, u.avatar_url FROM messages m JOIN users u ON m.sender_id = u.id WHERE m.id = ?`, [messageId]);
+      io.to(`conv_${msg.conversation_id}`).emit('message_deleted', { messageId, updatedMessage: msgRows[0], permanentlyDeleted: false });
+    }
+  } catch (err) {
+    socket.emit('error', err.message);
+  }
+});
 
   // Mark message as seen (triggered when user opens chat)
   socket.on('mark_seen', async ({ conversationId, messageIds }) => {
