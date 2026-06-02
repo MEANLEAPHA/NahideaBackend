@@ -43,8 +43,20 @@ const getChatUser = async (req, res) => {
             FROM users u
             JOIN follows f1 ON f1.following_id = u.id AND f1.follower_id = ?
             JOIN follows f2 ON f2.following_id = ? AND f2.follower_id = u.id
-            LEFT JOIN conversations c ON (c.user1_id = ? AND c.user2_id = u.id) 
-                                      OR (c.user1_id = u.id AND c.user2_id = ?)
+            LEFT JOIN conversations c
+              ON (
+                  (
+                      c.user1_id = ?
+                      AND c.user2_id = u.id
+                      AND c.user1_deleted_at IS NULL
+                  )
+                  OR
+                  (
+                      c.user1_id = u.id
+                      AND c.user2_id = ?
+                      AND c.user2_deleted_at IS NULL
+                  )
+              )
             WHERE u.id != ?
         `, [userId, userId, userId, userId, userId, userId, userId, userId, userId]);
         
@@ -107,15 +119,26 @@ const getMessage = async (req, res) => {
       [currentUserId, otherUserId, otherUserId, currentUserId]
     );
     let conversationId;
+
+    // if (convRows.length === 0) {
+    //   const [result] = await db.execute(
+    //     'INSERT INTO conversations (user1_id, user2_id) VALUES (?, ?)',
+    //     [currentUserId, otherUserId]
+    //   );
+    //   conversationId = result.insertId;
+    // } else {
+    //   conversationId = convRows[0].id;
+    // }
+    
     if (convRows.length === 0) {
-      const [result] = await db.execute(
-        'INSERT INTO conversations (user1_id, user2_id) VALUES (?, ?)',
-        [currentUserId, otherUserId]
-      );
-      conversationId = result.insertId;
-    } else {
-      conversationId = convRows[0].id;
+      return res.json({
+        conversationId: null,
+        messages: [],
+        hasMore: false
+      });
     }
+
+    conversationId = convRows[0].id;
 
     // Base query with pagination (older messages before the given message ID)
    let query = `
@@ -187,34 +210,93 @@ const getMessage = async (req, res) => {
   }
 };
 
-const deleteConversation = async (req,res) => {
-    const currentUserId = req.user.userId;
-    const otherUserId = req.params.userId;
-    try {
-        const [convRows] = await db.execute(
-            `SELECT id, user1_id, user2_id, user1_deleted_at, user2_deleted_at FROM conversations 
-             WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)`,
-            [currentUserId, otherUserId, otherUserId, currentUserId]
-        );
-        if (convRows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
-        const conv = convRows[0];
-        if (conv.user1_id === currentUserId) {
-            await db.execute('UPDATE conversations SET user1_deleted_at = NOW() WHERE id = ?', [conv.id]);
-        } else {
-            await db.execute('UPDATE conversations SET user2_deleted_at = NOW() WHERE id = ?', [conv.id]);
-        }
-        const [updated] = await db.execute('SELECT * FROM conversations WHERE id = ?', [conv.id]);
-        const u = updated[0];
-        if (u.user1_deleted_at && u.user2_deleted_at) {
-            await db.execute('DELETE FROM messages WHERE conversation_id = ?', [conv.id]);
-            await db.execute('DELETE FROM conversations WHERE id = ?', [conv.id]);
-        }
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-}
+const deleteConversation = async (req, res) => {
+  const currentUserId = req.user.userId;
+  const otherUserId = req.params.userId;
 
+  try {
+    const [convRows] = await db.execute(
+      `
+      SELECT *
+      FROM conversations
+      WHERE
+      (user1_id = ? AND user2_id = ?)
+      OR
+      (user1_id = ? AND user2_id = ?)
+      `,
+      [currentUserId, otherUserId, otherUserId, currentUserId]
+    );
+
+    if (!convRows.length) {
+      return res.status(404).json({
+        error: "Conversation not found"
+      });
+    }
+
+    const conv = convRows[0];
+
+    if (conv.user1_id === currentUserId) {
+      await db.execute(
+        `
+        UPDATE conversations
+        SET user1_deleted_at = NOW()
+        WHERE id = ?
+        `,
+        [conv.id]
+      );
+    } else {
+      await db.execute(
+        `
+        UPDATE conversations
+        SET user2_deleted_at = NOW()
+        WHERE id = ?
+        `,
+        [conv.id]
+      );
+    }
+
+    const [updatedRows] = await db.execute(
+      `
+      SELECT *
+      FROM conversations
+      WHERE id = ?
+      `,
+      [conv.id]
+    );
+
+    const updated = updatedRows[0];
+
+    if (
+      updated.user1_deleted_at &&
+      updated.user2_deleted_at
+    ) {
+      await db.execute(
+        `
+        DELETE FROM messages
+        WHERE conversation_id = ?
+        `,
+        [conv.id]
+      );
+
+      await db.execute(
+        `
+        DELETE FROM conversations
+        WHERE id = ?
+        `,
+        [conv.id]
+      );
+    }
+
+    res.json({
+      success: true
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      error: err.message
+    });
+  }
+};
 
 const deleteMessage = async (req, res) => {
     const userId = req.user.userId;
@@ -237,6 +319,27 @@ const deleteMessage = async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+}
+
+const reportConversation = async (req, res) => {
+    const  conversationId = req.params;
+    const userId = req.user.userId;
+     const {reason, details } = req.body;
+
+  if (!conversationId || !reason) {
+    return res.status(400).json({ error: 'conversation_id and reason are required' });
+  }
+
+  try {
+    await db.query(
+      'INSERT INTO conversation_reports (reporter_id, conversation_id, reason, details) VALUES (?, ?, ?)',
+      [userId, conversationId, reason, details || null]
+    );
+    res.status(201).json({ message: 'Report submitted successfully' });
+  } catch (err) {
+    console.error('Error saving report:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 }
 
 const reportMessage = async (req,res)=>{
@@ -271,4 +374,61 @@ const searchGif = async (req, res) => {
   }
 };
 
-module.exports = { getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage, searchGif };
+const openConversation = async (req, res) => {
+  const currentUserId = req.user.userId;
+  const otherUserId = req.params.userId;
+
+  try {
+
+    const [rows] = await db.execute(
+      `
+      SELECT *
+      FROM conversations
+      WHERE
+      (user1_id = ? AND user2_id = ?)
+      OR
+      (user1_id = ? AND user2_id = ?)
+      `,
+      [currentUserId, otherUserId, otherUserId, currentUserId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({
+        error: "Conversation not found"
+      });
+    }
+
+    const conv = rows[0];
+
+    if (conv.user1_id === currentUserId) {
+      await db.execute(
+        `
+        UPDATE conversations
+        SET user1_deleted_at = NULL
+        WHERE id = ?
+        `,
+        [conv.id]
+      );
+    } else {
+      await db.execute(
+        `
+        UPDATE conversations
+        SET user2_deleted_at = NULL
+        WHERE id = ?
+        `,
+        [conv.id]
+      );
+    }
+
+    res.json({
+      success: true
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      error: err.message
+    });
+  }
+};
+
+module.exports = { getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage, searchGif, reportConversation };

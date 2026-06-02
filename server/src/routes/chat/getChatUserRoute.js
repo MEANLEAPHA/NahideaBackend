@@ -3,7 +3,7 @@ const router = express.Router();
 const {protect} = require("../../middleware/authMiddleware");
 
 const {
-    getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage, searchGif 
+    getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage, searchGif, reportConversation 
 } = require("../../controllers/chat/getChatUserController");
 
 
@@ -12,6 +12,7 @@ router.get("/get-message/:userId", protect, getMessage);
 router.delete("/delete-conversation/:userId", protect, deleteConversation);
 router.delete("/delete-message/:messageId", protect, deleteMessage);
 router.post("/report-message", protect, reportMessage);
+router.post("/report-conversation/:conversationId", protect, reportConversation);
 router.get("/search-gif", searchGif);
 
 module.exports = router;
