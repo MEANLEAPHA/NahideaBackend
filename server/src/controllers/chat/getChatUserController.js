@@ -141,7 +141,7 @@ const getChatArchivedUser = async (req, res) => {
 };
 const openConversation = async (req, res) => {
   const currentUserId = req.user.userId;
-  const otherUserId = req.params;
+  const otherUserId = req.params.otherUserId; 
   try {
     const [convRows] = await db.execute(
       `SELECT id, user1_id, user2_id, user1_deleted_at, user2_deleted_at 

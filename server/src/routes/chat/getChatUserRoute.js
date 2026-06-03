@@ -16,7 +16,7 @@ router.post("/report-message", protect, reportMessage);
 router.post("/report-conversation/:conversationId", protect, reportConversation);
 router.get("/get-chat-spam-user", protect, getChatSpamUser);
 router.get("/get-chat-archived-user", protect, getChatArchivedUser);
-router.patch("/open-conversation/:otherUserId", protect, openConversation);
+router.put("/open-conversation/:otherUserId", protect, openConversation);
 router.get("/search-gif", searchGif);
 
 module.exports = router;
