@@ -3,7 +3,7 @@ const router = express.Router();
 const {protect} = require("../../middleware/authMiddleware");
 
 const {
-    getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage, searchGif, reportConversation,
+    getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage, searchGif, reportConversation,getChatSpamUser,
     getChatArchivedUser, openConversation 
 } = require("../../controllers/chat/getChatUserController");
 
@@ -14,7 +14,7 @@ router.delete("/delete-conversation/:userId", protect, deleteConversation);
 router.delete("/delete-message/:messageId", protect, deleteMessage);
 router.post("/report-message", protect, reportMessage);
 router.post("/report-conversation/:conversationId", protect, reportConversation);
-router.get("/get-chat-spam-user", protect, getChatUser);
+router.get("/get-chat-spam-user", protect, getChatSpamUser);
 router.get("/get-chat-archived-user", protect, getChatArchivedUser);
 router.patch("/open-conversation/:otherUserId", protect, openConversation);
 router.get("/search-gif", searchGif);
