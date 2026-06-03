@@ -59,6 +59,111 @@ const getChatUser = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+const getChatSpamUser = async (req, res) => {
+  const userId = req.user.userId;
+  try {
+    const [rows] = await db.execute(`
+      SELECT u.id, u.username, u.avatar_url,
+             (SELECT m.content 
+              FROM messages m
+              WHERE m.conversation_id = c.id 
+                AND NOT (m.deleted_by_sender = 1 AND m.sender_id = ?)
+                AND NOT (m.deleted_by_recipient = 1 AND m.sender_id != ?)
+              ORDER BY m.created_at DESC 
+              LIMIT 1) AS last_message,
+             (SELECT COUNT(*)
+              FROM messages m
+              WHERE m.conversation_id = c.id 
+                AND m.sender_id != ? 
+                AND m.status != 'seen'
+                AND NOT (m.deleted_by_recipient = 1 AND m.sender_id != ?)
+             ) AS unread_count
+      FROM users u
+      LEFT JOIN conversations c 
+        ON (c.user1_id = ? AND c.user2_id = u.id) 
+        OR (c.user1_id = u.id AND c.user2_id = ?)
+      WHERE u.id != ?
+        AND (
+          c.id IS NOT NULL
+          AND (
+            (c.user1_id = ? AND c.user1_deleted_at IS NULL)
+            OR (c.user2_id = ? AND c.user2_deleted_at IS NULL)
+          )
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM follows f1
+          JOIN follows f2 ON f1.following_id = f2.follower_id
+          WHERE f1.follower_id = ? AND f1.following_id = u.id
+            AND f2.follower_id = u.id AND f2.following_id = ?
+        )
+    `, [
+      userId, userId, userId, userId, // subqueries
+      userId, userId,                 // conversation join
+      userId,                         // exclude self
+      userId, userId,                 // deletion check
+      userId, userId                  // mutual follow exclusion
+    ]);
+
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const getChatArchivedUser = async (req, res) => {
+  const userId = req.user.userId;
+  try {
+    const [rows] = await db.execute(`
+      SELECT u.id, u.username, u.avatar_url,
+             c.id AS conversation_id,
+             (SELECT m.content 
+              FROM messages m
+              WHERE m.conversation_id = c.id 
+                AND NOT (m.deleted_by_sender = 1 AND m.sender_id = ?)
+                AND NOT (m.deleted_by_recipient = 1 AND m.sender_id != ?)
+              ORDER BY m.created_at DESC 
+              LIMIT 1) AS last_message
+      FROM users u
+      JOIN conversations c 
+        ON (c.user1_id = ? AND c.user2_id = u.id) 
+        OR (c.user1_id = u.id AND c.user2_id = ?)
+      WHERE (
+        (c.user1_id = ? AND c.user1_deleted_at IS NOT NULL AND c.user2_deleted_at IS NULL)
+        OR (c.user2_id = ? AND c.user2_deleted_at IS NOT NULL AND c.user1_deleted_at IS NULL)
+      )
+    `, [userId, userId, userId, userId, userId, userId]);
+
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+const openConversation = async (req, res) => {
+  const currentUserId = req.user.userId;
+  const otherUserId = req.params;
+  try {
+    const [convRows] = await db.execute(
+      `SELECT id, user1_id, user2_id, user1_deleted_at, user2_deleted_at 
+       FROM conversations 
+       WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)`,
+      [currentUserId, otherUserId, otherUserId, currentUserId]
+    );
+
+    if (convRows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+
+    const conv = convRows[0];
+    if (conv.user1_id === currentUserId) {
+      await db.execute('UPDATE conversations SET user1_deleted_at = NULL WHERE id = ?', [conv.id]);
+    } else {
+      await db.execute('UPDATE conversations SET user2_deleted_at = NULL WHERE id = ?', [conv.id]);
+    }
+
+    res.json({ success: true, message: 'Conversation restored successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
 
 // const getChatUser = async (req, res) => {
 //     const userId = req.user.userId;
@@ -246,7 +351,7 @@ const deleteConversation = async (req,res) => {
         const u = updated[0];
         if (u.user1_deleted_at && u.user2_deleted_at) {
             await db.execute('DELETE FROM messages WHERE conversation_id = ?', [conv.id]);
-            await db.execute('DELETE FROM conversations WHERE id = ?', [conv.id]);
+            // await db.execute('DELETE FROM conversations WHERE id = ?', [conv.id]);
         }
         res.json({ success: true });
     } catch (err) {
@@ -331,4 +436,4 @@ const searchGif = async (req, res) => {
   }
 };
 
-module.exports = { getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage, searchGif, reportConversation };
+module.exports = { getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage, searchGif, reportConversation, getChatSpamUser, getChatArchivedUser, openConversation };
