@@ -1,26 +1,5 @@
 const db = require("../../config/db");
 
-// const getChatUser = async (req, res) => {
-//     const userId = req.user.userId;
-//     try {
-//         const [rows] = await db.execute(`
-//             SELECT u.id, u.username, u.avatar_url,
-//                    (SELECT content FROM messages m 
-//                     WHERE m.conversation_id = c.id 
-//                     ORDER BY m.created_at DESC LIMIT 1) AS last_message,
-//                    (SELECT COUNT(*) FROM messages m 
-//                     WHERE m.conversation_id = c.id AND m.sender_id != ? AND m.status != 'seen') AS unread_count
-//             FROM users u
-//             JOIN follows f1 ON f1.following_id = u.id AND f1.follower_id = ?
-//             JOIN follows f2 ON f2.following_id = ? AND f2.follower_id = u.id
-//             LEFT JOIN conversations c ON (c.user1_id = ? AND c.user2_id = u.id) OR (c.user1_id = u.id AND c.user2_id = ?)
-//             WHERE u.id != ?
-//         `, [userId, userId, userId, userId, userId, userId]);
-//         res.json(rows);
-//     } catch (err) {
-//         res.status(500).json({ error: err.message });
-//     }
-// }
 const getChatUser = async (req, res) => {
   const userId = req.user.userId;
   try {
@@ -142,7 +121,7 @@ const getChatArchivedUser = async (req, res) => {
 const openConversation = async (req, res) => {
   const currentUserId = req.user.userId;
   const otherUserId = req.params.otherUserId; 
-  try {
+  try { 
     const [convRows] = await db.execute(
       `SELECT id, user1_id, user2_id, user1_deleted_at, user2_deleted_at 
        FROM conversations 
@@ -436,4 +415,36 @@ const searchGif = async (req, res) => {
   }
 };
 
-module.exports = { getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage, searchGif, reportConversation, getChatSpamUser, getChatArchivedUser, openConversation };
+const getUnreadChatCount = async (req, res) => {
+  const currentUserId = req.user.userId;
+
+  try {
+    const [rows] = await db.execute(
+      `
+      SELECT COUNT(*) AS unreadCount
+      FROM messages m
+      JOIN conversations c
+        ON c.id = m.conversation_id
+      WHERE
+        m.sender_id != ?
+        AND m.status != 'seen'
+
+        AND (
+          (c.user1_id = ? AND c.user1_deleted_at IS NULL)
+          OR
+          (c.user2_id = ? AND c.user2_deleted_at IS NULL)
+        )
+      `,
+      [currentUserId, currentUserId, currentUserId]
+    );
+
+    res.json({
+      unreadCount: rows[0].unreadCount || 0,
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: err.message,
+    });
+  }
+};
+module.exports = { getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage, searchGif, reportConversation, getChatSpamUser, getChatArchivedUser, openConversation, getUnreadChatCount };
