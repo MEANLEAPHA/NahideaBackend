@@ -1547,16 +1547,7 @@ function timeAgo(date){
 // controllers/postController.js
 const getPostsByLike = async (req, res) => {
   try {
-    const userId = req.user.userId; // current user
-    const CACHE_KEY = `likes:user:${userId}`;
-
-    // check cache
-    const cached = await cachePost.get(CACHE_KEY);
-    const parsed = safeJsonParse(cached);
-    if (parsed) {
-      return res.status(200).json({ source: "cache", data: parsed });
-    }
-
+    const userId = req.user.userId; 
     // fetch liked posts
     const [rows] = await pool.query(
       `SELECT 
@@ -1584,11 +1575,7 @@ const getPostsByLike = async (req, res) => {
       isAnonymous: r.is_anonymous,
       anonymousBg: r.anonymous_bg_color,
       mediaSrc: r.mediaSrc,
-      createdAt: timeAgo(r.created_at)
     }));
-
-    // cache for 5 minutes
-    await cachePost.set(CACHE_KEY, JSON.stringify(result), { EX: 300 });
 
     return res.status(200).json({ source: "db", data: result });
   } catch (err) {
