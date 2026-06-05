@@ -1,6 +1,5 @@
 const db = require("../../config/db");
-// controllers/signalController.js
-const db = require("../db"); // your mysql2/promise connection
+
 
 // Check if user already sent signal today
 async function hasSentToday(senderId, receiverId, signalType) {

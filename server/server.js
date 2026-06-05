@@ -473,208 +473,60 @@ app.use(globalLimiter); // global rate limit
 */
 
 // chat 
+const userChatRoute = require("./src/routes/chat/getChatUserRoute");
+app.use('/api', userChatRoute);
 
-// const userChatRoute = require("./src/routes/chat/getChatUserRoute");
-// app.use('/api', userChatRoute);
+// user authentication
+const authRoutes = require("./src/routes/authentication/authRoutes");
+app.use("/api", authRoutes);
 
-// // user authentication
-// const authRoutes = require("./src/routes/authentication/authRoutes");
-// app.use("/api", authRoutes);
+// mutual logic
+const followRoutes = require("./src/routes/mutuals/followRoute");
+app.use("/api", followRoutes);
 
-// // mutual logic
-// const followRoutes = require("./src/routes/mutuals/followRoute");
-// app.use("/api", followRoutes);
+// post
+const postRoutes = require("./src/routes/upload/postRoutes");
+app.use("/api", postRoutes);
 
-// // post
-// const postRoutes = require("./src/routes/upload/postRoutes");
-// app.use("/api", postRoutes);
+// view recorder post
+const viewPostRoutes = require("./src/routes/view/viewPostRoute");
+app.use("/api", viewPostRoutes);
 
-// // view recorder post
-// const viewPostRoutes = require("./src/routes/view/viewPostRoute");
-// app.use("/api", viewPostRoutes);
+// answer question
+const answerQARoutes = require("./src/routes/upload/answerQAroute");
+app.use("/api", answerQARoutes);
 
-// // answer question
-// const answerQARoutes = require("./src/routes/upload/answerQAroute");
-// app.use("/api", answerQARoutes);
+// comment and reply
+const commentsRoutes = require("./src/routes/upload/commentRoute");
+app.use("/api", commentsRoutes);
 
-// // comment and reply
-// const commentsRoutes = require("./src/routes/upload/commentRoute");
-// app.use("/api", commentsRoutes);
+// gif
+const gifRoutes = require("./src/routes/upload/gifRoute");
+app.use("/api/gifs", gifRoutes);
 
-// // gif
-// const gifRoutes = require("./src/routes/upload/gifRoute");
-// app.use("/api/gifs", gifRoutes);
+// notification
+const notificationRoutes = require("./src/routes/notification/notificationRoute");
+app.use("/api", notificationRoutes);
 
-// // notification
-// const notificationRoutes = require("./src/routes/notification/notificationRoute");
-// app.use("/api", notificationRoutes);
+// ranking
+const rankRoutes = require("./src/routes/rank/rankRoute");
+app.use("/api", rankRoutes);
 
-// // ranking
-// const rankRoutes = require("./src/routes/rank/rankRoute");
-// app.use("/api", rankRoutes);
+// reports
+const reportRoutes = require("./src/routes/report/reportPostRoute");
+app.use("/api", reportRoutes);
 
-// // reports
-// const reportRoutes = require("./src/routes/report/reportPostRoute");
-// app.use("/api", reportRoutes);
+// history recorder post
+const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
+app.use("/api", postHistoryRoutes);
 
-// // history recorder post
-// const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
-// app.use("/api", postHistoryRoutes);
+// mutual
+const mutualRoutes = require("./src/routes/friend/mutualRoute");
+app.use("/api", mutualRoutes);
 
-// // mutual
-// const mutualRoutes = require("./src/routes/friend/mutualRoute");
-// app.use("/api", mutualRoutes);
+const pokeRoutes = require("./src/routes/poke/pokeRoute");
+app.use("/api", pokeRoutes);
 
-// const pokeRoutes = require("./src/routes/poke/pokeRoute");
-// app.use("/api", pokeRoutes);
-
-/*
-|--------------------------------------------------------------------------
-| ROUTES
-|--------------------------------------------------------------------------
-*/
-
-try {
-  console.log("[ROUTE] Loading getChatUserRoute");
-  const userChatRoute = require("./src/routes/chat/getChatUserRoute");
-  app.use("/api", userChatRoute);
-  console.log("[ROUTE] ✓ getChatUserRoute loaded");
-} catch (err) {
-  console.error("[ROUTE ERROR] getChatUserRoute");
-  console.error(err);
-}
-
-try {
-  console.log("[ROUTE] Loading authRoutes");
-  const authRoutes = require("./src/routes/authentication/authRoutes");
-  app.use("/api", authRoutes);
-  console.log("[ROUTE] ✓ authRoutes loaded");
-} catch (err) {
-  console.error("[ROUTE ERROR] authRoutes");
-  console.error(err);
-}
-
-try {
-  console.log("[ROUTE] Loading followRoute");
-  const followRoutes = require("./src/routes/mutuals/followRoute");
-  app.use("/api", followRoutes);
-  console.log("[ROUTE] ✓ followRoute loaded");
-} catch (err) {
-  console.error("[ROUTE ERROR] followRoute");
-  console.error(err);
-}
-
-try {
-  console.log("[ROUTE] Loading postRoutes");
-  const postRoutes = require("./src/routes/upload/postRoutes");
-  app.use("/api", postRoutes);
-  console.log("[ROUTE] ✓ postRoutes loaded");
-} catch (err) {
-  console.error("[ROUTE ERROR] postRoutes");
-  console.error(err);
-}
-
-try {
-  console.log("[ROUTE] Loading viewPostRoute");
-  const viewPostRoutes = require("./src/routes/view/viewPostRoute");
-  app.use("/api", viewPostRoutes);
-  console.log("[ROUTE] ✓ viewPostRoute loaded");
-} catch (err) {
-  console.error("[ROUTE ERROR] viewPostRoute");
-  console.error(err);
-}
-
-try {
-  console.log("[ROUTE] Loading answerQAroute");
-  const answerQARoutes = require("./src/routes/upload/answerQAroute");
-  app.use("/api", answerQARoutes);
-  console.log("[ROUTE] ✓ answerQAroute loaded");
-} catch (err) {
-  console.error("[ROUTE ERROR] answerQAroute");
-  console.error(err);
-}
-
-try {
-  console.log("[ROUTE] Loading commentRoute");
-  const commentsRoutes = require("./src/routes/upload/commentRoute");
-  app.use("/api", commentsRoutes);
-  console.log("[ROUTE] ✓ commentRoute loaded");
-} catch (err) {
-  console.error("[ROUTE ERROR] commentRoute");
-  console.error(err);
-}
-
-try {
-  console.log("[ROUTE] Loading gifRoute");
-  const gifRoutes = require("./src/routes/upload/gifRoute");
-  app.use("/api/gifs", gifRoutes);
-  console.log("[ROUTE] ✓ gifRoute loaded");
-} catch (err) {
-  console.error("[ROUTE ERROR] gifRoute");
-  console.error(err);
-}
-
-try {
-  console.log("[ROUTE] Loading notificationRoute");
-  const notificationRoutes = require("./src/routes/notification/notificationRoute");
-  app.use("/api", notificationRoutes);
-  console.log("[ROUTE] ✓ notificationRoute loaded");
-} catch (err) {
-  console.error("[ROUTE ERROR] notificationRoute");
-  console.error(err);
-}
-
-try {
-  console.log("[ROUTE] Loading rankRoute");
-  const rankRoutes = require("./src/routes/rank/rankRoute");
-  app.use("/api", rankRoutes);
-  console.log("[ROUTE] ✓ rankRoute loaded");
-} catch (err) {
-  console.error("[ROUTE ERROR] rankRoute");
-  console.error(err);
-}
-
-try {
-  console.log("[ROUTE] Loading reportPostRoute");
-  const reportRoutes = require("./src/routes/report/reportPostRoute");
-  app.use("/api", reportRoutes);
-  console.log("[ROUTE] ✓ reportPostRoute loaded");
-} catch (err) {
-  console.error("[ROUTE ERROR] reportPostRoute");
-  console.error(err);
-}
-
-try {
-  console.log("[ROUTE] Loading postHistoryRoute");
-  const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
-  app.use("/api", postHistoryRoutes);
-  console.log("[ROUTE] ✓ postHistoryRoute loaded");
-} catch (err) {
-  console.error("[ROUTE ERROR] postHistoryRoute");
-  console.error(err);
-}
-
-try {
-  console.log("[ROUTE] Loading mutualRoute");
-  const mutualRoutes = require("./src/routes/friend/mutualRoute");
-  app.use("/api", mutualRoutes);
-  console.log("[ROUTE] ✓ mutualRoute loaded");
-} catch (err) {
-  console.error("[ROUTE ERROR] mutualRoute");
-  console.error(err);
-}
-
-try {
-  console.log("[ROUTE] Loading pokeRoute");
-  const pokeRoutes = require("./src/routes/poke/pokeRoute");
-  app.use("/api", pokeRoutes);
-  console.log("[ROUTE] ✓ pokeRoute loaded");
-} catch (err) {
-  console.error("[ROUTE ERROR] pokeRoute");
-  console.error(err);
-}
-
-console.log("[ROUTES] Finished loading routes");
 
 // const postArchiveRoutes = require("./src/routes/upload/postArchiveRoute");
 // app.use("/api", postArchiveRoutes);
