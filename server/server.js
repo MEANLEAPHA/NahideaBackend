@@ -524,6 +524,9 @@ app.use("/api", postHistoryRoutes);
 const mutualRoutes = require("./src/routes/friend/mutualRoute");
 app.use("/api", mutualRoutes);
 
+const pokeRoutes = require("./src/routes/poke/pokeRoute");
+app.use("/api", pokeRoutes);
+
 
 // const postArchiveRoutes = require("./src/routes/upload/postArchiveRoute");
 // app.use("/api", postArchiveRoutes);
