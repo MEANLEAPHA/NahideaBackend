@@ -1597,7 +1597,6 @@ const getPostsByLike = async (req, res) => {
   }
 };
 
-module.exports = { getPostsByLike };
 
 
 
