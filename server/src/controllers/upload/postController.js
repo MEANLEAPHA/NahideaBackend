@@ -1545,44 +1545,44 @@ function timeAgo(date){
 
 
 // controllers/postController.js
-const getPostsByLike = async (req, res) => {
-  try {
-    const userId = req.user.userId; 
-    // fetch liked posts
-    const [rows] = await pool.query(
-      `SELECT 
-        p.id, p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color,
-        p.created_at, p.user_id,
-        u.username, u.avatar_url,
-        COALESCE(c.title, cf.title, q.title) as title,
-        COALESCE(c.media_url, cf.media_url, q.media_url) as mediaSrc
-      FROM post_likes pl
-      JOIN posts p ON pl.post_id = p.id
-      JOIN users u ON p.user_id = u.id
-      LEFT JOIN content c ON p.id = c.post_id
-      LEFT JOIN confession cf ON p.id = cf.post_id
-      LEFT JOIN question q ON p.id = q.post_id
-      WHERE pl.user_id = ?
-      ORDER BY pl.created_at DESC`,
-      [userId]
-    );
+// const getPostsByLike = async (req, res) => {
+//   try {
+//     const userId = req.user.userId; 
+ 
+//     const [rows] = await pool.query(
+//       `SELECT 
+//         p.id, p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color,
+//         p.created_at, p.user_id,
+//         u.username, u.avatar_url,
+//         COALESCE(c.title, cf.title, q.title) as title,
+//         COALESCE(c.media_url, cf.media_url, q.media_url) as mediaSrc
+//       FROM post_likes pl
+//       JOIN posts p ON pl.post_id = p.id
+//       JOIN users u ON p.user_id = u.id
+//       LEFT JOIN content c ON p.id = c.post_id
+//       LEFT JOIN confession cf ON p.id = cf.post_id
+//       LEFT JOIN question q ON p.id = q.post_id
+//       WHERE pl.user_id = ?
+//       ORDER BY pl.created_at DESC`,
+//       [userId]
+//     );
 
-    const result = rows.map(r => ({
-      id: r.id,
-      title: r.title,
-      author: r.is_anonymous ? r.anonymous_name : r.username,
-      authurPf: r.is_anonymous ? null : r.avatar_url,
-      isAnonymous: r.is_anonymous,
-      anonymousBg: r.anonymous_bg_color,
-      mediaSrc: r.mediaSrc,
-    }));
+//     const result = rows.map(r => ({
+//       id: r.id,
+//       title: r.title,
+//       author: r.is_anonymous ? r.anonymous_name : r.username,
+//       authurPf: r.is_anonymous ? null : r.avatar_url,
+//       isAnonymous: r.is_anonymous,
+//       anonymousBg: r.anonymous_bg_color,
+//       mediaSrc: r.mediaSrc,
+//     }));
 
-    return res.status(200).json({ source: "db", data: result });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
+//     return res.status(200).json({ source: "db", data: result });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
 
 
 
@@ -1598,7 +1598,7 @@ module.exports = {
   deletePost,
   likePost,
   favoritePost,
-  getPostsByLike,
+  // getPostsByLike,
 };
 
 // async function attachLikeState(posts, userId) {
