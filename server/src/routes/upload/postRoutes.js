@@ -10,7 +10,8 @@ const {
   deletePost,
   likePost,
   favoritePost,
-  getPostsByLike
+  getPostsByLike,
+  getPostsByFavorite
 
 } = require("../../controllers/upload/postController");
 const {
@@ -54,6 +55,8 @@ router.post("/create-posts", protect,
   );
 
 router.get("/posts/likes", protect, getPostsByLike);
+router.get("/posts/favorites", protect, getPostsByFavorite);
+
 // router.post("/:id/comments", protect, addComment);
 // router.post("/:id/vote", protect, vote); 
 // router.patch("/:id/solve", protect, markSolved);
