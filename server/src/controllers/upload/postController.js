@@ -1531,8 +1531,6 @@ function timeAgo(date){
 }
 
 // controllers/postController.js
-
-// controllers/postController.js
 const getPostsByLike = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -1696,7 +1694,89 @@ const getPostsByFavorite = async (req, res) => {
 // };
 
 
+const getPostByUserId = async (req, res) => {
+  try {
+    const userId = req.user.userId;
 
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = 25;
+    const offset = (page - 1) * limit;
+
+    const [rows] = await pool.query(
+      `
+      SELECT
+        p.id,
+        p.post_type,
+
+        p.is_anonymous,
+        p.anonymous_name,
+        p.anonymous_bg_color,
+
+        p.likes_count,
+        p.comments_count,
+        p.views_count,
+
+        p.created_at,
+
+        u.username,
+        u.avatar_url,
+
+        COALESCE(
+          c.title,
+          cf.title,
+          q.title
+        ) AS title,
+
+        COALESCE(
+          c.media_url,
+          cf.media_url,
+          q.media_url
+        ) AS media_url,
+
+        q.status AS question_status
+
+      FROM posts p
+
+      JOIN users u
+        ON p.user_id = u.id
+
+      LEFT JOIN content c
+        ON p.id = c.post_id
+
+      LEFT JOIN confession cf
+        ON p.id = cf.post_id
+
+      LEFT JOIN question q
+        ON p.id = q.post_id
+
+      WHERE
+        p.user_id = ?
+        AND p.is_deleted = 0
+
+      ORDER BY p.created_at DESC
+
+      LIMIT ?
+      OFFSET ?
+      `,
+      [userId, limit, offset]
+    );
+
+    return res.status(200).json({
+      source: "db",
+      page,
+      limit,
+      hasMore: rows.length === limit,
+      data: rows
+    });
+
+  } catch (err) {
+    console.error(err);
+
+    return res.status(500).json({
+      message: "Server error"
+    });
+  }
+};
 
 
 
@@ -1712,7 +1792,8 @@ module.exports = {
   likePost,
   favoritePost,
   getPostsByLike,
-  getPostsByFavorite
+  getPostsByFavorite,
+  getPostByUserId
  
 };
 

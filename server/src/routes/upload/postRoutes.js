@@ -11,7 +11,8 @@ const {
   likePost,
   favoritePost,
   getPostsByLike,
-  getPostsByFavorite
+  getPostsByFavorite,
+  getPostByUserId
 
 } = require("../../controllers/upload/postController");
 const {
@@ -41,6 +42,8 @@ router.post("/create-posts", protect,
   router.get("/all-posts", protect ,getAllPosts);
 
   router.get("/get-post/:id", getPostsById);
+
+  router.get("/get-post-by-user", protect, getPostByUserId);
 
   router.put("/update-post-body-content/:contentId/:postId", protect, updatePostBodyContent);
   
