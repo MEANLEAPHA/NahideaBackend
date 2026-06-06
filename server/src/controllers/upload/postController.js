@@ -1531,19 +1531,15 @@ function timeAgo(date){
 }
 
 // controllers/postController.js
+
+// controllers/postController.js
 const getPostsByLike = async (req, res) => {
   try {
-    const userId = req.user.userId; // current user
-    const CACHE_KEY = `likes:user:${userId}`;
+    const userId = req.user.userId;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = 25;
+    const offset = (page - 1) * limit;
 
-    // check cache
-    const cached = await cachePost.get(CACHE_KEY);
-    const parsed = safeJsonParse(cached);
-    if (parsed) {
-      return res.status(200).json({ source: "cache", data: parsed });
-    }
-
-    // fetch liked posts
     const [rows] = await pool.query(
       `SELECT 
         p.id, p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color,
@@ -1558,8 +1554,9 @@ const getPostsByLike = async (req, res) => {
       LEFT JOIN confession cf ON p.id = cf.post_id
       LEFT JOIN question q ON p.id = q.post_id
       WHERE pl.user_id = ?
-      ORDER BY pl.created_at DESC`,
-      [userId]
+      ORDER BY pl.created_at DESC
+      LIMIT ? OFFSET ?`,
+      [userId, limit, offset]
     );
 
     const result = rows.map(r => ({
@@ -1573,15 +1570,69 @@ const getPostsByLike = async (req, res) => {
       createdAt: timeAgo(r.created_at)
     }));
 
-    // cache for 5 minutes
-    await cachePost.set(CACHE_KEY, JSON.stringify(result), { EX: 300 });
-
-    return res.status(200).json({ source: "db", data: result });
+    return res.status(200).json({
+      source: "db",
+      page,
+      limit,
+      data: result,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
+
+// const getPostsByLike = async (req, res) => {
+//   try {
+//     const userId = req.user.userId; // current user
+//     const CACHE_KEY = `likes:user:${userId}`;
+
+//     // check cache
+//     const cached = await cachePost.get(CACHE_KEY);
+//     const parsed = safeJsonParse(cached);
+//     if (parsed) {
+//       return res.status(200).json({ source: "cache", data: parsed });
+//     }
+
+//     // fetch liked posts
+//     const [rows] = await pool.query(
+//       `SELECT 
+//         p.id, p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color,
+//         p.created_at, p.user_id,
+//         u.username, u.avatar_url,
+//         COALESCE(c.title, cf.title, q.title) as title,
+//         COALESCE(c.media_url, cf.media_url, q.media_url) as mediaSrc
+//       FROM post_likes pl
+//       JOIN posts p ON pl.post_id = p.id
+//       JOIN users u ON p.user_id = u.id
+//       LEFT JOIN content c ON p.id = c.post_id
+//       LEFT JOIN confession cf ON p.id = cf.post_id
+//       LEFT JOIN question q ON p.id = q.post_id
+//       WHERE pl.user_id = ?
+//       ORDER BY pl.created_at DESC`,
+//       [userId]
+//     );
+
+//     const result = rows.map(r => ({
+//       id: r.id,
+//       title: r.title,
+//       author: r.is_anonymous ? r.anonymous_name : r.username,
+//       authurPf: r.is_anonymous ? null : r.avatar_url,
+//       isAnonymous: r.is_anonymous,
+//       anonymousBg: r.anonymous_bg_color,
+//       mediaSrc: r.mediaSrc,
+//       createdAt: timeAgo(r.created_at)
+//     }));
+
+//     // cache for 5 minutes
+//     await cachePost.set(CACHE_KEY, JSON.stringify(result), { EX: 300 });
+
+//     return res.status(200).json({ source: "db", data: result });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
 
 
 
