@@ -1766,7 +1766,8 @@ const getPostByUserId = async (req, res) => {
       page,
       limit,
       hasMore: rows.length === limit,
-      data: rows
+      data: rows,
+      createdAt: timeAgo(rows[0].created_at)
     });
 
   } catch (err) {
@@ -1778,7 +1779,61 @@ const getPostByUserId = async (req, res) => {
   }
 };
 
+const markQuestionSolved = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { postId } = req.params;
 
+    // verify ownership first
+    const [owned] = await pool.query(
+      `
+      SELECT id
+      FROM posts
+      WHERE
+        id = ?
+        AND user_id = ?
+        AND post_type = 'question'
+      LIMIT 1
+      `,
+      [postId, userId]
+    );
+
+    if (!owned.length) {
+      return res.status(404).json({
+        message: "Question not found"
+      });
+    }
+
+    const [result] = await pool.query(
+      `
+      UPDATE question
+      SET status = 'solved'
+      WHERE
+        post_id = ?
+        AND status != 'solved'
+      `,
+      [postId]
+    );
+
+   
+    if (!result.affectedRows) {
+      return res.status(400).json({
+        message: "Question already solved"
+      });
+    }
+
+    return res.status(200).json({
+      message: "Question marked as solved"
+    });
+
+  } catch (err) {
+    console.error("markQuestionSolved:", err);
+
+    return res.status(500).json({
+      message: "Server error"
+    });
+  }
+};
 
 module.exports = {
 
@@ -1793,7 +1848,8 @@ module.exports = {
   favoritePost,
   getPostsByLike,
   getPostsByFavorite,
-  getPostByUserId
+  getPostByUserId,
+  markQuestionSolved
  
 };
 

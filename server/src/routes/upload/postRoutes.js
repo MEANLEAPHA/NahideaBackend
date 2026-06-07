@@ -12,7 +12,8 @@ const {
   favoritePost,
   getPostsByLike,
   getPostsByFavorite,
-  getPostByUserId
+  getPostByUserId,
+   markQuestionSolved
 
 } = require("../../controllers/upload/postController");
 const {
@@ -59,6 +60,11 @@ router.post("/create-posts", protect,
 
 router.get("/posts/likes", protect, getPostsByLike);
 router.get("/posts/favorites", protect, getPostsByFavorite);
+router.patch(
+  "/posts/:postId/solve",
+  protect,
+  markQuestionSolved
+);
 
 // router.post("/:id/comments", protect, addComment);
 // router.post("/:id/vote", protect, vote); 
