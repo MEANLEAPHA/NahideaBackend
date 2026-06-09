@@ -41,17 +41,73 @@ const recordLogin = async (req, res) => {
 };
 
 
+// const getHallOfFame = async (req, res) => {
+//   try {
+//     const today = new Date().toISOString().split("T")[0];
+//     const currentMonth = today.slice(0, 7).replace("-", "");
+//     const redisKey = `hof:month:${currentMonth}`;
+
+//     // Get top 10 users from Redis (descending order)
+//     const topUsers = await ranking.zRangeWithScores(redisKey, 0, 9, { REV: true });
+
+//     if (topUsers.length === 0) {
+//       return res.json({ items: [] });
+//     }
+
+//     // Collect userIds
+//     const userIds = topUsers.map(u => parseInt(u.value, 10));
+
+//     // Fetch user info from DB
+//     const [rows] = await pool.query(
+//       `SELECT id, username, avatar_url, profession
+//        FROM users
+//        WHERE id IN (?)`,
+//       [userIds]
+//     );
+
+//     // Map results back to Redis order
+//     const items = topUsers.map((u, index) => {
+//       const user = rows.find(r => r.id === parseInt(u.value, 10));
+//       return {
+//         userId: parseInt(u.value, 10),
+//         username: user?.username || "Unknown",
+//         avatar_url: user?.avatar_url || null,
+//         profession: user?.profession || "N/A",
+//         score: u.score,
+//         rank: index + 1,
+//       };
+//     });
+
+//     res.json({ items });
+//   } catch (err) {
+//     console.error("Error fetching Hall of Fame:", err.message);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// };
+
 const getHallOfFame = async (req, res) => {
   try {
+    // Pagination parameters (default page=1, limit=20)
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+
     const today = new Date().toISOString().split("T")[0];
     const currentMonth = today.slice(0, 7).replace("-", "");
     const redisKey = `hof:month:${currentMonth}`;
 
-    // Get top 10 users from Redis (descending order)
-    const topUsers = await ranking.zRangeWithScores(redisKey, 0, 9, { REV: true });
+    // Get total count of users in the sorted set
+    const total = await ranking.zCard(redisKey);
+    if (total === 0) {
+      return res.json({ items: [], total: 0, page, limit, totalPages: 0 });
+    }
+
+    // Get a slice of top users (descending order) with pagination
+    // zRangeWithScores: start = offset, stop = offset + limit - 1
+    const topUsers = await ranking.zRangeWithScores(redisKey, offset, offset + limit - 1, { REV: true });
 
     if (topUsers.length === 0) {
-      return res.json({ items: [] });
+      return res.json({ items: [], total, page, limit, totalPages: Math.ceil(total / limit) });
     }
 
     // Collect userIds
@@ -65,8 +121,8 @@ const getHallOfFame = async (req, res) => {
       [userIds]
     );
 
-    // Map results back to Redis order
-    const items = topUsers.map((u, index) => {
+    // Map results back to Redis order (preserve ranking)
+    const items = topUsers.map((u, idx) => {
       const user = rows.find(r => r.id === parseInt(u.value, 10));
       return {
         userId: parseInt(u.value, 10),
@@ -74,18 +130,17 @@ const getHallOfFame = async (req, res) => {
         avatar_url: user?.avatar_url || null,
         profession: user?.profession || "N/A",
         score: u.score,
-        rank: index + 1,
+        rank: offset + idx + 1,   // absolute rank
       };
     });
 
-    res.json({ items });
+    const totalPages = Math.ceil(total / limit);
+    res.json({ items, total, page, limit, totalPages });
   } catch (err) {
     console.error("Error fetching Hall of Fame:", err.message);
     res.status(500).json({ error: "Server error" });
   }
 };
-
-
 const getTrendingPost = async (req, res) => {
    try{
     

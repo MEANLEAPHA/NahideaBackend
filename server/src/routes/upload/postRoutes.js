@@ -5,6 +5,8 @@ const {
   createPost,
   // markSolved,
   getAllPosts,
+  getAllTrending,
+  getUnsolvedQuestions,
   getPostsById,
   updatePostBodyContent,
   deletePost,
@@ -13,7 +15,7 @@ const {
   getPostsByLike,
   getPostsByFavorite,
   getPostByUserId,
-   markQuestionSolved
+  markQuestionSolved
 
 } = require("../../controllers/upload/postController");
 const {
@@ -40,7 +42,11 @@ router.post("/create-posts", protect,
   ]),
   createPost);
 
-  router.get("/all-posts", protect ,getAllPosts);
+  router.get("/all-posts", protect, getAllPosts);
+
+  router.get("/all-trending", protect, getAllTrending);
+
+  router.get("/questions/unsolved", protect, getUnsolvedQuestions);
 
   router.get("/get-post/:id", getPostsById);
 

@@ -575,6 +575,185 @@ const getAllPosts = async (req, res) => {
     });
   }
 };
+
+// ================================
+// GET TRENDING POSTS (top 10)
+// ================================
+const getAllTrending = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const TRENDING_KEY = "trending:posts";
+    const TRENDING_TTL = 180; // seconds
+
+    // 1. Check cache for hydrated posts (no user states)
+    const cached = await cachePost.get(TRENDING_KEY);
+    if (cached) {
+      const posts = safeJsonParse(cached);
+      if (posts && posts.length) {
+        const personalized = await attachUserStates(posts, userId);
+        console.log("TRENDING CACHE HIT");
+        return res.status(200).json({
+          source: "cache",
+          data: personalized,
+        });
+      }
+    }
+
+    // 2. Fetch from database – top 10 by score
+    const [rows] = await pool.query(`
+      SELECT
+        p.id,
+        p.post_type,
+        p.is_anonymous,
+        p.anonymous_name,
+        p.anonymous_bg_color,
+        p.likes_count,
+        p.comments_count,
+        p.views_count,
+        p.created_at,
+        p.status,
+        p.user_id,
+        u.username,
+        u.avatar_url,
+        u.id as user_id,
+        GROUP_CONCAT(tg.label) as tags,
+        (p.likes_count + p.comments_count + p.views_count) as score
+      FROM posts p
+      JOIN users u ON p.user_id = u.id
+      LEFT JOIN post_tags pt ON pt.post_id = p.id
+      LEFT JOIN tags tg ON tg.id = pt.tag_id
+      GROUP BY p.id
+      ORDER BY score DESC
+      LIMIT 10
+    `);
+
+    if (!rows.length) {
+      return res.status(200).json({
+        source: "db",
+        data: [],
+      });
+    }
+
+    // 3. Hydrate posts (content/confession/question specific data)
+    const ids = rows.map((p) => p.id);
+    const hydratedPosts = await hydratePostsFromDb(ids, rows);
+
+    // 4. Cache the hydrated posts (without user states)
+    await cachePost.set(TRENDING_KEY, JSON.stringify(hydratedPosts), {
+      EX: TRENDING_TTL,
+    });
+
+    // 5. Attach user‑specific flags (liked/favorited) and respond
+    const personalized = await attachUserStates(hydratedPosts, userId);
+    console.log("TRENDING DB HIT");
+    return res.status(200).json({
+      source: "db",
+      data: personalized,
+    });
+  } catch (err) {
+    console.error("getAllTrending error:", err);
+    return res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
+// ================================
+// GET UNSOLVED QUESTIONS
+// ================================
+const getUnsolvedQuestions = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    // Optional: pagination (default page 1, limit 50)
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const offset = (page - 1) * limit;
+
+    // Cache key (include page, but not user-specific)
+    const CACHE_KEY = `unsolved_questions:page:${page}:limit:${limit}`;
+    const CACHE_TTL = 60; // 1 minute – short because status can change
+
+    // 1. Try cache (hydrated posts without user states)
+    const cached = await cachePost.get(CACHE_KEY);
+    if (cached) {
+      const posts = safeJsonParse(cached);
+      if (posts && posts.length) {
+        const personalized = await attachUserStates(posts, userId);
+        console.log("UNSOLVED QUESTIONS CACHE HIT");
+        return res.status(200).json({
+          source: "cache",
+          data: personalized,
+        });
+      }
+    }
+
+    // 2. Fetch from database – only unsolved questions (status = 'open')
+    const [rows] = await pool.query(`
+      SELECT
+        p.id,
+        p.post_type,
+        p.is_anonymous,
+        p.anonymous_name,
+        p.anonymous_bg_color,
+        p.likes_count,
+        p.comments_count,
+        p.views_count,
+        p.created_at,
+        p.status as post_status,
+        p.user_id,
+        u.username,
+        u.avatar_url,
+        GROUP_CONCAT(tg.label) as tags,
+        q.id as question_id,
+        q.question_type,
+        q.status as question_status,
+        q.type,
+        q.cate_icon,
+        q.title,
+        q.media_url
+      FROM posts p
+      JOIN users u ON p.user_id = u.id
+      JOIN question q ON q.post_id = p.id   -- link to question details
+      LEFT JOIN post_tags pt ON pt.post_id = p.id
+      LEFT JOIN tags tg ON tg.id = pt.tag_id
+      WHERE p.post_type = 'question'
+        AND q.status = 'open'               -- unsolved
+      GROUP BY p.id
+      ORDER BY p.created_at DESC
+      LIMIT ? OFFSET ?
+    `, [limit, offset]);
+
+    if (!rows.length) {
+      return res.status(200).json({
+        source: "db",
+        data: [],
+      });
+    }
+
+    // 3. Hydrate posts (this will add the rich `data` object for each question type)
+    const ids = rows.map((r) => r.id);
+    const hydratedPosts = await hydratePostsFromDb(ids, rows);
+
+    // 4. Cache the hydrated results (without user flags)
+    await cachePost.set(CACHE_KEY, JSON.stringify(hydratedPosts), {
+      EX: CACHE_TTL,
+    });
+
+    // 5. Attach user‑specific flags (liked / favorited) and respond
+    const personalized = await attachUserStates(hydratedPosts, userId);
+    console.log("UNSOLVED QUESTIONS DB HIT");
+    return res.status(200).json({
+      source: "db",
+      data: personalized,
+    });
+
+  } catch (err) {
+    console.error("getUnsolvedQuestions error:", err);
+    return res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
 async function attachUserStates(posts, userId) {
 
   const postIds = posts.map(p => p.id);
@@ -623,82 +802,7 @@ async function attachUserStates(posts, userId) {
       favoriteSet.has(post.id)
   }));
 }
-// async function updateCachedPostLike(postId, isLike) {
 
-//   try {
-
-//     const cached = await cachePost.get(`post:${postId}`);
-
-//     if (!cached) return;
-
-//     const parsed = safeJsonParse(cached);
-
-//     if (!parsed) return;
-
-//     parsed.likes_count = isLike
-//       ? parsed.likes_count + 1
-//       : Math.max(parsed.likes_count - 1, 0);
-
-//       console.log("TTL:", ttl);
-//       console.log("Before:", parsed.likes_count);
-
-//     const ttl = await cachePost.ttl(`post:${postId}`);
-
-//     const result = await cachePost.set(
-//       `post:${postId}`,
-//       JSON.stringify(parsed),
-//       ttl > 0 ? { EX: ttl } : {}
-//     );
-//         console.log(result);
-
-//   } catch (err) {
-
-//     console.error("updateCachedPostLike error:", err);
-
-//   }
-// }
-async function updateCachedPostLike(postId, isLike) {
-
-  try {
-
-    const key = `post:${postId}`;
-
-    const cached = await cachePost.get(key);
-
-    if (!cached) return;
-
-    const parsed = safeJsonParse(cached);
-
-    if (!parsed) return;
-
-    // update count
-    parsed.likes_count = isLike
-      ? parsed.likes_count + 1
-      : Math.max(parsed.likes_count - 1, 0);
-
-    // get current ttl
-    const ttl = await cachePost.ttl(key);
-
-    console.log("TTL:", ttl);
-    console.log("Updated likes_count:", parsed.likes_count);
-
-    // preserve remaining ttl
-    const result = await cachePost.set(
-      key,
-      JSON.stringify(parsed),
-      ttl > 0
-        ? { EX: ttl }
-        : {}
-    );
-
-    console.log("Redis SET result:", result);
-
-  } catch (err) {
-
-    console.error("updateCachedPostLike error:", err);
-
-  }
-}
 // ================================
 // HYDRATE POSTS
 // ================================
@@ -963,6 +1067,84 @@ async function hydratePostsFromDb(ids, basePosts = null) {
       data
     };
   });
+}
+
+// async function updateCachedPostLike(postId, isLike) {
+
+//   try {
+
+//     const cached = await cachePost.get(`post:${postId}`);
+
+//     if (!cached) return;
+
+//     const parsed = safeJsonParse(cached);
+
+//     if (!parsed) return;
+
+//     parsed.likes_count = isLike
+//       ? parsed.likes_count + 1
+//       : Math.max(parsed.likes_count - 1, 0);
+
+//       console.log("TTL:", ttl);
+//       console.log("Before:", parsed.likes_count);
+
+//     const ttl = await cachePost.ttl(`post:${postId}`);
+
+//     const result = await cachePost.set(
+//       `post:${postId}`,
+//       JSON.stringify(parsed),
+//       ttl > 0 ? { EX: ttl } : {}
+//     );
+//         console.log(result);
+
+//   } catch (err) {
+
+//     console.error("updateCachedPostLike error:", err);
+
+//   }
+// }
+
+async function updateCachedPostLike(postId, isLike) {
+
+  try {
+
+    const key = `post:${postId}`;
+
+    const cached = await cachePost.get(key);
+
+    if (!cached) return;
+
+    const parsed = safeJsonParse(cached);
+
+    if (!parsed) return;
+
+    // update count
+    parsed.likes_count = isLike
+      ? parsed.likes_count + 1
+      : Math.max(parsed.likes_count - 1, 0);
+
+    // get current ttl
+    const ttl = await cachePost.ttl(key);
+
+    console.log("TTL:", ttl);
+    console.log("Updated likes_count:", parsed.likes_count);
+
+    // preserve remaining ttl
+    const result = await cachePost.set(
+      key,
+      JSON.stringify(parsed),
+      ttl > 0
+        ? { EX: ttl }
+        : {}
+    );
+
+    console.log("Redis SET result:", result);
+
+  } catch (err) {
+
+    console.error("updateCachedPostLike error:", err);
+
+  }
 }
 const likePost = async (req, res) => {
   const connection = await pool.getConnection();
@@ -1838,10 +2020,10 @@ const markQuestionSolved = async (req, res) => {
 module.exports = {
 
   createPost,
-  // markSolved,
   upload,
   getAllPosts,
   getPostsById,
+  getUnsolvedQuestions,
   updatePostBodyContent,
   deletePost,
   likePost,
@@ -1849,7 +2031,8 @@ module.exports = {
   getPostsByLike,
   getPostsByFavorite,
   getPostByUserId,
-  markQuestionSolved
+  markQuestionSolved,
+  getAllTrending
  
 };
 

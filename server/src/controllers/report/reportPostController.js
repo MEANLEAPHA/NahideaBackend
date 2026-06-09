@@ -66,4 +66,52 @@ const createReport = async (req, res) => {
   }
 };
 
-module.exports = {createReport};
+const getSentimentFromScore = (score, type) => {
+    if (type === 'nps') {
+        if (score >= 9) return 'positive';
+        if (score >= 7) return 'neutral';
+        return 'negative';
+    } else if (type === 'csat') {
+        if (score >= 4) return 'positive';
+        if (score === 3) return 'neutral';
+        return 'negative';
+    }
+    return null;
+};
+
+// POST /api/feedback - Submit new feedback
+const submitFeedback = async (req, res) => {
+    try {
+        const { feedback_type, score, category, message, page_url } = req.body;
+        const user_id = req.user.userId || null; // If user is logged in
+
+        // Validation
+        if (!feedback_type || !['nps', 'csat', 'general'].includes(feedback_type)) {
+            return res.status(400).json({ error: 'Invalid feedback type' });
+        }
+        
+        if (feedback_type !== 'general' && (score === undefined || score === null)) {
+            return res.status(400).json({ error: 'Score is required for this feedback type' });
+        }
+
+        // Calculate sentiment if score exists
+        const sentiment = score !== undefined ? getSentimentFromScore(score, feedback_type) : null;
+
+        const [result] = await pool.query(
+            `INSERT INTO user_feedback (user_id, feedback_type, score, sentiment, category, message, page_url) 
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [user_id, feedback_type, score, sentiment, category || null, message?.trim() || null, page_url || null]
+        );
+
+        res.status(201).json({ 
+            success: true, 
+            id: result.insertId, 
+            message: 'Thank you for your feedback! Your insights help us build a better product.' 
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
+};
+
+module.exports = {createReport, submitFeedback};
