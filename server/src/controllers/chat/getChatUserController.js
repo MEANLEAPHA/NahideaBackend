@@ -415,6 +415,33 @@ const searchGif = async (req, res) => {
   }
 };
 
+const searchGifFav = async (req, res) => {
+  const userId = req.user.userId;
+  const { q } = req.query;
+
+  try {
+    let query = `
+      SELECT gifs.*
+      FROM gifs
+      INNER JOIN fav_gifs ON gifs.id = fav_gifs.gif_id
+      WHERE fav_gifs.user_id = ?
+    `;
+    let params = [userId];
+
+    if (q) {
+      query += ` AND (gifs.gif_label LIKE ? OR gifs.gif_name LIKE ?)`;
+      params.push(`%${q}%`, `%${q}%`);
+    }
+
+    query += ` ORDER BY gifs.id DESC LIMIT 50`;
+
+    const [rows] = await db.execute(query, params);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 const getUnreadChatCount = async (req, res) => {
   const currentUserId = req.user.userId;
 
@@ -447,4 +474,5 @@ const getUnreadChatCount = async (req, res) => {
     });
   }
 };
-module.exports = { getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage, searchGif, reportConversation, getChatSpamUser, getChatArchivedUser, openConversation, getUnreadChatCount };
+module.exports = { getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage,
+   searchGif, reportConversation, getChatSpamUser, getChatArchivedUser, openConversation, getUnreadChatCount, searchGifFav };
