@@ -18,7 +18,7 @@ router.get("/get-chat-spam-user", protect, getChatSpamUser);
 router.get("/get-chat-archived-user", protect, getChatArchivedUser);
 router.put("/open-conversation/:otherUserId", protect, openConversation);
 router.get("/search-gif", searchGif);
-router.get("/search-gif-fav", searchGifFav);
+router.get("/search-gif-fav", protect, searchGifFav);
 router.get(
   "/chat/unread-count",
   protect,
