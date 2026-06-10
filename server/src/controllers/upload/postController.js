@@ -664,16 +664,14 @@ const getAllTrending = async (req, res) => {
 const getUnsolvedQuestions = async (req, res) => {
   try {
     const userId = req.user.userId;
-    // Optional: pagination (default page 1, limit 50)
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(parseInt(req.query.limit) || 50, 100);
     const offset = (page - 1) * limit;
 
-    // Cache key (include page, but not user-specific)
     const CACHE_KEY = `unsolved_questions:page:${page}:limit:${limit}`;
-    const CACHE_TTL = 60; // 1 minute – short because status can change
+    const CACHE_TTL = 60;
 
-    // 1. Try cache (hydrated posts without user states)
+    // 1. Try cache
     const cached = await cachePost.get(CACHE_KEY);
     if (cached) {
       const posts = safeJsonParse(cached);
@@ -687,7 +685,7 @@ const getUnsolvedQuestions = async (req, res) => {
       }
     }
 
-    // 2. Fetch from database – only unsolved questions (status = 'open')
+    // 2. Fetch from database - only unsolved questions (status = 'open')
     const [rows] = await pool.query(`
       SELECT
         p.id,
@@ -703,7 +701,7 @@ const getUnsolvedQuestions = async (req, res) => {
         p.user_id,
         u.username,
         u.avatar_url,
-        GROUP_CONCAT(tg.label) as tags,
+        GROUP_CONCAT(DISTINCT tg.label) as tags,
         q.id as question_id,
         q.question_type,
         q.status as question_status,
@@ -713,12 +711,12 @@ const getUnsolvedQuestions = async (req, res) => {
         q.media_url
       FROM posts p
       JOIN users u ON p.user_id = u.id
-      JOIN question q ON q.post_id = p.id   -- link to question details
+      JOIN question q ON q.post_id = p.id   
       LEFT JOIN post_tags pt ON pt.post_id = p.id
       LEFT JOIN tags tg ON tg.id = pt.tag_id
       WHERE p.post_type = 'question'
-        AND q.status = 'open'               -- unsolved
-      GROUP BY p.id
+        AND q.status = 'open'               
+      GROUP BY p.id, q.id
       ORDER BY p.created_at DESC
       LIMIT ? OFFSET ?
     `, [limit, offset]);
@@ -730,16 +728,16 @@ const getUnsolvedQuestions = async (req, res) => {
       });
     }
 
-    // 3. Hydrate posts (this will add the rich `data` object for each question type)
+    // 3. Hydrate posts (adds rich `data` object for each question type)
     const ids = rows.map((r) => r.id);
     const hydratedPosts = await hydratePostsFromDb(ids, rows);
 
-    // 4. Cache the hydrated results (without user flags)
+    // 4. Cache the hydrated results
     await cachePost.set(CACHE_KEY, JSON.stringify(hydratedPosts), {
       EX: CACHE_TTL,
     });
 
-    // 5. Attach user‑specific flags (liked / favorited) and respond
+    // 5. Attach user-specific flags
     const personalized = await attachUserStates(hydratedPosts, userId);
     console.log("UNSOLVED QUESTIONS DB HIT");
     return res.status(200).json({
