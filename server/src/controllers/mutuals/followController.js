@@ -488,7 +488,7 @@ const unfollowUser = async (req, res) => {
     const followerId = req.user.userId;
 
     const followingId = req.params.userId;
-
+  console.log('Unfollow request:', { followerId, followingId }); // Add this
     const connection = await pool.getConnection();
 
     try {
@@ -556,8 +556,10 @@ const unfollowUser = async (req, res) => {
 
         await connection.rollback();
 
+         console.error('Full error details:', err); // Add this
         return res.status(500).json({
-            message: err.message
+            message: err.message,
+            details: err.sqlMessage || err.toString() // More details
         });
 
     } finally {
