@@ -4,7 +4,7 @@ const {protect} = require("../../middleware/authMiddleware");
 
 const {
     getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage, searchGif, reportConversation,getChatSpamUser,
-    getChatArchivedUser, openConversation, getUnreadChatCount, searchGifFav
+    getChatArchivedUser, openConversation, getUnreadChatCount, searchGifFav, checkConversation
 } = require("../../controllers/chat/getChatUserController");
 
 
@@ -24,5 +24,6 @@ router.get(
   protect,
   getUnreadChatCount
 );
+app.post('/conversations/get-or-create', protect, checkConversation);
 
 module.exports = router;

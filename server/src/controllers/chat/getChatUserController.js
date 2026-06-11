@@ -474,5 +474,33 @@ const getUnreadChatCount = async (req, res) => {
     });
   }
 };
-module.exports = { getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage,
+
+const checkConversation = async (req, res) => {
+  const { otherUserId } = req.body;
+  const currentUserId = req.user.userId;
+  
+  // Check if conversation exists
+  let conversation = await db.query(
+    `SELECT * FROM conversations 
+     WHERE (user1_id = ? AND user2_id = ?) 
+        OR (user1_id = ? AND user2_id = ?)`,
+    [currentUserId, otherUserId, otherUserId, currentUserId]
+  );
+  
+  if (conversation.length === 0) {
+    // Create new conversation
+    const result = await db.query(
+      `INSERT INTO conversations (user1_id, user2_id, created_at) 
+       VALUES (?, ?, NOW())`,
+      [currentUserId, otherUserId]
+    );
+    conversation = { id: result.insertId, user1_id: currentUserId, user2_id: otherUserId };
+  }
+  
+  res.json({ 
+    id: conversation[0].id,
+    user_id: otherUserId 
+  });
+};
+module.exports = { getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage,checkConversation,
    searchGif, reportConversation, getChatSpamUser, getChatArchivedUser, openConversation, getUnreadChatCount, searchGifFav };
