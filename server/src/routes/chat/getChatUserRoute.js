@@ -24,6 +24,6 @@ router.get(
   protect,
   getUnreadChatCount
 );
-app.post('/conversations/get-or-create', protect, checkConversation);
+router.post('/conversations/get-or-create', protect, checkConversation);
 
 module.exports = router;
