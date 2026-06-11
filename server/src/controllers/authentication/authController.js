@@ -586,56 +586,59 @@ const getUserInfo = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
-const getUserInfoById = async (req, res) => {
+// const getUserInfoById = async (req, res) => {
 
-  try {
+//   try {
 
-    const userId =
-      req.params.userId;
+//     const userId =
+//       req.params.userId;
 
-    const [rows] =
-      await pool.query(
-        `
-        SELECT
-          username,
-          avatar_url,
-          id,
-          nickname,
-          profession,
-          work_place,
-          bio
-        FROM users
-        WHERE id = ?
-        `,
-        [userId]
-      );
+//     const [rows] =
+//       await pool.query(
+//         `
+//         SELECT
+//           username,
+//           avatar_url,
+//           id,
+//           nickname,
+//           profession,
+//           work_place,
+//           bio,
+//           created_at,
+//           followers_count,
+//           following_count
+//         FROM users
+//         WHERE id = ?
+//         `,
+//         [userId]
+//       );
 
-    if (!rows.length) {
+//     if (!rows.length) {
 
-      return res.status(404).json({
-        message: "User not found"
-      });
+//       return res.status(404).json({
+//         message: "User not found"
+//       });
 
-    }
+//     }
 
-    return res.status(200).json({
-      userData: rows[0]
-    });
+//     return res.status(200).json({
+//       userData: rows[0]
+//     });
 
-  } catch (err) {
+//   } catch (err) {
 
-    console.error(
-      "Error in getUserInfo:",
-      err
-    );
+//     console.error(
+//       "Error in getUserInfo:",
+//       err
+//     );
 
-    return res.status(500).json({
-      message: "Server error"
-    });
+//     return res.status(500).json({
+//       message: "Server error"
+//     });
 
-  }
+//   }
 
-};
+// };
 const updateUser = async (
   req,
   res
@@ -735,7 +738,49 @@ const updateUser = async (
     });
   }
 };
+const getUserInfoById = async (req, res) => {
+  try {
+    const userId = req.params.userId;
 
+    const [rows] = await pool.query(
+      `
+      SELECT 
+        u.username,
+        u.avatar_url,
+        u.id,
+        u.nickname,
+        u.profession,
+        u.work_place,
+        u.bio,
+        u.created_at,
+        u.followers_count,
+        u.following_count,
+        COUNT(p.id) as post_count
+      FROM users u
+      LEFT JOIN posts p ON u.id = p.user_id
+      WHERE u.id = ?
+      GROUP BY u.id
+      `,
+      [userId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({
+        message: "User not found"
+      });
+    }
+
+    return res.status(200).json({
+      userData: rows[0]
+    });
+
+  } catch (err) {
+    console.error("Error in getUserInfo:", err);
+    return res.status(500).json({
+      message: "Server error"
+    });
+  }
+};
 module.exports = {
     login,
     register,

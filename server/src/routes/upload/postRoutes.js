@@ -3,7 +3,6 @@ const { protect } = require("../../middleware/authMiddleware");
 
 const {
   createPost,
-  // markSolved,
   getAllPosts,
   getAllTrending,
   getUnsolvedQuestions,
@@ -15,16 +14,14 @@ const {
   getPostsByLike,
   getPostsByFavorite,
   getPostByUserId,
-  markQuestionSolved
+  markQuestionSolved,
+  getPostsByPostId
 
 } = require("../../controllers/upload/postController");
 const {
   content,
   upload
 } = require("../../controllers/upload/contentController");
-
-// const { addComment } = require("../../controllers/upload/commentController");
-// const { vote } = require("../../controllers/upload/voteController");
 
 const { likeLimiter } = require("../../middleware/rateLimiter");
 
@@ -50,6 +47,8 @@ router.post("/create-posts", protect,
 
   router.get("/get-post/:id", protect, getPostsById);
 
+  router.get("/get-posts/:postId", protect, getPostsByPostId);
+
   router.get("/user/:userId/posts", protect, getPostByUserId);
 
   router.put("/update-post-body-content/:contentId/:postId", protect, updatePostBodyContent);
@@ -72,10 +71,4 @@ router.patch(
   markQuestionSolved
 );
 
-// router.post("/:id/comments", protect, addComment);
-// router.post("/:id/vote", protect, vote); 
-// router.patch("/:id/solve", protect, markSolved);
-
-
-// router.post("/create/content", upload.array("media", 5), content);
 module.exports = router;

@@ -1709,7 +1709,85 @@ function timeAgo(date){
   if (months < 12)  return `${months} month${months > 1 ? "s" : ""} ago`;
   return `${years} year${years > 1 ? "s" : ""} ago`;
 }
+// ================================
+// GET POST BY POST ID (FULL DATA)
+// ================================
+const getPostsByPostId = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const postId = req.params.postId;
+    const CACHE_KEY = `post:${postId}`; 
+    
+    const cached = await cachePost.get(CACHE_KEY);
+    const parsed = safeJsonParse(cached);
 
+    if (parsed) {
+      // Attach user states to cached post (important!)
+      const personalized = await attachUserStates([parsed], userId);
+      return res.status(200).json({
+        source: "cache",
+        data: personalized[0]
+      });
+    }
+
+    const [posts] = await pool.query(`
+      SELECT
+        p.id,
+        p.post_type,
+        p.is_anonymous,
+        p.anonymous_name,
+        p.anonymous_bg_color,
+        p.likes_count,
+        p.comments_count,
+        p.views_count,
+        p.created_at,
+        p.status,
+        u.username,
+        u.avatar_url,
+        u.id as user_id,
+        GROUP_CONCAT(tg.label) as tags
+      FROM posts p
+      JOIN users u ON p.user_id = u.id
+      LEFT JOIN post_tags pt ON pt.post_id = p.id
+      LEFT JOIN tags tg ON tg.id = pt.tag_id
+      WHERE p.id = ?
+      GROUP BY p.id
+    `, [postId]);
+
+    if (!posts.length) {
+      return res.status(404).json({
+        message: "Post not found"
+      });
+    }
+
+    const ids = posts.map(p => p.id);
+    const hydratedPosts = await hydratePostsFromDb(ids, posts);
+    
+
+    const personalized = await attachUserStates(hydratedPosts, userId);
+
+    const post = personalized[0];
+
+    const postToCache = {
+      ...post,
+      is_liked: undefined,
+      is_favorited: undefined
+    };
+    
+    await cachePost.set(CACHE_KEY, JSON.stringify(postToCache), { EX: 300 });
+
+    return res.status(200).json({
+      source: "db",
+      data: post,
+    });
+
+  } catch (err) {
+    console.error("getPostsByPostId error:", err);
+    return res.status(500).json({
+      message: "Server error"
+    });
+  }
+};
 // controllers/postController.js
 const getPostsByLike = async (req, res) => {
   try {
@@ -2012,8 +2090,8 @@ module.exports = {
   getPostsByFavorite,
   getPostByUserId,
   markQuestionSolved,
-  getAllTrending
- 
+  getAllTrending,
+  getPostsByPostId
 };
 
 // async function attachLikeState(posts, userId) {
