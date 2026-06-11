@@ -1557,10 +1557,10 @@ const updatePostBodyContent = async (req, res) => {
 };
 
 const getPostsById = async(req, res)=>{
-
+  const userId = req.user.userId;
   try{
     const {id} = req.params;
-    const CACHE_KEY = `post:${id}`; // align with layered cache naming
+    const CACHE_KEY = `post:${id}`; 
     const cached = await cachePost.get(CACHE_KEY);
 
    const parsed = safeJsonParse(cached);
@@ -1872,93 +1872,75 @@ const getPostsByFavorite = async (req, res) => {
 
 //   res.json({ message: "Marked as solved" });
 // };
-
-
+// ================================
+// GET POSTS BY USER ID (EXCLUDES ANONYMOUS POSTS)
+// ================================
 const getPostByUserId = async (req, res) => {
   try {
     const userId = req.user.userId;
-
-    const page = parseInt(req.query.page, 10) || 1;
+    const targetUserId = req.params.userId;
+    const page = Math.max(1, Math.min(parseInt(req.query.page) || 1, 1000));
     const limit = 25;
     const offset = (page - 1) * limit;
 
-    const [rows] = await pool.query(
-      `
+    // ====================================
+    // FETCH FROM DATABASE
+    // ====================================
+    const [posts] = await pool.query(`
       SELECT
         p.id,
         p.post_type,
-
         p.is_anonymous,
         p.anonymous_name,
         p.anonymous_bg_color,
-
         p.likes_count,
         p.comments_count,
         p.views_count,
-
         p.created_at,
-
+        p.status,
         u.username,
         u.avatar_url,
-
-        COALESCE(
-          c.title,
-          cf.title,
-          q.title
-        ) AS title,
-
-        COALESCE(
-          c.media_url,
-          cf.media_url,
-          q.media_url
-        ) AS media_url,
-
-        q.status AS question_status
-
+        u.id as user_id,
+        GROUP_CONCAT(tg.label) as tags
       FROM posts p
-
-      JOIN users u
-        ON p.user_id = u.id
-
-      LEFT JOIN content c
-        ON p.id = c.post_id
-
-      LEFT JOIN confession cf
-        ON p.id = cf.post_id
-
-      LEFT JOIN question q
-        ON p.id = q.post_id
-
-      WHERE
-        p.user_id = ?
-        AND p.is_deleted = 0
-
+      JOIN users u ON p.user_id = u.id
+      LEFT JOIN post_tags pt ON pt.post_id = p.id
+      LEFT JOIN tags tg ON tg.id = pt.tag_id
+      WHERE p.user_id = ?
+        AND p.is_anonymous = 0
+      GROUP BY p.id
       ORDER BY p.created_at DESC
+      LIMIT ? OFFSET ?
+    `, [targetUserId || userId, limit, offset]);
 
-      LIMIT ?
-      OFFSET ?
-      `,
-      [userId, limit, offset]
-    );
+    if (!posts.length) {
+      return res.status(200).json({
+        source: "db",
+        data: []
+      });
+    }
+
+    // Hydrate posts with their specific data
+    const ids = posts.map(p => p.id);
+    const hydratedPosts = await hydratePostsFromDb(ids, posts);
+
+    // Attach user states (liked/favorited)
+    const personalized = await attachUserStates(hydratedPosts, userId);
+
+    console.log(`USER POSTS FETCHED for user ${targetUserId}`);
 
     return res.status(200).json({
       source: "db",
-      page,
-      limit,
-      hasMore: rows.length === limit,
-      data: rows,
-      createdAt: timeAgo(rows[0].created_at)
+      data: personalized
     });
 
   } catch (err) {
-    console.error(err);
-
+    console.error("getPostByUserId error:", err);
     return res.status(500).json({
       message: "Server error"
     });
   }
 };
-
 const markQuestionSolved = async (req, res) => {
   try {
     const userId = req.user.userId;
