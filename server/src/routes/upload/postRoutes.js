@@ -6,7 +6,7 @@ const {
   getAllPosts,
   getAllTrending,
   getUnsolvedQuestions,
-  getPostsById,
+  // getPostsById,
   updatePostBodyContent,
   deletePost,
   likePost,
@@ -45,7 +45,7 @@ router.post("/create-posts", protect,
 
   router.get("/questions/unsolved", protect, getUnsolvedQuestions);
 
-  router.get("/get-post/:id", protect, getPostsById);
+  // router.get("/get-post/:id", protect, getPostsById);
 
   router.get("/get-posts/:postId", protect, getPostsByPostId);
 

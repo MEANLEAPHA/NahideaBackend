@@ -379,9 +379,6 @@ function safeJsonParse(str) {
   }
 }
 
-// ================================
-// GET ALL POSTS
-// ================================
 const getAllPosts = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -459,7 +456,7 @@ const getAllPosts = async (req, res) => {
         // ====================================
         console.log("PARTIAL CACHE HIT");
 
-        const hydrated = await hydratePostsFromDb(missingIds);
+        const hydrated = await hydratePostsFromDbVone(missingIds);
 
         // cache hydrated posts
         const hydratePipeline = cachePost.multi();
@@ -527,7 +524,7 @@ const getAllPosts = async (req, res) => {
     }
 
     // hydrate
-    const final = await hydratePostsFromDb(
+    const final = await hydratePostsFromDbVone(
       posts.map(p => p.id),
       posts
     );
@@ -576,9 +573,270 @@ const getAllPosts = async (req, res) => {
   }
 };
 
-// ================================
-// GET TRENDING POSTS (top 10)
-// ================================
+async function hydratePostsFromDbVone(ids, basePosts = null) {
+
+  let posts = basePosts;
+
+  // fetch posts if not supplied
+  if (!posts) {
+    const [rows] = await pool.query(`
+      SELECT
+        p.id,
+        p.post_type,
+        p.is_anonymous,
+        p.anonymous_name,
+        p.anonymous_bg_color,
+        p.likes_count,
+        p.comments_count,
+        p.views_count,
+        p.created_at,
+        p.user_id,
+
+        u.username,
+        u.avatar_url,
+
+        GROUP_CONCAT(tg.label) as tags
+
+      FROM posts p
+
+      JOIN users u
+        ON p.user_id = u.id
+
+      LEFT JOIN post_tags pt
+        ON pt.post_id = p.id
+
+      LEFT JOIN tags tg
+        ON tg.id = pt.tag_id
+
+      WHERE p.id IN (?)
+
+      GROUP BY p.id
+
+      ORDER BY FIELD(p.id, ?)
+    `, [ids, ids]);
+
+    posts = rows;
+  }
+
+  // ====================================
+  // SPLIT IDS
+  // ====================================
+  const contentIds = posts
+    .filter(p => p.post_type === "content")
+    .map(p => p.id);
+
+  const confessionIds = posts
+    .filter(p => p.post_type === "confession")
+    .map(p => p.id);
+
+  const questionIds = posts
+    .filter(p => p.post_type === "question")
+    .map(p => p.id);
+
+  // ====================================
+  // FETCH RELATED TABLES
+  // ====================================
+  const [contents] = contentIds.length
+    ? await pool.query(
+        `SELECT type, cate_icon, title, media_url FROM content WHERE post_id IN (?)`,
+        [contentIds]
+      )
+    : [[]];
+
+  const [confessions] = confessionIds.length
+    ? await pool.query(
+        `SELECT type, cate_icon, title, media_url FROM confession WHERE post_id IN (?)`,
+        [confessionIds]
+      )
+    : [[]];
+
+  const [questions] = questionIds.length
+    ? await pool.query(
+        `SELECT type, cate_icon, title, media_url, question_type, id, status FROM question WHERE post_id IN (?)`,
+        [questionIds]
+      )
+    : [[]];
+
+  const qIds = questions.map(q => q.id);
+
+  const [closed] = qIds.length
+    ? await pool.query(
+        `SELECT * FROM closedend WHERE question_id IN (?)`,
+        [qIds]
+      )
+    : [[]];
+
+  const [ranges] = qIds.length
+    ? await pool.query(
+        `SELECT * FROM question_range WHERE question_id IN (?)`,
+        [qIds]
+      )
+    : [[]];
+
+  const [ratings] = qIds.length
+    ? await pool.query(
+        `SELECT * FROM rating WHERE question_id IN (?)`,
+        [qIds]
+      )
+    : [[]];
+
+  const [singleOptions] = qIds.length
+    ? await pool.query(`
+        SELECT sco.*, sc.question_id
+        FROM singlechoice_option sco
+        JOIN singlechoice sc
+          ON sco.singlechoice_id = sc.id
+        WHERE sc.question_id IN (?)
+      `, [qIds])
+    : [[]];
+
+  const [multipleOptions] = qIds.length
+    ? await pool.query(`
+        SELECT
+          mco.*,
+          mc.question_id,
+          mc.include_all_above
+        FROM multiplechoice_option mco
+        JOIN multiplechoice mc
+          ON mco.multiplechoice_id = mc.id
+        WHERE mc.question_id IN (?)
+      `, [qIds])
+    : [[]];
+
+  const [rankingItems] = qIds.length
+    ? await pool.query(`
+        SELECT ri.*, ro.question_id
+        FROM ranking_item ri
+        JOIN rankingorder ro
+          ON ri.ranking_id = ro.id
+        WHERE ro.question_id IN (?)
+      `, [qIds])
+    : [[]];
+
+  // ====================================
+  // MAPS FOR FAST LOOKUP
+  // ====================================
+  const contentMap = new Map(
+    contents.map(c => [c.post_id, c])
+  );
+
+  const confessionMap = new Map(
+    confessions.map(c => [c.post_id, c])
+  );
+
+  const questionMap = new Map(
+    questions.map(q => [q.post_id, q])
+  );
+
+  const closedMap = new Map(
+    closed.map(c => [c.question_id, c])
+  );
+
+  const rangeMap = new Map(
+    ranges.map(r => [r.question_id, r])
+  );
+
+  const ratingMap = new Map(
+    ratings.map(r => [r.question_id, r])
+  );
+
+  // ====================================
+  // BUILD FINAL RESPONSE
+  // ====================================
+  return posts.map(post => {
+
+    let data = null;
+
+    // ====================================
+    // CONTENT
+    // ====================================
+    if (post.post_type === "content") {
+      data = contentMap.get(post.id) || null;
+    }
+
+    // ====================================
+    // CONFESSION
+    // ====================================
+    if (post.post_type === "confession") {
+      data = confessionMap.get(post.id) || null;
+    }
+
+    // ====================================
+    // QUESTION
+    // ====================================
+    if (post.post_type === "question") {
+
+      const q = questionMap.get(post.id);
+
+      if (!q) {
+        return {
+          ...post,
+          data: null
+        };
+      }
+
+      let extra = {};
+
+      switch (q.question_type) {
+
+        case "closedend":
+          extra = closedMap.get(q.id) || {};
+          break;
+
+        case "range":
+          extra = rangeMap.get(q.id) || {};
+          break;
+
+        case "singlechoice":
+          extra = {
+            choices: singleOptions.filter(
+              o => o.question_id === q.id
+            )
+          };
+          break;
+
+        case "multiplechoice":
+          extra = {
+            include_all_above:
+              multipleOptions.find(
+                o => o.question_id === q.id
+              )?.include_all_above || false,
+
+            choices: multipleOptions.filter(
+              o => o.question_id === q.id
+            )
+          };
+          break;
+
+        case "rankingorder":
+          extra = {
+            items: rankingItems.filter(
+              i => i.question_id === q.id
+            )
+          };
+          break;
+
+        case "rating":
+          extra = ratingMap.get(q.id) || {};
+          break;
+      }
+
+      data = {
+        ...q,
+        ...extra
+      };
+    }
+
+    return {
+      ...post,
+      created_at: timeAgo(post.created_at),
+      data
+    };
+  });
+}
+
+
+
 const getAllTrending = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -636,7 +894,7 @@ const getAllTrending = async (req, res) => {
 
     // 3. Hydrate posts (content/confession/question specific data)
     const ids = rows.map((p) => p.id);
-    const hydratedPosts = await hydratePostsFromDb(ids, rows);
+    const hydratedPosts = await hydratePostsFromDbVone(ids, rows);
 
     // 4. Cache the hydrated posts (without user states)
     await cachePost.set(TRENDING_KEY, JSON.stringify(hydratedPosts), {
@@ -658,9 +916,7 @@ const getAllTrending = async (req, res) => {
   }
 };
 
-// ================================
-// GET UNSOLVED QUESTIONS
-// ================================
+
 const getUnsolvedQuestions = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -801,9 +1057,7 @@ async function attachUserStates(posts, userId) {
   }));
 }
 
-// ================================
-// HYDRATE POSTS
-// ================================
+
 async function hydratePostsFromDb(ids, basePosts = null) {
 
   let posts = basePosts;
@@ -1504,9 +1758,7 @@ const favoritePost = async (req, res) => {
   }
 };
 
-// ================================
-// UPDATE CONTENT
-// ================================
+
 const updatePostBodyContent = async (req, res) => {
 
   try {
@@ -1556,135 +1808,114 @@ const updatePostBodyContent = async (req, res) => {
   }
 };
 
-const getPostsById = async(req, res)=>{
-  const userId = req.user.userId;
-  try{
-    const {id} = req.params;
-    const CACHE_KEY = `post:${id}`; 
-    const cached = await cachePost.get(CACHE_KEY);
 
-   const parsed = safeJsonParse(cached);
+// const getPostById = async (req, res) => {
+//   try {
+//     const userId = req.user.userId;
+//     const postId = req.params.id;
 
-    if (parsed) {
-      return res.status(200).json({
-        source: "cache",
-        data: parsed
-      });
-    }
+//     if (!postId) {
+//       return res.status(400).json({
+//         message: "Post ID is required"
+//       });
+//     }
 
-    const [aboutpost] = await pool.query(
-      `SELECT 
-        p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color, p.status, p.views_count, p.comments_count, p.likes_count,
-        p.created_at, p.user_id,
-        u.username,
-        GROUP_CONCAT(tg.label) as tags
-        FROM posts p 
-        JOIN users u ON p.user_id = u.id
-        LEFT JOIN post_tags pt ON p.id = pt.post_id
-        LEFT JOIN tags tg ON pt.tag_id = tg.id
-        WHERE p.id = ?
-        GROUP BY p.id`,
-      [id]
-    )
-    if (!aboutpost.length) {
-      return res.status(404).json({ message: "Post not found or deleted" });
-    }
+//     // ====================================
+//     // 1. CHECK CACHE
+//     // ====================================
+//     const cachedPost = await cachePost.get(`post:${postId}`);
 
-    const post = aboutpost[0];
+//     if (cachedPost) {
+//       const parsed = safeJsonParse(cachedPost);
+      
+//       if (parsed) {
+//         const personalized = await attachUserStates([parsed], userId);
+        
+//         console.log("CACHE HIT (single post)");
+        
+//         return res.status(200).json({
+//           source: "cache",
+//           data: personalized[0]
+//         });
+//       }
+//     }
 
-    let data = null;
-   
-    if(post.post_type === 'content'){
-      const [datas] = await pool.query(
-        `SELECT id, type, title, text_body, media_url FROM content WHERE post_id = ?`,
-        [id]
-      )
-      data = datas[0];
-    };
+//     // ====================================
+//     // 2. FETCH FROM DATABASE
+//     // ====================================
+//     const [posts] = await pool.query(`
+//       SELECT
+//         p.id,
+//         p.post_type,
+//         p.is_anonymous,
+//         p.anonymous_name,
+//         p.anonymous_bg_color,
+//         p.likes_count,
+//         p.comments_count,
+//         p.views_count,
+//         p.created_at,
+//         p.status,
+//         u.username,
+//         u.avatar_url,
+//         u.id as user_id,
+//         GROUP_CONCAT(tg.label) as tags
+//       FROM posts p
+//       JOIN users u ON p.user_id = u.id
+//       LEFT JOIN post_tags pt ON pt.post_id = p.id
+//       LEFT JOIN tags tg ON tg.id = pt.tag_id
+//       WHERE p.id = ?
+//       GROUP BY p.id
+//     `, [postId]);
+
+//     if (!posts.length) {
+//       return res.status(404).json({
+//         message: "Post not found"
+//       });
+//     }
+
+//     // ====================================
+//     // 3. HYDRATE POST
+//     // ====================================
+//     const hydrated = await hydratePostsFromDb(
+//       [posts[0].id],
+//       posts
+//     );
+
+//     if (!hydrated.length) {
+//       return res.status(404).json({
+//         message: "Post not found"
+//       });
+//     }
+
+//     // ====================================
+//     // 4. CACHE THE POST
+//     // ====================================
+//     await cachePost.set(
+//       `post:${postId}`,
+//       JSON.stringify(hydrated[0]),
+//       { EX: 300 }
+//     );
+
+//     // ====================================
+//     // 5. ATTACH USER STATES
+//     // ====================================
+//     const personalized = await attachUserStates(hydrated, userId);
+
+//     console.log("DB HIT (single post)");
+
+//     return res.status(200).json({
+//       source: "db",
+//       data: personalized[0]
+//     });
+
+//   } catch (err) {
+//     console.error("getPostById error:", err);
     
-    if(post.post_type === 'confession'){
-      const [datas] = await pool.query(
-        `SELECT id, type, title, media_url FROM confession WHERE post_id = ?`,
-        [id]
-      )
-      data = datas[0];
-    };
-
-    if(post.post_type === 'question'){
-      const [rows] = await pool.query(
-          `SELECT id, question_type, question_related_to, title, media_url FROM question WHERE post_id = ?`,
-          [id]
-        );
-        const row = rows[0];
-        switch(row.question_type){   
-
-          case 'range' :
-            const [rangeRows] = await pool.query(
-                `SELECT * FROM question_range WHERE question_id = ?`,
-                [row.id]
-              );
-            const range = rangeRows[0] || {};
-            data = { ...row, ...range };
-            break;
-
-          case 'rating':
-            const [ratingRows] = await pool.query(
-              `SELECT * FROM rating WHERE question_id = ?`,
-              [row.id]
-            );
-            const rating = ratingRows[0] || {};
-            data = { ...row, ...rating };
-            break;
-          
-          case 'singlechoice':
-            const [singleRows] = await pool.query(`
-              SELECT sco.*, sc.question_id
-              FROM singlechoice_option sco
-              JOIN singlechoice sc ON sco.singlechoice_id = sc.id
-              WHERE sc.question_id = ?`, [row.id]);
-            data = { ...row, choices: singleRows };
-            break;
-
-          case 'multiplechoice':
-            const [multiRows] = await pool.query(`
-              SELECT mco.*, mc.question_id
-              FROM multiplechoice_option mco
-              JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
-              WHERE mc.question_id = ?`, [row.id]);
-            data = { ...row, choices: multiRows };
-            break;
-
-          case 'rankingorder' :
-            const [rankRows] = await pool.query(`
-              SELECT ri.*, ro.question_id
-              FROM ranking_item ri
-              JOIN rankingorder ro ON ri.ranking_id = ro.id
-              WHERE ro.question_id = ?`, [row.id]);
-            data = { ...row, items: rankRows };
-            break;
-        }
-    }
-    const final = {
-      ...post,
-      created_at: timeAgo(post.created_at),
-      data
-    };
-    // const final = { ...post, ...data };
-     
-    // cache hydrated post
-    await cachePost.set(CACHE_KEY, JSON.stringify(final), { EX: 300 });
-
-    return res.status(200).json({
-      source: "db",
-      data: final,
-    });
-
-  }
-  catch(err){
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-}
+//     return res.status(500).json({
+//       message: "Server error"
+//     });
+//   }
+// };
 function timeAgo(date){
 
   // get the time now in ms
@@ -1709,9 +1940,7 @@ function timeAgo(date){
   if (months < 12)  return `${months} month${months > 1 ? "s" : ""} ago`;
   return `${years} year${years > 1 ? "s" : ""} ago`;
 }
-// ================================
-// GET POST BY POST ID (FULL DATA)
-// ================================
+
 const getPostsByPostId = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -1788,7 +2017,7 @@ const getPostsByPostId = async (req, res) => {
     });
   }
 };
-// controllers/postController.js
+
 const getPostsByLike = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -2080,7 +2309,7 @@ module.exports = {
   createPost,
   upload,
   getAllPosts,
-  getPostsById,
+  // getPostsById,
   getUnsolvedQuestions,
   updatePostBodyContent,
   deletePost,
