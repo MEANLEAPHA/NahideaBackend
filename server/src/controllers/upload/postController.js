@@ -456,7 +456,7 @@ const getAllPosts = async (req, res) => {
         // ====================================
         console.log("PARTIAL CACHE HIT");
 
-        const hydrated = await hydratePostsFromDbVone(missingIds);
+        const hydrated = await hydratePostsFromDb(missingIds);
 
         // cache hydrated posts
         const hydratePipeline = cachePost.multi();
@@ -524,7 +524,7 @@ const getAllPosts = async (req, res) => {
     }
 
     // hydrate
-    const final = await hydratePostsFromDbVone(
+    const final = await hydratePostsFromDb(
       posts.map(p => p.id),
       posts
     );
@@ -572,268 +572,6 @@ const getAllPosts = async (req, res) => {
     });
   }
 };
-
-async function hydratePostsFromDbVone(ids, basePosts = null) {
-
-  let posts = basePosts;
-
-  // fetch posts if not supplied
-  if (!posts) {
-    const [rows] = await pool.query(`
-      SELECT
-        p.id,
-        p.post_type,
-        p.is_anonymous,
-        p.anonymous_name,
-        p.anonymous_bg_color,
-        p.likes_count,
-        p.comments_count,
-        p.views_count,
-        p.created_at,
-        p.user_id,
-
-        u.username,
-        u.avatar_url,
-
-        GROUP_CONCAT(tg.label) as tags
-
-      FROM posts p
-
-      JOIN users u
-        ON p.user_id = u.id
-
-      LEFT JOIN post_tags pt
-        ON pt.post_id = p.id
-
-      LEFT JOIN tags tg
-        ON tg.id = pt.tag_id
-
-      WHERE p.id IN (?)
-
-      GROUP BY p.id
-
-      ORDER BY FIELD(p.id, ?)
-    `, [ids, ids]);
-
-    posts = rows;
-  }
-
-  // ====================================
-  // SPLIT IDS
-  // ====================================
-  const contentIds = posts
-    .filter(p => p.post_type === "content")
-    .map(p => p.id);
-
-  const confessionIds = posts
-    .filter(p => p.post_type === "confession")
-    .map(p => p.id);
-
-  const questionIds = posts
-    .filter(p => p.post_type === "question")
-    .map(p => p.id);
-
-  // ====================================
-  // FETCH RELATED TABLES
-  // ====================================
-  const [contents] = contentIds.length
-    ? await pool.query(
-        `SELECT type, cate_icon, title, media_url FROM content WHERE post_id IN (?)`,
-        [contentIds]
-      )
-    : [[]];
-
-  const [confessions] = confessionIds.length
-    ? await pool.query(
-        `SELECT type, cate_icon, title, media_url FROM confession WHERE post_id IN (?)`,
-        [confessionIds]
-      )
-    : [[]];
-
-  const [questions] = questionIds.length
-    ? await pool.query(
-        `SELECT type, cate_icon, title, media_url, question_type, id, status FROM question WHERE post_id IN (?)`,
-        [questionIds]
-      )
-    : [[]];
-
-  const qIds = questions.map(q => q.id);
-
-  const [closed] = qIds.length
-    ? await pool.query(
-        `SELECT * FROM closedend WHERE question_id IN (?)`,
-        [qIds]
-      )
-    : [[]];
-
-  const [ranges] = qIds.length
-    ? await pool.query(
-        `SELECT * FROM question_range WHERE question_id IN (?)`,
-        [qIds]
-      )
-    : [[]];
-
-  const [ratings] = qIds.length
-    ? await pool.query(
-        `SELECT * FROM rating WHERE question_id IN (?)`,
-        [qIds]
-      )
-    : [[]];
-
-  const [singleOptions] = qIds.length
-    ? await pool.query(`
-        SELECT sco.*, sc.question_id
-        FROM singlechoice_option sco
-        JOIN singlechoice sc
-          ON sco.singlechoice_id = sc.id
-        WHERE sc.question_id IN (?)
-      `, [qIds])
-    : [[]];
-
-  const [multipleOptions] = qIds.length
-    ? await pool.query(`
-        SELECT
-          mco.*,
-          mc.question_id,
-          mc.include_all_above
-        FROM multiplechoice_option mco
-        JOIN multiplechoice mc
-          ON mco.multiplechoice_id = mc.id
-        WHERE mc.question_id IN (?)
-      `, [qIds])
-    : [[]];
-
-  const [rankingItems] = qIds.length
-    ? await pool.query(`
-        SELECT ri.*, ro.question_id
-        FROM ranking_item ri
-        JOIN rankingorder ro
-          ON ri.ranking_id = ro.id
-        WHERE ro.question_id IN (?)
-      `, [qIds])
-    : [[]];
-
-  // ====================================
-  // MAPS FOR FAST LOOKUP
-  // ====================================
-  const contentMap = new Map(
-    contents.map(c => [c.post_id, c])
-  );
-
-  const confessionMap = new Map(
-    confessions.map(c => [c.post_id, c])
-  );
-
-  const questionMap = new Map(
-    questions.map(q => [q.post_id, q])
-  );
-
-  const closedMap = new Map(
-    closed.map(c => [c.question_id, c])
-  );
-
-  const rangeMap = new Map(
-    ranges.map(r => [r.question_id, r])
-  );
-
-  const ratingMap = new Map(
-    ratings.map(r => [r.question_id, r])
-  );
-
-  // ====================================
-  // BUILD FINAL RESPONSE
-  // ====================================
-  return posts.map(post => {
-
-    let data = null;
-
-    // ====================================
-    // CONTENT
-    // ====================================
-    if (post.post_type === "content") {
-      data = contentMap.get(post.id) || null;
-    }
-
-    // ====================================
-    // CONFESSION
-    // ====================================
-    if (post.post_type === "confession") {
-      data = confessionMap.get(post.id) || null;
-    }
-
-    // ====================================
-    // QUESTION
-    // ====================================
-    if (post.post_type === "question") {
-
-      const q = questionMap.get(post.id);
-
-      if (!q) {
-        return {
-          ...post,
-          data: null
-        };
-      }
-
-      let extra = {};
-
-      switch (q.question_type) {
-
-        case "closedend":
-          extra = closedMap.get(q.id) || {};
-          break;
-
-        case "range":
-          extra = rangeMap.get(q.id) || {};
-          break;
-
-        case "singlechoice":
-          extra = {
-            choices: singleOptions.filter(
-              o => o.question_id === q.id
-            )
-          };
-          break;
-
-        case "multiplechoice":
-          extra = {
-            include_all_above:
-              multipleOptions.find(
-                o => o.question_id === q.id
-              )?.include_all_above || false,
-
-            choices: multipleOptions.filter(
-              o => o.question_id === q.id
-            )
-          };
-          break;
-
-        case "rankingorder":
-          extra = {
-            items: rankingItems.filter(
-              i => i.question_id === q.id
-            )
-          };
-          break;
-
-        case "rating":
-          extra = ratingMap.get(q.id) || {};
-          break;
-      }
-
-      data = {
-        ...q,
-        ...extra
-      };
-    }
-
-    return {
-      ...post,
-      created_at: timeAgo(post.created_at),
-      data
-    };
-  });
-}
 
 
 
@@ -894,7 +632,7 @@ const getAllTrending = async (req, res) => {
 
     // 3. Hydrate posts (content/confession/question specific data)
     const ids = rows.map((p) => p.id);
-    const hydratedPosts = await hydratePostsFromDbVone(ids, rows);
+    const hydratedPosts = await hydratePostsFromDb(ids, rows);
 
     // 4. Cache the hydrated posts (without user states)
     await cachePost.set(TRENDING_KEY, JSON.stringify(hydratedPosts), {
