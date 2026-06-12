@@ -483,93 +483,134 @@ const followUser = async (req, res) => {
 };
 
 
+// const unfollowUser = async (req, res) => {
+
+//     const followerId = req.user.userId;
+
+//     const followingId = req.params.userId;
+//   console.log('Unfollow request:', { followerId, followingId }); // Add this
+//     const connection = await pool.getConnection();
+
+//     try {
+
+//         await connection.beginTransaction();
+
+//         /*
+//         |--------------------------------------------------------------------------
+//         | DELETE FOLLOW
+//         |--------------------------------------------------------------------------
+//         */
+
+//         const [result] = await connection.query(
+//             `
+//             DELETE FROM follows
+//             WHERE follower_id=?
+//             AND following_id=?
+//             `,
+//             [
+//                 followerId,
+//                 followingId
+//             ]
+//         );
+
+//         if (!result.affectedRows) {
+
+//             throw new Error("Not following");
+
+//         }
+
+//         /*
+//         |--------------------------------------------------------------------------
+//         | DECREASE COUNTS
+//         |--------------------------------------------------------------------------
+//         */
+
+//         await connection.query(
+//             `
+//             UPDATE users
+//             SET following_count =
+//                 following_count - 1
+//             WHERE id=?
+//             `,
+//             [followerId]
+//         );
+
+//         await connection.query(
+//             `
+//             UPDATE users
+//             SET followers_count =
+//                 followers_count - 1
+//             WHERE id=?
+//             `,
+//             [followingId]
+//         );
+
+//         await connection.commit();
+
+//         return res.json({
+//             message: "Unfollowed",
+//              mutual: false
+//         });
+
+//     } catch (err) {
+
+//         await connection.rollback();
+
+//          console.error('Full error details:', err); // Add this
+//         return res.status(500).json({
+//             message: err.message,
+//             details: err.sqlMessage || err.toString() // More details
+//         });
+
+//     } finally {
+
+//         connection.release();
+
+//     }
+
+// };
 const unfollowUser = async (req, res) => {
-
     const followerId = req.user.userId;
-
     const followingId = req.params.userId;
-  console.log('Unfollow request:', { followerId, followingId }); // Add this
     const connection = await pool.getConnection();
 
     try {
-
         await connection.beginTransaction();
 
-        /*
-        |--------------------------------------------------------------------------
-        | DELETE FOLLOW
-        |--------------------------------------------------------------------------
-        */
-
         const [result] = await connection.query(
-            `
-            DELETE FROM follows
-            WHERE follower_id=?
-            AND following_id=?
-            `,
-            [
-                followerId,
-                followingId
-            ]
+            `DELETE FROM follows WHERE follower_id=? AND following_id=?`,
+            [followerId, followingId]
         );
 
-        if (!result.affectedRows) {
-
-            throw new Error("Not following");
-
+        // Only update counts if a follow was actually deleted
+        if (result.affectedRows) {
+            await connection.query(
+                `UPDATE users SET following_count = following_count - 1 WHERE id=?`,
+                [followerId]
+            );
+            await connection.query(
+                `UPDATE users SET followers_count = followers_count - 1 WHERE id=?`,
+                [followingId]
+            );
         }
-
-        /*
-        |--------------------------------------------------------------------------
-        | DECREASE COUNTS
-        |--------------------------------------------------------------------------
-        */
-
-        await connection.query(
-            `
-            UPDATE users
-            SET following_count =
-                following_count - 1
-            WHERE id=?
-            `,
-            [followerId]
-        );
-
-        await connection.query(
-            `
-            UPDATE users
-            SET followers_count =
-                followers_count - 1
-            WHERE id=?
-            `,
-            [followingId]
-        );
 
         await connection.commit();
 
+        // Always return success (just with different status)
         return res.json({
-            message: "Unfollowed",
-             mutual: false
+            message: result.affectedRows ? "Unfollowed" : "Already not following",
+            mutual: false
         });
 
     } catch (err) {
-
         await connection.rollback();
-
-         console.error('Full error details:', err); // Add this
         return res.status(500).json({
-            message: err.message,
-            details: err.sqlMessage || err.toString() // More details
+            message: err.message
         });
-
     } finally {
-
         connection.release();
-
     }
-
 };
-
 module.exports = { followUser, unfollowUser, getFollowStatus};
 
 

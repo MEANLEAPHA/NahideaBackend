@@ -88,29 +88,106 @@ const getFriendsById = async (req, res) => {
   }
 };
 
-const getAllFriendsById = async (req, res) => {
+// const getAllFriendsById = async (req, res) => {
+//   try {
+//     const userId = req.params.userId;
+
+//     const [result] = await pool.query(
+//   `
+//   SELECT u.id, u.username, u.profession, u.avatar_url
+//   FROM users u
+//   JOIN follows f1 ON u.id = f1.following_id
+//   JOIN follows f2 ON f1.following_id = f2.follower_id
+//   WHERE f1.follower_id = ?
+//     AND f2.following_id = f1.follower_id
+//   ORDER BY f1.created_at DESC
+//   `,
+//   [userId]
+// );
+
+//     res.status(200).json({
+//       data: result,
+//     });
+//   } catch (err) {
+//     console.error(err.message);
+//     res.status(500).json({ error: "Failed to get mutual friends" });
+//   }
+// };
+
+// Get mutual friends (users who follow each other)
+const getMutualFriendsById = async (req, res) => {
   try {
     const userId = req.params.userId;
 
     const [result] = await pool.query(
-  `
-  SELECT u.id, u.username, u.profession, u.avatar_url
-  FROM users u
-  JOIN follows f1 ON u.id = f1.following_id
-  JOIN follows f2 ON f1.following_id = f2.follower_id
-  WHERE f1.follower_id = ?
-    AND f2.following_id = f1.follower_id
-  ORDER BY f1.created_at DESC
-  `,
-  [userId]
-);
+      `
+      SELECT u.id, u.username, u.profession, u.avatar_url
+      FROM users u
+      JOIN follows f1 ON u.id = f1.following_id
+      JOIN follows f2 ON f1.following_id = f2.follower_id
+      WHERE f1.follower_id = ?
+        AND f2.following_id = f1.follower_id
+      ORDER BY f1.created_at DESC
+      `,
+      [userId]
+    );
 
-    res.status(200).json({
-      data: result,
-    });
+    res.status(200).json(result);
   } catch (err) {
-    console.error(err.message);
+    console.error('Error in getMutualFriendsById:', err.message);
     res.status(500).json({ error: "Failed to get mutual friends" });
   }
 };
-module.exports = { getMutuals, getAllFriends, getFriendsById, getAllFriendsById };
+
+// Get followers (users who follow the given user)
+const getFollowersById = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+
+    const [result] = await pool.query(
+      `
+      SELECT u.id, u.username, u.profession, u.avatar_url, f.created_at
+      FROM users u
+      JOIN follows f ON u.id = f.follower_id
+      WHERE f.following_id = ?
+      ORDER BY f.created_at DESC
+      `,
+      [userId]
+    );
+
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('Error in getFollowersById:', err.message);
+    res.status(500).json({ error: "Failed to get followers" });
+  }
+};
+
+// Get followings (users the given user follows)
+const getFollowingsById = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+
+    const [result] = await pool.query(
+      `
+      SELECT u.id, u.username, u.profession, u.avatar_url, f.created_at
+      FROM users u
+      JOIN follows f ON u.id = f.following_id
+      WHERE f.follower_id = ?
+      ORDER BY f.created_at DESC
+      `,
+      [userId]
+    );
+
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('Error in getFollowingsById:', err.message);
+    res.status(500).json({ error: "Failed to get followings" });
+  }
+};
+
+module.exports = {
+  getMutualFriendsById,
+  getFollowersById,
+  getFollowingsById
+};
+module.exports = { getMutuals, getAllFriends, getFriendsById, getMutualFriendsById, getFollowersById, getFollowingsById };
