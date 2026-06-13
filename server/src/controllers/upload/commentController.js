@@ -592,7 +592,7 @@ const updateComment = async (req, res) => {
 
         const { commentId } = req.params;
 
-        const { content } = req.body;
+        const { content, gif_url } = req.body;
 
         if (!content) {
       
@@ -606,10 +606,11 @@ const updateComment = async (req, res) => {
         const [result] = await db.query(
             `UPDATE comments
              SET content = ?,
+                 gif_url = ?,
                  is_edited = 1
              WHERE id = ?
              AND user_id = ? AND is_deleted = 0`,
-            [content, commentId, userId]
+            [content, gif_url, commentId, userId]
         );
 
         if (result.affectedRows === 0) {
@@ -673,203 +674,6 @@ const deleteComment = async (req, res) => {
   }
 };
 
-// const deleteComment = async (req, res) => {
-//     try{
-
-//         const today = new Date().toISOString().split("T")[0]; // "2026-05-20"
-//         const currentDate = today; // keep full YYYY-MM-DD
-//         const userId = req.user.userId;
-//         const commentId= req.params.commentId;
-//         const postId = req.params.postId;
-
-//         const [result] = await db.query(
-//             "UPDATE comments SET is_deleted = 1, content = '[deleted]' WHERE id = ? AND user_id = ? AND is_deleted = 0",
-//             [commentId, userId]
-//         );
-
-//         if (result.affectedRows === 0) {
-//             return res.status(404).json({ message: "Comment not found" });
-//         }
-
-//         await ranking.zIncrBy(`trendingPost:day:${currentDate}`, -5, commentId.toString());
-        
-//         res.status(200).json({ message: "Comment deleted" });
-//     } catch (err) {
-//         console.error(err);
-//         res.status(500).json({ message: "Server error" });
-//     }
-// };
-
-// const getCommentsByPostId = async (req, res) => {
-
-//     try {
-
-//         const userId = req.user.userId;
-
-//         const { postId } = req.params;
-
-//         let { page = 1, limit = 10 } = req.query;
-
-//         page = Math.max(parseInt(page) || 1, 1);
-
-//         limit = Math.min(
-//             Math.max(parseInt(limit) || 10, 1),
-//             50
-//         );
-
-//         const offset = (page - 1) * limit;
-
-//         // top-level comments only
-//         const [topComments] = await db.query(
-//             `SELECT
-//                 c.id,
-//                 c.post_id,
-//                 c.parent_id,
-//                 c.user_id,
-
-//                 CASE
-//                     WHEN c.is_deleted = 1 THEN '[deleted]'
-//                     ELSE c.content
-//                 END AS content,
-
-//                 c.username,
-//                 c.gif_url,
-//                 c.username_mention,
-//                 c.is_anonymous,
-//                 c.anonymous_name,
-//                 c.anonymous_bg_color,
-//                 c.likes_count,
-//                 c.reply_count,
-//                 c.is_deleted,
-//                 c.is_edited,
-//                 c.created_at,
-//                 c.updated_at,
-
-//                 EXISTS(
-//                     SELECT 1
-//                     FROM comment_likes cl
-//                     WHERE cl.comment_id = c.id
-//                     AND cl.user_id = ?
-//                 ) AS is_liked
-
-//             FROM comments c
-
-//             WHERE c.post_id = ?
-//             AND c.parent_id IS NULL
-
-//             ORDER BY c.created_at DESC
-
-//             LIMIT ?
-//             OFFSET ?`,
-//             [userId, postId, limit, offset]
-//         );
-
-//         // no comments
-//         if (!topComments.length) {
-//             return res.json({
-//                 comments: [],
-//                 pagination: {
-//                     page,
-//                     limit,
-//                     has_more: false
-//                 }
-//             });
-//         }
-
-//         // parent ids
-//         const parentIds = topComments.map(c => c.id);
-
-//         // fetch replies
-//         const [replies] = await db.query(
-//             `SELECT
-//                 c.id,
-//                 c.post_id,
-//                 c.parent_id,
-//                 c.user_id,
-
-//                 CASE
-//                     WHEN c.is_deleted = 1 THEN '[deleted]'
-//                     ELSE c.content
-//                 END AS content,
-
-//                 c.username,
-//                 c.gif_url,
-//                 c.username_mention,
-//                 c.is_anonymous,
-//                 c.anonymous_name,
-//                 c.anonymous_bg_color,
-//                 c.likes_count,
-//                 c.reply_count,
-//                 c.is_deleted,
-//                 c.is_edited,
-//                 c.created_at,
-//                 c.updated_at,
-
-//                 EXISTS(
-//                     SELECT 1
-//                     FROM comment_likes cl
-//                     WHERE cl.comment_id = c.id
-//                     AND cl.user_id = ?
-//                 ) AS is_liked
-
-//             FROM comments c
-
-//             WHERE c.parent_id IN (?)
-
-//             ORDER BY c.created_at ASC`,
-//             [userId, parentIds.length ? parentIds : [0]] // ensure array expands
-//             // [userId, parentIds]
-//         );
-
-//         // group replies
-//         const grouped = {};
-
-//         topComments.forEach(comment => {
-//             grouped[comment.id] = {
-//                 ...comment,
-//                 replies: []
-//             };
-//         });
-
-//         replies.forEach(reply => {
-
-//             if (grouped[reply.parent_id]) {
-//                 grouped[reply.parent_id].replies.push(reply);
-//             }
-//         });
-
-//         // count total top-level comments
-//         const [countRows] = await db.query(
-//             `SELECT COUNT(*) as total
-//              FROM comments
-//              WHERE post_id = ?
-//              AND parent_id IS NULL`,
-//             [postId]
-//         );
-
-//         const total = countRows[0].total;
-
-//         res.json({
-//             comments: Object.values(grouped),
-
-//             pagination: {
-//                 page,
-//                 limit,
-//                 total,
-//                 total_pages: Math.ceil(total / limit),
-//                 has_more: offset + limit < total
-//             }
-//         });
-
-//     } catch (err) {
-
-//         console.error(err);
-
-//         res.status(500).json({
-//             message: "Error fetching comments"
-//         });
-//     }
-// };
 const getCommentsByPostId = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -880,7 +684,14 @@ const getCommentsByPostId = async (req, res) => {
     limit = Math.min(Math.max(parseInt(limit) || 10, 1), 50);
     const offset = (page - 1) * limit;
 
-    // top-level comments only with user data
+    // Get user's liked comments as SET (exactly like attachUserStates)
+    const [likedRows] = await db.query(
+      `SELECT comment_id FROM comment_likes WHERE user_id = ?`,
+      [userId]
+    );
+    const likedSet = new Set(likedRows.map(row => row.comment_id));
+
+    // top-level comments only
     const [topComments] = await db.query(
       `SELECT
         c.id,
@@ -902,33 +713,8 @@ const getCommentsByPostId = async (req, res) => {
         c.is_edited,
         c.created_at,
         c.updated_at,
-        
-        -- User information (not anonymous or not deleted)
-        CASE
-          WHEN c.is_deleted = 1 THEN NULL
-          WHEN c.is_anonymous = 1 THEN NULL
-          ELSE u.avatar_url
-        END AS avatar_url,
-        
-        CASE
-          WHEN c.is_deleted = 1 THEN '[deleted]'
-          WHEN c.is_anonymous = 1 THEN c.anonymous_name
-          ELSE u.username
-        END AS display_name,
-        
-        -- Check if current user liked this comment
-        EXISTS(
-          SELECT 1 FROM comment_likes cl
-          WHERE cl.comment_id = c.id
-          AND cl.user_id = ?
-        ) AS is_liked,
-        
-        -- Get total replies count (including soft-deleted)
-        (
-          SELECT COUNT(*) FROM comments r
-          WHERE r.parent_id = c.id
-        ) AS total_replies
-
+        u.avatar_url,
+        u.username AS original_username
       FROM comments c
       LEFT JOIN users u ON c.user_id = u.id
       WHERE c.post_id = ?
@@ -936,10 +722,9 @@ const getCommentsByPostId = async (req, res) => {
       AND c.is_deleted = 0
       ORDER BY c.created_at DESC
       LIMIT ? OFFSET ?`,
-      [userId, postId, limit, offset]
+      [postId, limit, offset]
     );
 
-    // no comments
     if (!topComments.length) {
       return res.json({
         comments: [],
@@ -953,10 +738,9 @@ const getCommentsByPostId = async (req, res) => {
       });
     }
 
-    // get all parent IDs for replies
     const parentIds = topComments.map(c => c.id);
 
-    // fetch replies with user data
+    // fetch replies
     const [replies] = await db.query(
       `SELECT
         c.id,
@@ -978,51 +762,69 @@ const getCommentsByPostId = async (req, res) => {
         c.is_edited,
         c.created_at,
         c.updated_at,
-        
-        -- User information for replies
-        CASE
-          WHEN c.is_deleted = 1 THEN NULL
-          WHEN c.is_anonymous = 1 THEN NULL
-          ELSE u.avatar_url
-        END AS avatar_url,
-        
-        CASE
-          WHEN c.is_deleted = 1 THEN '[deleted]'
-          WHEN c.is_anonymous = 1 THEN c.anonymous_name
-          ELSE u.username
-        END AS display_name,
-        
-        -- Check if current user liked this reply
-        EXISTS(
-          SELECT 1 FROM comment_likes cl
-          WHERE cl.comment_id = c.id
-          AND cl.user_id = ?
-        ) AS is_liked
-
+        u.avatar_url,
+        u.username AS original_username
       FROM comments c
       LEFT JOIN users u ON c.user_id = u.id
       WHERE c.parent_id IN (?)
       AND c.is_deleted = 0
       ORDER BY c.created_at ASC`,
-      [userId, parentIds]
+      [parentIds]
     );
 
-    // group replies under their parents
+    // Build response with is_liked from Set
     const commentsMap = {};
     topComments.forEach(comment => {
       commentsMap[comment.id] = {
-        ...comment,
+        id: comment.id,
+        post_id: comment.post_id,
+        parent_id: comment.parent_id,
+        user_id: comment.user_id,
+        content: comment.content,
+        gif_url: comment.gif_url,
+        username_mention: comment.username_mention,
+        is_anonymous: comment.is_anonymous,
+        anonymous_name: comment.anonymous_name,
+        anonymous_bg_color: comment.anonymous_bg_color,
+        likes_count: comment.likes_count,
+        reply_count: comment.reply_count,
+        is_deleted: comment.is_deleted,
+        is_edited: comment.is_edited,
+        created_at: comment.created_at,
+        updated_at: comment.updated_at,
+        avatar_url: comment.is_anonymous === 1 ? null : comment.avatar_url,
+        username: comment.is_anonymous === 1 ? comment.anonymous_name : comment.original_username,
+        is_liked: likedSet.has(comment.id),
         replies: []
       };
     });
 
     replies.forEach(reply => {
       if (commentsMap[reply.parent_id]) {
-        commentsMap[reply.parent_id].replies.push(reply);
+        commentsMap[reply.parent_id].replies.push({
+          id: reply.id,
+          post_id: reply.post_id,
+          parent_id: reply.parent_id,
+          user_id: reply.user_id,
+          content: reply.content,
+          gif_url: reply.gif_url,
+          username_mention: reply.username_mention,
+          is_anonymous: reply.is_anonymous,
+          anonymous_name: reply.anonymous_name,
+          anonymous_bg_color: reply.anonymous_bg_color,
+          likes_count: reply.likes_count,
+          reply_count: reply.reply_count,
+          is_deleted: reply.is_deleted,
+          is_edited: reply.is_edited,
+          created_at: reply.created_at,
+          updated_at: reply.updated_at,
+          avatar_url: reply.is_anonymous === 1 ? null : reply.avatar_url,
+          username: reply.is_anonymous === 1 ? reply.anonymous_name : reply.original_username,
+          is_liked: likedSet.has(reply.id)
+        });
       }
     });
 
-    // count total top-level comments
     const [countRows] = await db.query(
       `SELECT COUNT(*) as total
        FROM comments
@@ -1052,6 +854,188 @@ const getCommentsByPostId = async (req, res) => {
     });
   }
 };
+// const getCommentsByPostId = async (req, res) => {
+//   try {
+//     const userId = req.user.userId;
+//     const { postId } = req.params;
+//     let { page = 1, limit = 10 } = req.query;
+
+//     page = Math.max(parseInt(page) || 1, 1);
+//     limit = Math.min(Math.max(parseInt(limit) || 10, 1), 50);
+//     const offset = (page - 1) * limit;
+
+//     // top-level comments only with user data
+//     const [topComments] = await db.query(
+//       `SELECT
+//         c.id,
+//         c.post_id,
+//         c.parent_id,
+//         c.user_id,
+//         CASE
+//           WHEN c.is_deleted = 1 THEN '[deleted]'
+//           ELSE c.content
+//         END AS content,
+//         c.gif_url,
+//         c.username_mention,
+//         c.is_anonymous,
+//         c.anonymous_name,
+//         c.anonymous_bg_color,
+//         c.likes_count,
+//         c.reply_count,
+//         c.is_deleted,
+//         c.is_edited,
+//         c.created_at,
+//         c.updated_at,
+        
+//         -- User information (not anonymous or not deleted)
+//         CASE
+//           WHEN c.is_deleted = 1 THEN NULL
+//           WHEN c.is_anonymous = 1 THEN NULL
+//           ELSE u.avatar_url
+//         END AS avatar_url,
+        
+//         CASE
+//           WHEN c.is_deleted = 1 THEN '[deleted]'
+//           WHEN c.is_anonymous = 1 THEN c.anonymous_name
+//           ELSE u.username
+//         END AS display_name,
+        
+//         -- Check if current user liked this comment
+//         EXISTS(
+//           SELECT 1 FROM comment_likes cl
+//           WHERE cl.comment_id = c.id
+//           AND cl.user_id = ?
+//         ) AS is_liked,
+        
+//         -- Get total replies count (including soft-deleted)
+//         (
+//           SELECT COUNT(*) FROM comments r
+//           WHERE r.parent_id = c.id
+//         ) AS total_replies
+
+//       FROM comments c
+//       LEFT JOIN users u ON c.user_id = u.id
+//       WHERE c.post_id = ?
+//       AND c.parent_id IS NULL
+//       AND c.is_deleted = 0
+//       ORDER BY c.created_at DESC
+//       LIMIT ? OFFSET ?`,
+//       [userId, postId, limit, offset]
+//     );
+
+//     // no comments
+//     if (!topComments.length) {
+//       return res.json({
+//         comments: [],
+//         pagination: {
+//           page,
+//           limit,
+//           total: 0,
+//           total_pages: 0,
+//           has_more: false
+//         }
+//       });
+//     }
+
+//     // get all parent IDs for replies
+//     const parentIds = topComments.map(c => c.id);
+
+//     // fetch replies with user data
+//     const [replies] = await db.query(
+//       `SELECT
+//         c.id,
+//         c.post_id,
+//         c.parent_id,
+//         c.user_id,
+//         CASE
+//           WHEN c.is_deleted = 1 THEN '[deleted]'
+//           ELSE c.content
+//         END AS content,
+//         c.gif_url,
+//         c.username_mention,
+//         c.is_anonymous,
+//         c.anonymous_name,
+//         c.anonymous_bg_color,
+//         c.likes_count,
+//         c.reply_count,
+//         c.is_deleted,
+//         c.is_edited,
+//         c.created_at,
+//         c.updated_at,
+        
+//         -- User information for replies
+//         CASE
+//           WHEN c.is_deleted = 1 THEN NULL
+//           WHEN c.is_anonymous = 1 THEN NULL
+//           ELSE u.avatar_url
+//         END AS avatar_url,
+        
+//         CASE
+//           WHEN c.is_deleted = 1 THEN '[deleted]'
+//           WHEN c.is_anonymous = 1 THEN c.anonymous_name
+//           ELSE u.username
+//         END AS display_name,
+        
+//         -- Check if current user liked this reply
+//         EXISTS(
+//           SELECT 1 FROM comment_likes cl
+//           WHERE cl.comment_id = c.id
+//           AND cl.user_id = ?
+//         ) AS is_liked
+
+//       FROM comments c
+//       LEFT JOIN users u ON c.user_id = u.id
+//       WHERE c.parent_id IN (?)
+//       AND c.is_deleted = 0
+//       ORDER BY c.created_at ASC`,
+//       [userId, parentIds]
+//     );
+
+//     // group replies under their parents
+//     const commentsMap = {};
+//     topComments.forEach(comment => {
+//       commentsMap[comment.id] = {
+//         ...comment,
+//         replies: []
+//       };
+//     });
+
+//     replies.forEach(reply => {
+//       if (commentsMap[reply.parent_id]) {
+//         commentsMap[reply.parent_id].replies.push(reply);
+//       }
+//     });
+
+//     // count total top-level comments
+//     const [countRows] = await db.query(
+//       `SELECT COUNT(*) as total
+//        FROM comments
+//        WHERE post_id = ?
+//        AND parent_id IS NULL
+//        AND is_deleted = 0`,
+//       [postId]
+//     );
+
+//     const total = countRows[0].total;
+
+//     res.json({
+//       comments: Object.values(commentsMap),
+//       pagination: {
+//         page,
+//         limit,
+//         total,
+//         total_pages: Math.ceil(total / limit),
+//         has_more: offset + limit < total
+//       }
+//     });
+
+//   } catch (err) {
+//     console.error("getCommentsByPostId error:", err);
+//     res.status(500).json({
+//       message: "Error fetching comments"
+//     });
+//   }
+// };
 const getAnonIdentity = async (req, res) => {
   try {
     const userId = req.user.userId;
