@@ -1546,114 +1546,6 @@ const updatePostBodyContent = async (req, res) => {
   }
 };
 
-
-// const getPostById = async (req, res) => {
-//   try {
-//     const userId = req.user.userId;
-//     const postId = req.params.id;
-
-//     if (!postId) {
-//       return res.status(400).json({
-//         message: "Post ID is required"
-//       });
-//     }
-
-//     // ====================================
-//     // 1. CHECK CACHE
-//     // ====================================
-//     const cachedPost = await cachePost.get(`post:${postId}`);
-
-//     if (cachedPost) {
-//       const parsed = safeJsonParse(cachedPost);
-      
-//       if (parsed) {
-//         const personalized = await attachUserStates([parsed], userId);
-        
-//         console.log("CACHE HIT (single post)");
-        
-//         return res.status(200).json({
-//           source: "cache",
-//           data: personalized[0]
-//         });
-//       }
-//     }
-
-//     // ====================================
-//     // 2. FETCH FROM DATABASE
-//     // ====================================
-//     const [posts] = await pool.query(`
-//       SELECT
-//         p.id,
-//         p.post_type,
-//         p.is_anonymous,
-//         p.anonymous_name,
-//         p.anonymous_bg_color,
-//         p.likes_count,
-//         p.comments_count,
-//         p.views_count,
-//         p.created_at,
-//         p.status,
-//         u.username,
-//         u.avatar_url,
-//         u.id as user_id,
-//         GROUP_CONCAT(tg.label) as tags
-//       FROM posts p
-//       JOIN users u ON p.user_id = u.id
-//       LEFT JOIN post_tags pt ON pt.post_id = p.id
-//       LEFT JOIN tags tg ON tg.id = pt.tag_id
-//       WHERE p.id = ?
-//       GROUP BY p.id
-//     `, [postId]);
-
-//     if (!posts.length) {
-//       return res.status(404).json({
-//         message: "Post not found"
-//       });
-//     }
-
-//     // ====================================
-//     // 3. HYDRATE POST
-//     // ====================================
-//     const hydrated = await hydratePostsFromDb(
-//       [posts[0].id],
-//       posts
-//     );
-
-//     if (!hydrated.length) {
-//       return res.status(404).json({
-//         message: "Post not found"
-//       });
-//     }
-
-//     // ====================================
-//     // 4. CACHE THE POST
-//     // ====================================
-//     await cachePost.set(
-//       `post:${postId}`,
-//       JSON.stringify(hydrated[0]),
-//       { EX: 300 }
-//     );
-
-//     // ====================================
-//     // 5. ATTACH USER STATES
-//     // ====================================
-//     const personalized = await attachUserStates(hydrated, userId);
-
-//     console.log("DB HIT (single post)");
-
-//     return res.status(200).json({
-//       source: "db",
-//       data: personalized[0]
-//     });
-
-//   } catch (err) {
-//     console.error("getPostById error:", err);
-    
-//     return res.status(500).json({
-//       message: "Server error"
-//     });
-//   }
-// };
 function timeAgo(date){
 
   // get the time now in ms
@@ -2047,7 +1939,6 @@ module.exports = {
   createPost,
   upload,
   getAllPosts,
-  // getPostsById,
   getUnsolvedQuestions,
   updatePostBodyContent,
   deletePost,
