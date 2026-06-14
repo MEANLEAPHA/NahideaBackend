@@ -130,7 +130,7 @@ const getNotifications = async (req, res) => {
         const [rows] = await pool.query(
             `SELECT n.*, 
                     u.username as sender_username,
-                    u.avatar as sender_avatar
+                    u.avatar_url as sender_avatar
              FROM notifications n
              LEFT JOIN users u ON n.sender_id = u.id
              WHERE n.receiver_id = ? 
