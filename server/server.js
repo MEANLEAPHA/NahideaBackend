@@ -21,7 +21,7 @@ require("./src/workers/hydrateViewsToDB");
 // cor
 app.use(cors({
   origin: process.env.ORIGIN_URL,
-  methods: ["GET","POST","PUT","DELETE","OPTIONS"],
+  methods: ["GET","POST","PUT","DELETE","OPTIONS","PATCH"],
   allowedHeaders: ["Content-Type","Authorization"],
 }));
 
