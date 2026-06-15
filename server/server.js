@@ -493,8 +493,24 @@ const viewPostRoutes = require("./src/routes/view/viewPostRoute");
 app.use("/api", viewPostRoutes);
 
 // answer question
-const answerQARoutes = require("./src/routes/upload/answerQAroute");
-app.use("/api", answerQARoutes);
+try {
+  const answerQARoutes = require("./src/routes/upload/answerQAroute");
+  app.use("/api", answerQARoutes);
+  console.log("✅ answerQARoutes mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading answerQARoutes:", err.message);
+  console.error(err.stack);
+}
+
+try {
+  const spammyRoutes = require("./src/routes/spammy/spammyRoute");
+  app.use("/api", spammyRoutes);
+  console.log("✅ spammyRoutes mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading spammyRoutes:", err.message);
+  console.error(err.stack);
+}
+
 
 // comment and reply
 const commentsRoutes = require("./src/routes/upload/commentRoute");
@@ -527,8 +543,7 @@ app.use("/api", mutualRoutes);
 const pokeRoutes = require("./src/routes/poke/pokeRoute");
 app.use("/api", pokeRoutes);
 
-const spammyRoutes = require("./src/routes/spammy/spammyRoute");
-app.use("/api", spammyRoutes);
+
 
 
 app.get("/", (req, res) => {
