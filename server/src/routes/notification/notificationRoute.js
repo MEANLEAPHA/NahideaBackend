@@ -7,7 +7,8 @@ const {
     markNotificationRead,
     markAllNotification,
     deleteNotification,
-    deleteAllNotification
+    deleteAllNotification,
+    getUnreadCount
 } = require("../../controllers/notifications/notificationController");
 
 router.get(
@@ -38,6 +39,13 @@ router.delete(
     "/notifications/delete-all",
     protect,
     deleteAllNotification
+);
+
+
+router.get(
+    "/notifications/unread-count",
+    protect,
+    getUnreadCount
 );
 
 module.exports = router;

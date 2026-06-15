@@ -527,9 +527,8 @@ app.use("/api", mutualRoutes);
 const pokeRoutes = require("./src/routes/poke/pokeRoute");
 app.use("/api", pokeRoutes);
 
-
-// const postArchiveRoutes = require("./src/routes/upload/postArchiveRoute");
-// app.use("/api", postArchiveRoutes);
+const spammyRoutes = require("./src/routes/spammy/spammyRoute");
+app.use("/api", spammyRoutes);
 
 
 app.get("/", (req, res) => {
