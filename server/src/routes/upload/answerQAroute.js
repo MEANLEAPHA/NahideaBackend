@@ -13,15 +13,15 @@ const {
   getMostPopularAnswer
 } = require("../../controllers/upload/answerQAcontroller");
 
-router.post("/answer-qa/:postId/:questionId/:questionType", protect, answerQA);
-router.get("/get-question/:questionId/:questionType", getQuestionById);
+router.post("/answers/answer-qa/:postId/:questionId/:questionType", protect, answerQA);
+router.get("/answers/get-question/:questionId/:questionType", getQuestionById);
 
 // Public routes (with auth for vote tracking)
-router.get('/question/:questionId', protect, getAllAnswersByQuestionId);
-router.get('/question/:questionId/popular', protect, getMostPopularAnswer);
-router.get('/:answerId', protect, getAnswerById);
+router.get('/answers/question/:questionId', protect, getAllAnswersByQuestionId);
+router.get('/answers/question/:questionId/popular', protect, getMostPopularAnswer);
+router.get('/answers/:answerId', protect, getAnswerById);
 
 // Vote routes
-router.post('/:answerId/upvote', protect, upvoteAnswer);
-router.post('/:answerId/downvote', protect, downvoteAnswer);
+router.post('/answers/:answerId/upvote', protect, upvoteAnswer);
+router.post('/answers/:answerId/downvote', protect, downvoteAnswer);
 module.exports = router;
