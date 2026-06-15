@@ -1,4 +1,4 @@
-const pool = require("../../config/db");
+const pool = require("../../config/pool");
 const answerQA = async (req, res) => {
     try{
         const userId = req.user.userId;
@@ -166,7 +166,7 @@ const getQuestionById = async (req, res) => {
     }
 
     res.status(200).json({
-      source: "db",
+      source: "pool",
       datas: data,
     });
    }catch(err){
@@ -186,7 +186,7 @@ const getAllAnswersByQuestionId = async (req, res) => {
     const offset = (page - 1) * limit;
 
     // Get user's votes on answers
-    const [userVotes] = await db.query(
+    const [userVotes] = await pool.query(
       `SELECT answer_id, vote_type FROM answer_votes WHERE user_id = ?`,
       [userId]
     );
@@ -216,7 +216,7 @@ const getAllAnswersByQuestionId = async (req, res) => {
     }
 
     // Get answers with user info
-    const [answers] = await db.query(
+    const [answers] = await pool.query(
       `SELECT 
         a.id,
         a.question_id,
@@ -305,7 +305,7 @@ const getMostPopularAnswer = async (req, res) => {
     const { questionId } = req.params;
 
     // Get user's votes
-    const [userVotes] = await db.query(
+    const [userVotes] = await pool.query(
       `SELECT answer_id, vote_type FROM answer_votes WHERE user_id = ?`,
       [userId]
     );
@@ -315,7 +315,7 @@ const getMostPopularAnswer = async (req, res) => {
       voteMap.set(vote.answer_id, vote.vote_type);
     });
 
-    const [answer] = await db.query(
+    const [answer] = await pool.query(
       `SELECT 
         a.id,
         a.question_id,
@@ -394,7 +394,7 @@ const upvoteAnswer = async (req, res) => {
     const { answerId } = req.params;
 
     // Check if answer exists
-    const [answer] = await db.query(
+    const [answer] = await pool.query(
       `SELECT id, user_id FROM answers WHERE id = ?`,
       [answerId]
     );
@@ -407,7 +407,7 @@ const upvoteAnswer = async (req, res) => {
     }
 
     // Check existing vote
-    const [existingVote] = await db.query(
+    const [existingVote] = await pool.query(
       `SELECT vote_type FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
       [answerId, userId]
     );
@@ -419,7 +419,7 @@ const upvoteAnswer = async (req, res) => {
 
     if (existingVote.length === 0) {
       // No existing vote - add upvote
-      await db.query(
+      await pool.query(
         `INSERT INTO answer_votes (answer_id, user_id, vote_type) VALUES (?, ?, 'upvote')`,
         [answerId, userId]
       );
@@ -428,7 +428,7 @@ const upvoteAnswer = async (req, res) => {
       newVoteType = 'upvote';
     } else if (existingVote[0].vote_type === 'upvote') {
       // Already upvoted - remove upvote
-      await db.query(
+      await pool.query(
         `DELETE FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
         [answerId, userId]
       );
@@ -437,7 +437,7 @@ const upvoteAnswer = async (req, res) => {
       newVoteType = null;
     } else if (existingVote[0].vote_type === 'downvote') {
       // Was downvoted - change to upvote
-      await db.query(
+      await pool.query(
         `UPDATE answer_votes SET vote_type = 'upvote' WHERE answer_id = ? AND user_id = ?`,
         [answerId, userId]
       );
@@ -448,7 +448,7 @@ const upvoteAnswer = async (req, res) => {
     }
 
     // Update answer vote counts
-    await db.query(
+    await pool.query(
       `UPDATE answers 
        SET upvotes = upvotes + ?,
            downvotes = downvotes + ?,
@@ -458,7 +458,7 @@ const upvoteAnswer = async (req, res) => {
     );
 
     // Get updated counts
-    const [updatedAnswer] = await db.query(
+    const [updatedAnswer] = await pool.query(
       `SELECT upvotes, downvotes, vote_score FROM answers WHERE id = ?`,
       [answerId]
     );
@@ -491,7 +491,7 @@ const downvoteAnswer = async (req, res) => {
     const { answerId } = req.params;
 
     // Check if answer exists
-    const [answer] = await db.query(
+    const [answer] = await pool.query(
       `SELECT id, user_id FROM answers WHERE id = ?`,
       [answerId]
     );
@@ -504,7 +504,7 @@ const downvoteAnswer = async (req, res) => {
     }
 
     // Check existing vote
-    const [existingVote] = await db.query(
+    const [existingVote] = await pool.query(
       `SELECT vote_type FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
       [answerId, userId]
     );
@@ -516,7 +516,7 @@ const downvoteAnswer = async (req, res) => {
 
     if (existingVote.length === 0) {
       // No existing vote - add downvote
-      await db.query(
+      await pool.query(
         `INSERT INTO answer_votes (answer_id, user_id, vote_type) VALUES (?, ?, 'downvote')`,
         [answerId, userId]
       );
@@ -525,7 +525,7 @@ const downvoteAnswer = async (req, res) => {
       newVoteType = 'downvote';
     } else if (existingVote[0].vote_type === 'downvote') {
       // Already downvoted - remove downvote
-      await db.query(
+      await pool.query(
         `DELETE FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
         [answerId, userId]
       );
@@ -534,7 +534,7 @@ const downvoteAnswer = async (req, res) => {
       newVoteType = null;
     } else if (existingVote[0].vote_type === 'upvote') {
       // Was upvoted - change to downvote
-      await db.query(
+      await pool.query(
         `UPDATE answer_votes SET vote_type = 'downvote' WHERE answer_id = ? AND user_id = ?`,
         [answerId, userId]
       );
@@ -545,7 +545,7 @@ const downvoteAnswer = async (req, res) => {
     }
 
     // Update answer vote counts
-    await db.query(
+    await pool.query(
       `UPDATE answers 
        SET upvotes = upvotes + ?,
            downvotes = downvotes + ?,
@@ -555,7 +555,7 @@ const downvoteAnswer = async (req, res) => {
     );
 
     // Get updated counts
-    const [updatedAnswer] = await db.query(
+    const [updatedAnswer] = await pool.query(
       `SELECT upvotes, downvotes, vote_score FROM answers WHERE id = ?`,
       [answerId]
     );
@@ -588,12 +588,12 @@ const getAnswerById = async (req, res) => {
     const { answerId } = req.params;
 
     // Get user's vote
-    const [userVote] = await db.query(
+    const [userVote] = await pool.query(
       `SELECT vote_type FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
       [answerId, userId]
     );
 
-    const [answer] = await db.query(
+    const [answer] = await pool.query(
       `SELECT 
         a.id,
         a.question_id,
