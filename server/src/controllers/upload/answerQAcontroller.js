@@ -1,105 +1,339 @@
 const pool = require("../../config/db");
+// const answerQA = async (req, res) => {
+//     try{
+//         const userId = req.user.userId;
+//         const { postId, questionId, questionType } = req.params;
+
+//         const {
+//             is_anonymous, anonymous_name, anonymous_bg_color,
+
+//             // opened
+//             answerText,
+
+//             // closed
+//             answerYesNo,
+
+//             // rating
+//             ratingValue,
+
+//             // singlechoice
+//             optionId,
+//             optionText,
+
+//             // multiplechoice
+//             optionIds,
+//             optionTexts,
+
+//             // ranking
+//             rankingIds,
+//             rankingTexts,
+
+//             // range
+//             rangeValue
+//         } = req.body;
+
+//         switch(questionType){
+//             case "openend":
+//                 await pool.query(
+//                 `INSERT INTO answers 
+//                     (question_id, post_id, user_id, question_type, text_answer, is_anonymous, anonymous_name, anonymous_bg_color)
+//                     VALUES (?, ?, ?, 'openend', ?, ?, ?, ?)`,
+//                 [questionId, postId, userId, answerText, is_anonymous || null, anonymous_name || null, anonymous_bg_color || null]);
+//                 break;
+//             case "closedend":
+//                 await pool.query(
+//                 `INSERT INTO answers 
+//                     (question_id, post_id, user_id, question_type, yes_no, is_anonymous, anonymous_name, anonymous_bg_color)
+//                     VALUES (?, ?, ?, 'closedend', ?, ?, ?, ?)`,
+//                 [questionId, postId, userId, answerYesNo, is_anonymous, anonymous_name, anonymous_bg_color]);
+//                 break;
+
+//             case "rating":
+//                 await pool.query(
+//                 `INSERT INTO answers 
+//                     (question_id, post_id, user_id, question_type, rating_value, is_anonymous, anonymous_name, anonymous_bg_color)
+//                     VALUES (?, ?, ?, 'rating', ?, ?, ?, ?)`,
+//                 [questionId, postId, userId, ratingValue, is_anonymous, anonymous_name, anonymous_bg_color]);
+//                 break;
+
+//             case "singlechoice":
+//                 await pool.query(
+//                 `INSERT INTO answers 
+//                     (question_id, post_id, user_id, question_type, singlechoice_option_id, singlechoice_option_value, is_anonymous, anonymous_name, anonymous_bg_color)
+//                     VALUES (?, ?, ?, 'singlechoice', ?, ?, ?, ?, ?)`,
+//                 [questionId, postId, userId, optionId, optionText, is_anonymous, anonymous_name, anonymous_bg_color]);
+//                 break;
+
+//             case "multiplechoice":
+//                 await pool.query(
+//                 `INSERT INTO answers 
+//                     (question_id, post_id, user_id, question_type, multiplechoice_option_ids, multiplechoice_option_value,is_anonymous, anonymous_name, anonymous_bg_color)
+//                     VALUES (?, ?, ?, 'multiplechoice', ?, ?, ?, ?, ?)`,
+//                 [questionId, postId, userId, JSON.stringify(optionIds), JSON.stringify(optionTexts), is_anonymous, anonymous_name, anonymous_bg_color]);
+//                 break;
+
+//             case "rankingorder":
+//                 await pool.query(
+//                 `INSERT INTO answers 
+//                     (question_id, post_id, user_id, question_type, ranking_positions, ranking_position_value, is_anonymous, anonymous_name, anonymous_bg_color)
+//                     VALUES (?, ?, ?, 'rankingorder', ?, ?, ?, ?, ?)`,
+//                 [questionId, postId, userId, JSON.stringify(rankingIds) ,JSON.stringify(rankingTexts), is_anonymous, anonymous_name, anonymous_bg_color]);
+//                 break;
+
+//             case "range":
+//                 await pool.query(
+//                 `INSERT INTO answers 
+//                     (question_id, post_id, user_id, question_type, range_value, is_anonymous, anonymous_name, anonymous_bg_color)
+//                     VALUES (?, ?, ?, 'range', ?, ?, ?, ?)`,
+//                 [questionId, postId, userId, rangeValue, is_anonymous, anonymous_name, anonymous_bg_color]);
+//                 break;
+//         }
+//         res.status(200).json(
+//             {
+//                 success: true,
+//                 message: "Answer submitted successfully"
+//             }
+//         );
+
+//     }catch(err){
+//         console.log(err.message);
+//         res.status(500).json({ error: "Something went wrong" });
+//     }
+// }
 const answerQA = async (req, res) => {
-    try{
+    const connection = await pool.getConnection();
+    
+    try {
+        await connection.beginTransaction();
+        
         const userId = req.user.userId;
         const { postId, questionId, questionType } = req.params;
-
+        
+        // Get username for notification
+        const [[user]] = await connection.query(
+            `SELECT username FROM users WHERE id = ?`,
+            [userId]
+        );
+        const username = user?.username || 'Someone';
+        
+        // Get post owner for notification
+        const [[post]] = await connection.query(
+            `SELECT user_id FROM posts WHERE id = ?`,
+            [postId]
+        );
+        const postOwnerId = post?.user_id;
+        
+        // Get question details for notification
+        const [[question]] = await connection.query(
+            `SELECT title FROM question WHERE id = ?`,
+            [questionId]
+        );
+        const questionTitle = question?.title || 'your question';
+        
+        const today = new Date().toISOString().split("T")[0];
+        const currentDate = today;
+        const currentMonth = today.slice(0, 7).replace("-", "");
+        
+        const aggregateKey = `answer_${postOwnerId}_${questionId}`;
+        
         const {
             is_anonymous, anonymous_name, anonymous_bg_color,
-
-            // opened
             answerText,
-
-            // closed
             answerYesNo,
-
-            // rating
             ratingValue,
-
-            // singlechoice
             optionId,
             optionText,
-
-            // multiplechoice
             optionIds,
             optionTexts,
-
-            // ranking
             rankingIds,
             rankingTexts,
-
-            // range
             rangeValue
         } = req.body;
-
+        
+        let answerId;
+        
+        // =========================
+        // INSERT ANSWER
+        // =========================
+        
         switch(questionType){
             case "openend":
-                await pool.query(
-                `INSERT INTO answers 
-                    (question_id, post_id, user_id, question_type, text_answer, is_anonymous, anonymous_name, anonymous_bg_color)
-                    VALUES (?, ?, ?, 'openend', ?, ?, ?, ?)`,
-                [questionId, postId, userId, answerText, is_anonymous || null, anonymous_name || null, anonymous_bg_color || null]);
+                const [openResult] = await connection.query(
+                    `INSERT INTO answers 
+                        (question_id, post_id, user_id, question_type, text_answer, is_anonymous, anonymous_name, anonymous_bg_color)
+                        VALUES (?, ?, ?, 'openend', ?, ?, ?, ?)`,
+                    [questionId, postId, userId, answerText, is_anonymous || 0, anonymous_name || null, anonymous_bg_color || null]
+                );
+                answerId = openResult.insertId;
                 break;
+                
             case "closedend":
-                await pool.query(
-                `INSERT INTO answers 
-                    (question_id, post_id, user_id, question_type, yes_no, is_anonymous, anonymous_name, anonymous_bg_color)
-                    VALUES (?, ?, ?, 'closedend', ?, ?, ?, ?)`,
-                [questionId, postId, userId, answerYesNo, is_anonymous, anonymous_name, anonymous_bg_color]);
+                const [closedResult] = await connection.query(
+                    `INSERT INTO answers 
+                        (question_id, post_id, user_id, question_type, yes_no, is_anonymous, anonymous_name, anonymous_bg_color)
+                        VALUES (?, ?, ?, 'closedend', ?, ?, ?, ?)`,
+                    [questionId, postId, userId, answerYesNo, is_anonymous || 0, anonymous_name || null, anonymous_bg_color || null]
+                );
+                answerId = closedResult.insertId;
                 break;
 
             case "rating":
-                await pool.query(
-                `INSERT INTO answers 
-                    (question_id, post_id, user_id, question_type, rating_value, is_anonymous, anonymous_name, anonymous_bg_color)
-                    VALUES (?, ?, ?, 'rating', ?, ?, ?, ?)`,
-                [questionId, postId, userId, ratingValue, is_anonymous, anonymous_name, anonymous_bg_color]);
+                const [ratingResult] = await connection.query(
+                    `INSERT INTO answers 
+                        (question_id, post_id, user_id, question_type, rating_value, is_anonymous, anonymous_name, anonymous_bg_color)
+                        VALUES (?, ?, ?, 'rating', ?, ?, ?, ?)`,
+                    [questionId, postId, userId, ratingValue, is_anonymous || 0, anonymous_name || null, anonymous_bg_color || null]
+                );
+                answerId = ratingResult.insertId;
                 break;
 
             case "singlechoice":
-                await pool.query(
-                `INSERT INTO answers 
-                    (question_id, post_id, user_id, question_type, singlechoice_option_id, singlechoice_option_value, is_anonymous, anonymous_name, anonymous_bg_color)
-                    VALUES (?, ?, ?, 'singlechoice', ?, ?, ?, ?, ?)`,
-                [questionId, postId, userId, optionId, optionText, is_anonymous, anonymous_name, anonymous_bg_color]);
+                const [singleResult] = await connection.query(
+                    `INSERT INTO answers 
+                        (question_id, post_id, user_id, question_type, singlechoice_option_id, singlechoice_option_value, is_anonymous, anonymous_name, anonymous_bg_color)
+                        VALUES (?, ?, ?, 'singlechoice', ?, ?, ?, ?, ?)`,
+                    [questionId, postId, userId, optionId, optionText, is_anonymous || 0, anonymous_name || null, anonymous_bg_color || null]
+                );
+                answerId = singleResult.insertId;
                 break;
 
             case "multiplechoice":
-                await pool.query(
-                `INSERT INTO answers 
-                    (question_id, post_id, user_id, question_type, multiplechoice_option_ids, multiplechoice_option_value,is_anonymous, anonymous_name, anonymous_bg_color)
-                    VALUES (?, ?, ?, 'multiplechoice', ?, ?, ?, ?, ?)`,
-                [questionId, postId, userId, JSON.stringify(optionIds), JSON.stringify(optionTexts), is_anonymous, anonymous_name, anonymous_bg_color]);
+                const [multiResult] = await connection.query(
+                    `INSERT INTO answers 
+                        (question_id, post_id, user_id, question_type, multiplechoice_option_ids, multiplechoice_option_value, is_anonymous, anonymous_name, anonymous_bg_color)
+                        VALUES (?, ?, ?, 'multiplechoice', ?, ?, ?, ?, ?)`,
+                    [questionId, postId, userId, JSON.stringify(optionIds), JSON.stringify(optionTexts), is_anonymous || 0, anonymous_name || null, anonymous_bg_color || null]
+                );
+                answerId = multiResult.insertId;
                 break;
 
             case "rankingorder":
-                await pool.query(
-                `INSERT INTO answers 
-                    (question_id, post_id, user_id, question_type, ranking_positions, ranking_position_value, is_anonymous, anonymous_name, anonymous_bg_color)
-                    VALUES (?, ?, ?, 'rankingorder', ?, ?, ?, ?, ?)`,
-                [questionId, postId, userId, JSON.stringify(rankingIds) ,JSON.stringify(rankingTexts), is_anonymous, anonymous_name, anonymous_bg_color]);
+                const [rankingResult] = await connection.query(
+                    `INSERT INTO answers 
+                        (question_id, post_id, user_id, question_type, ranking_positions, ranking_position_value, is_anonymous, anonymous_name, anonymous_bg_color)
+                        VALUES (?, ?, ?, 'rankingorder', ?, ?, ?, ?, ?)`,
+                    [questionId, postId, userId, JSON.stringify(rankingIds), JSON.stringify(rankingTexts), is_anonymous || 0, anonymous_name || null, anonymous_bg_color || null]
+                );
+                answerId = rankingResult.insertId;
                 break;
 
             case "range":
-                await pool.query(
-                `INSERT INTO answers 
-                    (question_id, post_id, user_id, question_type, range_value, is_anonymous, anonymous_name, anonymous_bg_color)
-                    VALUES (?, ?, ?, 'range', ?, ?, ?, ?)`,
-                [questionId, postId, userId, rangeValue, is_anonymous, anonymous_name, anonymous_bg_color]);
+                const [rangeResult] = await connection.query(
+                    `INSERT INTO answers 
+                        (question_id, post_id, user_id, question_type, range_value, is_anonymous, anonymous_name, anonymous_bg_color)
+                        VALUES (?, ?, ?, 'range', ?, ?, ?, ?)`,
+                    [questionId, postId, userId, rangeValue, is_anonymous || 0, anonymous_name || null, anonymous_bg_color || null]
+                );
+                answerId = rangeResult.insertId;
                 break;
+                
+            default:
+                throw new Error("Invalid question type");
         }
-        res.status(200).json(
-            {
-                success: true,
-                message: "Answer submitted successfully"
-            }
+        
+        // =========================
+        // UPDATE POST ANSWERS COUNT
+        // =========================
+        
+        await connection.query(
+            `UPDATE question SET answers_count = answers_count + 1 WHERE id = ?`,
+            [questionId]
         );
-
-    }catch(err){
-        console.log(err.message);
-        res.status(500).json({ error: "Something went wrong" });
+        
+        // =========================
+        // NOTIFICATION LOGIC
+        // =========================
+        
+        // Don't notify if user is answering their own question
+        if (Number(postOwnerId) !== Number(userId)) {
+            
+            // Get total answers count for this question
+            const [[answerData]] = await connection.query(
+                `SELECT COUNT(*) as total_answers FROM answers WHERE question_id = ?`,
+                [questionId]
+            );
+            const totalAnswers = answerData.total_answers;
+            
+            // Build notification content
+            let notificationContent = '';
+            let displayName = is_anonymous ? 'Someone' : username;
+            
+            if (totalAnswers === 1) {
+                notificationContent = `${displayName} answered your question: "${questionTitle.slice(0, 50)}${questionTitle.length > 50 ? '...' : ''}"`;
+            } else {
+                notificationContent = `${displayName} and ${totalAnswers - 1} other${totalAnswers - 1 > 1 ? 's' : ''} answered your question: "${questionTitle.slice(0, 50)}${questionTitle.length > 50 ? '...' : ''}"`;
+            }
+            
+            // Check if there's already an existing aggregate notification
+            const [existingNotification] = await connection.query(
+                `SELECT id FROM notifications WHERE aggregate_key = ? AND type = 'answer' LIMIT 1`,
+                [aggregateKey]
+            );
+            
+            if (existingNotification.length > 0) {
+                // Update existing notification
+                await connection.query(
+                    `UPDATE notifications 
+                     SET sender_id = ?,
+                         content = ?,
+                         is_viewed = 0,
+                         created_at = NOW()
+                     WHERE aggregate_key = ? AND type = 'answer'`,
+                    [userId, notificationContent, aggregateKey]
+                );
+            } else {
+                // Create new notification
+                await connection.query(
+                    `INSERT INTO notifications (
+                        receiver_id, 
+                        sender_id, 
+                        type, 
+                        content, 
+                        post_id, 
+                        answer_id,
+                        aggregate_key, 
+                        is_viewed
+                    ) VALUES (?, ?, 'answer', ?, ?, ?, ?, 0)`,
+                    [
+                        postOwnerId,
+                        userId,
+                        notificationContent,
+                        postId,
+                        answerId,
+                        aggregateKey
+                    ]
+                );
+            }
+        }
+        
+        // =========================
+        // TRENDING/RANKING (TODO - implement later)
+        // =========================
+        // await ranking.zIncrBy(`trendingPost:day:${currentDate}`, 5, postId.toString());
+        // await ranking.zIncrBy(`hof:month:${currentMonth}`, 3, userId.toString());
+        
+        await connection.commit();
+        
+        res.status(200).json({
+            success: true,
+            message: "Answer submitted successfully",
+            data: {
+                answer_id: answerId
+            }
+        });
+        
+    } catch(err) {
+        await connection.rollback();
+        console.error("answerQA error:", err);
+        res.status(500).json({ 
+            success: false,
+            error: "Something went wrong",
+            message: err.message 
+        });
+    } finally {
+        connection.release();
     }
-}
+};
 
 const getQuestionById = async (req, res) => {
    try{
@@ -388,26 +622,236 @@ const getMostPopularAnswer = async (req, res) => {
     });
   }
 };
+// const upvoteAnswer = async (req, res) => {
+//   try {
+//     const userId = req.user.userId;
+//     const { answerId } = req.params;
+
+//     // Check if answer exists
+//     const [answer] = await pool.query(
+//       `SELECT id, user_id FROM answers WHERE id = ?`,
+//       [answerId]
+//     );
+
+//     if (!answer.length) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Answer not found"
+//       });
+//     }
+
+//     // Check existing vote
+//     const [existingVote] = await pool.query(
+//       `SELECT vote_type FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
+//       [answerId, userId]
+//     );
+
+//     let upvotesChange = 0;
+//     let downvotesChange = 0;
+//     let voteScoreChange = 0;
+//     let newVoteType = null;
+
+//     if (existingVote.length === 0) {
+//       // No existing vote - add upvote
+//       await pool.query(
+//         `INSERT INTO answer_votes (answer_id, user_id, vote_type) VALUES (?, ?, 'upvote')`,
+//         [answerId, userId]
+//       );
+//       upvotesChange = 1;
+//       voteScoreChange = 1;
+//       newVoteType = 'upvote';
+//     } else if (existingVote[0].vote_type === 'upvote') {
+//       // Already upvoted - remove upvote
+//       await pool.query(
+//         `DELETE FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
+//         [answerId, userId]
+//       );
+//       upvotesChange = -1;
+//       voteScoreChange = -1;
+//       newVoteType = null;
+//     } else if (existingVote[0].vote_type === 'downvote') {
+//       // Was downvoted - change to upvote
+//       await pool.query(
+//         `UPDATE answer_votes SET vote_type = 'upvote' WHERE answer_id = ? AND user_id = ?`,
+//         [answerId, userId]
+//       );
+//       upvotesChange = 1;
+//       downvotesChange = -1;
+//       voteScoreChange = 2; // +1 for upvote, -(-1) for removing downvote = +2
+//       newVoteType = 'upvote';
+//     }
+
+//     // Update answer vote counts
+//     await pool.query(
+//       `UPDATE answers 
+//        SET upvotes = upvotes + ?,
+//            downvotes = downvotes + ?,
+//            vote_score = vote_score + ?
+//        WHERE id = ?`,
+//       [upvotesChange, downvotesChange, voteScoreChange, answerId]
+//     );
+
+//     // Get updated counts
+//     const [updatedAnswer] = await pool.query(
+//       `SELECT upvotes, downvotes, vote_score FROM answers WHERE id = ?`,
+//       [answerId]
+//     );
+
+//     res.json({
+//       success: true,
+//       data: {
+//         upvotes: updatedAnswer[0].upvotes,
+//         downvotes: updatedAnswer[0].downvotes,
+//         vote_score: updatedAnswer[0].vote_score,
+//         user_vote_type: newVoteType
+//       },
+//       message: existingVote.length === 0 ? "Answer upvoted" : 
+//                existingVote[0].vote_type === 'upvote' ? "Upvote removed" : 
+//                "Changed from downvote to upvote"
+//     });
+
+//   } catch (err) {
+//     console.error("upvoteAnswer error:", err);
+//     res.status(500).json({
+//       success: false,
+//       message: "Error upvoting answer"
+//     });
+//   }
+// };
+
+// const downvoteAnswer = async (req, res) => {
+//   try {
+//     const userId = req.user.userId;
+//     const { answerId } = req.params;
+
+//     // Check if answer exists
+//     const [answer] = await pool.query(
+//       `SELECT id, user_id FROM answers WHERE id = ?`,
+//       [answerId]
+//     );
+
+//     if (!answer.length) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Answer not found"
+//       });
+//     }
+
+//     // Check existing vote
+//     const [existingVote] = await pool.query(
+//       `SELECT vote_type FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
+//       [answerId, userId]
+//     );
+
+//     let upvotesChange = 0;
+//     let downvotesChange = 0;
+//     let voteScoreChange = 0;
+//     let newVoteType = null;
+
+//     if (existingVote.length === 0) {
+//       // No existing vote - add downvote
+//       await pool.query(
+//         `INSERT INTO answer_votes (answer_id, user_id, vote_type) VALUES (?, ?, 'downvote')`,
+//         [answerId, userId]
+//       );
+//       downvotesChange = 1;
+//       voteScoreChange = -1;
+//       newVoteType = 'downvote';
+//     } else if (existingVote[0].vote_type === 'downvote') {
+//       // Already downvoted - remove downvote
+//       await pool.query(
+//         `DELETE FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
+//         [answerId, userId]
+//       );
+//       downvotesChange = -1;
+//       voteScoreChange = 1;
+//       newVoteType = null;
+//     } else if (existingVote[0].vote_type === 'upvote') {
+//       // Was upvoted - change to downvote
+//       await pool.query(
+//         `UPDATE answer_votes SET vote_type = 'downvote' WHERE answer_id = ? AND user_id = ?`,
+//         [answerId, userId]
+//       );
+//       upvotesChange = -1;
+//       downvotesChange = 1;
+//       voteScoreChange = -2; // -1 for removing upvote, -1 for adding downvote = -2
+//       newVoteType = 'downvote';
+//     }
+
+//     // Update answer vote counts
+//     await pool.query(
+//       `UPDATE answers 
+//        SET upvotes = upvotes + ?,
+//            downvotes = downvotes + ?,
+//            vote_score = vote_score + ?
+//        WHERE id = ?`,
+//       [upvotesChange, downvotesChange, voteScoreChange, answerId]
+//     );
+
+//     // Get updated counts
+//     const [updatedAnswer] = await pool.query(
+//       `SELECT upvotes, downvotes, vote_score FROM answers WHERE id = ?`,
+//       [answerId]
+//     );
+
+//     res.json({
+//       success: true,
+//       data: {
+//         upvotes: updatedAnswer[0].upvotes,
+//         downvotes: updatedAnswer[0].downvotes,
+//         vote_score: updatedAnswer[0].vote_score,
+//         user_vote_type: newVoteType
+//       },
+//       message: existingVote.length === 0 ? "Answer downvoted" : 
+//                existingVote[0].vote_type === 'downvote' ? "Downvote removed" : 
+//                "Changed from upvote to downvote"
+//     });
+
+//   } catch (err) {
+//     console.error("downvoteAnswer error:", err);
+//     res.status(500).json({
+//       success: false,
+//       message: "Error downvoting answer"
+//     });
+//   }
+// };
+
 const upvoteAnswer = async (req, res) => {
+  const connection = await pool.getConnection();
   try {
+    await connection.beginTransaction();
+    
     const userId = req.user.userId;
     const { answerId } = req.params;
+    
+    // Get username for notification
+    const [[user]] = await connection.query(
+      `SELECT username FROM users WHERE id = ?`,
+      [userId]
+    );
+    const username = user?.username || 'Someone';
 
     // Check if answer exists
-    const [answer] = await pool.query(
-      `SELECT id, user_id FROM answers WHERE id = ?`,
+    const [answer] = await connection.query(
+      `SELECT id, user_id, question_id, post_id FROM answers WHERE id = ?`,
       [answerId]
     );
 
     if (!answer.length) {
+      await connection.rollback();
       return res.status(404).json({
         success: false,
         message: "Answer not found"
       });
     }
 
+    const answerOwnerId = answer[0].user_id;
+    const questionId = answer[0].question_id;
+    const postId = answer[0].post_id;
+    const aggregateKey = `answer_vote_${answerOwnerId}_${answerId}`;
+
     // Check existing vote
-    const [existingVote] = await pool.query(
+    const [existingVote] = await connection.query(
       `SELECT vote_type FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
       [answerId, userId]
     );
@@ -416,39 +860,45 @@ const upvoteAnswer = async (req, res) => {
     let downvotesChange = 0;
     let voteScoreChange = 0;
     let newVoteType = null;
+    let notificationAction = null; // 'create', 'update', 'delete'
 
     if (existingVote.length === 0) {
       // No existing vote - add upvote
-      await pool.query(
+      await connection.query(
         `INSERT INTO answer_votes (answer_id, user_id, vote_type) VALUES (?, ?, 'upvote')`,
         [answerId, userId]
       );
       upvotesChange = 1;
       voteScoreChange = 1;
       newVoteType = 'upvote';
+      notificationAction = 'create';
+      
     } else if (existingVote[0].vote_type === 'upvote') {
       // Already upvoted - remove upvote
-      await pool.query(
+      await connection.query(
         `DELETE FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
         [answerId, userId]
       );
       upvotesChange = -1;
       voteScoreChange = -1;
       newVoteType = null;
+      notificationAction = 'delete';
+      
     } else if (existingVote[0].vote_type === 'downvote') {
       // Was downvoted - change to upvote
-      await pool.query(
+      await connection.query(
         `UPDATE answer_votes SET vote_type = 'upvote' WHERE answer_id = ? AND user_id = ?`,
         [answerId, userId]
       );
       upvotesChange = 1;
       downvotesChange = -1;
-      voteScoreChange = 2; // +1 for upvote, -(-1) for removing downvote = +2
+      voteScoreChange = 2;
       newVoteType = 'upvote';
+      notificationAction = 'update';
     }
 
     // Update answer vote counts
-    await pool.query(
+    await connection.query(
       `UPDATE answers 
        SET upvotes = upvotes + ?,
            downvotes = downvotes + ?,
@@ -457,54 +907,241 @@ const upvoteAnswer = async (req, res) => {
       [upvotesChange, downvotesChange, voteScoreChange, answerId]
     );
 
-    // Get updated counts
-    const [updatedAnswer] = await pool.query(
+    // Get updated vote counts
+    const [[updatedAnswer]] = await connection.query(
       `SELECT upvotes, downvotes, vote_score FROM answers WHERE id = ?`,
       [answerId]
     );
 
+    // ============================================
+    // NOTIFICATION LOGIC
+    // ============================================
+    
+    // Don't notify if user is voting on their own answer
+    if (Number(answerOwnerId) !== Number(userId)) {
+      
+      // Get total upvotes for this answer
+      const [[voteData]] = await connection.query(
+        `SELECT upvotes FROM answers WHERE id = ?`,
+        [answerId]
+      );
+      const totalUpvotes = voteData.upvotes;
+      
+      let notificationContent = '';
+      let notificationType = 'answer_upvote';
+      
+      if (notificationAction === 'create') {
+        // New upvote
+        if (totalUpvotes === 1) {
+          notificationContent = `${username} upvoted your answer`;
+        } else {
+          notificationContent = `${username} and ${totalUpvotes - 1} other${totalUpvotes - 1 > 1 ? 's' : ''} upvoted your answer`;
+        }
+        
+        // Check if there's already an existing aggregate notification
+        const [existingNotification] = await connection.query(
+          `SELECT id FROM notifications WHERE aggregate_key = ? LIMIT 1`,
+          [aggregateKey]
+        );
+        
+        if (existingNotification.length > 0) {
+          // Update existing notification
+          await connection.query(
+            `UPDATE notifications 
+             SET sender_id = ?,
+                 content = ?,
+                 is_viewed = 0,
+                 created_at = NOW()
+             WHERE aggregate_key = ?`,
+            [userId, notificationContent, aggregateKey]
+          );
+        } else {
+          // Create new notification
+          await connection.query(
+            `INSERT INTO notifications (
+              receiver_id, 
+              sender_id, 
+              type, 
+              content, 
+              answer_id,
+              post_id,
+              aggregate_key, 
+              is_viewed
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+            [
+              answerOwnerId,
+              userId,
+              notificationType,
+              notificationContent,
+              answerId,
+              postId,
+              aggregateKey
+            ]
+          );
+        }
+        
+      } else if (notificationAction === 'update') {
+        // Changed from downvote to upvote
+        if (totalUpvotes === 1) {
+          notificationContent = `${username} upvoted your answer`;
+        } else {
+          notificationContent = `${username} and ${totalUpvotes - 1} other${totalUpvotes - 1 > 1 ? 's' : ''} upvoted your answer`;
+        }
+        
+        // Update existing notification
+        const [existingNotification] = await connection.query(
+          `SELECT id FROM notifications WHERE aggregate_key = ? LIMIT 1`,
+          [aggregateKey]
+        );
+        
+        if (existingNotification.length > 0) {
+          await connection.query(
+            `UPDATE notifications 
+             SET sender_id = ?,
+                 content = ?,
+                 is_viewed = 0,
+                 created_at = NOW()
+             WHERE aggregate_key = ?`,
+            [userId, notificationContent, aggregateKey]
+          );
+        } else {
+          await connection.query(
+            `INSERT INTO notifications (
+              receiver_id, 
+              sender_id, 
+              type, 
+              content, 
+              answer_id,
+              post_id,
+              aggregate_key, 
+              is_viewed
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+            [
+              answerOwnerId,
+              userId,
+              notificationType,
+              notificationContent,
+              answerId,
+              postId,
+              aggregateKey
+            ]
+          );
+        }
+        
+      } else if (notificationAction === 'delete') {
+        // Remove upvote - check if there are any other upvotes
+        if (totalUpvotes === 0) {
+          // No upvotes left, delete notification
+          await connection.query(
+            `DELETE FROM notifications WHERE aggregate_key = ?`,
+            [aggregateKey]
+          );
+        } else {
+          // Still have upvotes, update notification with latest liker
+          const [[latestUpvoter]] = await connection.query(
+            `SELECT 
+               av.user_id,
+               u.username
+             FROM answer_votes av
+             JOIN users u ON u.id = av.user_id
+             WHERE av.answer_id = ? 
+               AND av.vote_type = 'upvote'
+             ORDER BY av.id DESC
+             LIMIT 1`,
+            [answerId]
+          );
+          
+          if (latestUpvoter) {
+            if (totalUpvotes === 1) {
+              notificationContent = `${latestUpvoter.username} upvoted your answer`;
+            } else {
+              notificationContent = `${latestUpvoter.username} and ${totalUpvotes - 1} other${totalUpvotes - 1 > 1 ? 's' : ''} upvoted your answer`;
+            }
+            
+            await connection.query(
+              `UPDATE notifications 
+               SET sender_id = ?,
+                   content = ?,
+                   is_viewed = 0,
+                   created_at = NOW()
+               WHERE aggregate_key = ?`,
+              [latestUpvoter.user_id, notificationContent, aggregateKey]
+            );
+          }
+        }
+      }
+    }
+
+    // ============================================
+    // TRENDING/RANKING (TODO - implement later)
+    // ============================================
+    // const currentDay = new Date().toISOString().split("T")[0];
+    // await ranking.zIncrBy(`trendingAnswer:day:${currentDay}`, 1, answerId.toString());
+    // await ranking.zIncrBy(`hof:month:${currentDay.slice(0, 7).replace("-", "")}`, 0.5, userId.toString());
+
+    await connection.commit();
+
     res.json({
       success: true,
       data: {
-        upvotes: updatedAnswer[0].upvotes,
-        downvotes: updatedAnswer[0].downvotes,
-        vote_score: updatedAnswer[0].vote_score,
+        upvotes: updatedAnswer.upvotes,
+        downvotes: updatedAnswer.downvotes,
+        vote_score: updatedAnswer.vote_score,
         user_vote_type: newVoteType
       },
       message: existingVote.length === 0 ? "Answer upvoted" : 
-               existingVote[0].vote_type === 'upvote' ? "Upvote removed" : 
+               existingVote[0]?.vote_type === 'upvote' ? "Upvote removed" : 
                "Changed from downvote to upvote"
     });
 
   } catch (err) {
+    await connection.rollback();
     console.error("upvoteAnswer error:", err);
     res.status(500).json({
       success: false,
       message: "Error upvoting answer"
     });
+  } finally {
+    connection.release();
   }
 };
 
 const downvoteAnswer = async (req, res) => {
+  const connection = await pool.getConnection();
   try {
+    await connection.beginTransaction();
+    
     const userId = req.user.userId;
     const { answerId } = req.params;
+    
+    // Get username for notification
+    const [[user]] = await connection.query(
+      `SELECT username FROM users WHERE id = ?`,
+      [userId]
+    );
+    const username = user?.username || 'Someone';
 
     // Check if answer exists
-    const [answer] = await pool.query(
-      `SELECT id, user_id FROM answers WHERE id = ?`,
+    const [answer] = await connection.query(
+      `SELECT id, user_id, question_id, post_id FROM answers WHERE id = ?`,
       [answerId]
     );
 
     if (!answer.length) {
+      await connection.rollback();
       return res.status(404).json({
         success: false,
         message: "Answer not found"
       });
     }
 
+    const answerOwnerId = answer[0].user_id;
+    const questionId = answer[0].question_id;
+    const postId = answer[0].post_id;
+    const aggregateKey = `answer_vote_${answerOwnerId}_${answerId}`;
+
     // Check existing vote
-    const [existingVote] = await pool.query(
+    const [existingVote] = await connection.query(
       `SELECT vote_type FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
       [answerId, userId]
     );
@@ -513,39 +1150,45 @@ const downvoteAnswer = async (req, res) => {
     let downvotesChange = 0;
     let voteScoreChange = 0;
     let newVoteType = null;
+    let notificationAction = null; // 'create', 'update', 'delete'
 
     if (existingVote.length === 0) {
       // No existing vote - add downvote
-      await pool.query(
+      await connection.query(
         `INSERT INTO answer_votes (answer_id, user_id, vote_type) VALUES (?, ?, 'downvote')`,
         [answerId, userId]
       );
       downvotesChange = 1;
       voteScoreChange = -1;
       newVoteType = 'downvote';
+      notificationAction = 'create';
+      
     } else if (existingVote[0].vote_type === 'downvote') {
       // Already downvoted - remove downvote
-      await pool.query(
+      await connection.query(
         `DELETE FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
         [answerId, userId]
       );
       downvotesChange = -1;
       voteScoreChange = 1;
       newVoteType = null;
+      notificationAction = 'delete';
+      
     } else if (existingVote[0].vote_type === 'upvote') {
       // Was upvoted - change to downvote
-      await pool.query(
+      await connection.query(
         `UPDATE answer_votes SET vote_type = 'downvote' WHERE answer_id = ? AND user_id = ?`,
         [answerId, userId]
       );
       upvotesChange = -1;
       downvotesChange = 1;
-      voteScoreChange = -2; // -1 for removing upvote, -1 for adding downvote = -2
+      voteScoreChange = -2;
       newVoteType = 'downvote';
+      notificationAction = 'update';
     }
 
     // Update answer vote counts
-    await pool.query(
+    await connection.query(
       `UPDATE answers 
        SET upvotes = upvotes + ?,
            downvotes = downvotes + ?,
@@ -554,34 +1197,113 @@ const downvoteAnswer = async (req, res) => {
       [upvotesChange, downvotesChange, voteScoreChange, answerId]
     );
 
-    // Get updated counts
-    const [updatedAnswer] = await pool.query(
+    // Get updated vote counts
+    const [[updatedAnswer]] = await connection.query(
       `SELECT upvotes, downvotes, vote_score FROM answers WHERE id = ?`,
       [answerId]
     );
 
+    // ============================================
+    // NOTIFICATION LOGIC FOR DOWNVOTES
+    // ============================================
+    
+    // Note: For downvotes, you may or may not want to notify.
+    // Option 1: Don't notify for downvotes (negative experience)
+    // Option 2: Notify for downvotes (but content different)
+    
+    // OPTION 2: Notify for downvotes (uncomment if you want this)
+    /*
+    if (Number(answerOwnerId) !== Number(userId)) {
+      
+      const [[voteData]] = await connection.query(
+        `SELECT downvotes FROM answers WHERE id = ?`,
+        [answerId]
+      );
+      const totalDownvotes = voteData.downvotes;
+      
+      let notificationContent = '';
+      let notificationType = 'answer_downvote';
+      
+      if (notificationAction === 'create') {
+        if (totalDownvotes === 1) {
+          notificationContent = `${username} downvoted your answer`;
+        } else {
+          notificationContent = `${username} and ${totalDownvotes - 1} other${totalDownvotes - 1 > 1 ? 's' : ''} downvoted your answer`;
+        }
+        
+        const [existingNotification] = await connection.query(
+          `SELECT id FROM notifications WHERE aggregate_key = ? AND type = 'answer_downvote' LIMIT 1`,
+          [aggregateKey]
+        );
+        
+        if (existingNotification.length > 0) {
+          await connection.query(
+            `UPDATE notifications 
+             SET sender_id = ?,
+                 content = ?,
+                 is_viewed = 0,
+                 created_at = NOW()
+             WHERE aggregate_key = ? AND type = 'answer_downvote'`,
+            [userId, notificationContent, aggregateKey]
+          );
+        } else {
+          await connection.query(
+            `INSERT INTO notifications (
+              receiver_id, sender_id, type, content, answer_id, post_id, aggregate_key, is_viewed
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+            [answerOwnerId, userId, notificationType, notificationContent, answerId, postId, aggregateKey]
+          );
+        }
+        
+      } else if (notificationAction === 'delete') {
+        const [existingDownvote] = await connection.query(
+          `SELECT id FROM answer_votes WHERE answer_id = ? AND vote_type = 'downvote' LIMIT 1`,
+          [answerId]
+        );
+        
+        if (!existingDownvote.length) {
+          await connection.query(
+            `DELETE FROM notifications WHERE aggregate_key = ? AND type = 'answer_downvote'`,
+            [aggregateKey]
+          );
+        }
+      }
+    }
+    */
+
+    // ============================================
+    // TRENDING/RANKING (TODO - implement later)
+    // ============================================
+    // const currentDay = new Date().toISOString().split("T")[0];
+    // For downvotes, you might want to decrement trending score
+    // await ranking.zIncrBy(`trendingAnswer:day:${currentDay}`, -1, answerId.toString());
+
+    await connection.commit();
+
     res.json({
       success: true,
       data: {
-        upvotes: updatedAnswer[0].upvotes,
-        downvotes: updatedAnswer[0].downvotes,
-        vote_score: updatedAnswer[0].vote_score,
+        upvotes: updatedAnswer.upvotes,
+        downvotes: updatedAnswer.downvotes,
+        vote_score: updatedAnswer.vote_score,
         user_vote_type: newVoteType
       },
       message: existingVote.length === 0 ? "Answer downvoted" : 
-               existingVote[0].vote_type === 'downvote' ? "Downvote removed" : 
+               existingVote[0]?.vote_type === 'downvote' ? "Downvote removed" : 
                "Changed from upvote to downvote"
     });
 
   } catch (err) {
+    await connection.rollback();
     console.error("downvoteAnswer error:", err);
     res.status(500).json({
       success: false,
       message: "Error downvoting answer"
     });
+  } finally {
+    connection.release();
   }
 };
-
 const getAnswerById = async (req, res) => {
   try {
     const userId = req.user.userId;
