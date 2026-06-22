@@ -472,25 +472,102 @@ app.use(globalLimiter); // global rate limit
 |--------------------------------------------------------------------------
 */
 
+// // chat 
+// const userChatRoute = require("./src/routes/chat/getChatUserRoute");
+// app.use('/api', userChatRoute);
+
+// // user authentication
+// const authRoutes = require("./src/routes/authentication/authRoutes");
+// app.use("/api", authRoutes);
+
+// // mutual logic
+// const followRoutes = require("./src/routes/mutuals/followRoute");
+// app.use("/api", followRoutes);
+
+// // post
+// const postRoutes = require("./src/routes/upload/postRoutes");
+// app.use("/api", postRoutes);
+
+// // view recorder post
+// const viewPostRoutes = require("./src/routes/view/viewPostRoute");
+// app.use("/api", viewPostRoutes);
+
+// // answer question
+// try {
+//   const answerQARoutes = require("./src/routes/upload/answerQAroute");
+//   app.use("/api", answerQARoutes);
+//   console.log("✅ answerQARoutes mounted successfully");
+// } catch (err) {
+//   console.error("❌ Error loading answerQARoutes:", err.message);
+//   console.error(err.stack);
+// }
+
+// try {
+//   const spammyRoutes = require("./src/routes/spammy/spammyRoute");
+//   app.use("/api", spammyRoutes);
+//   console.log("✅ spammyRoutes mounted successfully");
+// } catch (err) {
+//   console.error("❌ Error loading spammyRoutes:", err.message);
+//   console.error(err.stack);
+// }
+
+
+// // comment and reply
+// const commentsRoutes = require("./src/routes/upload/commentRoute");
+// app.use("/api", commentsRoutes);
+
+// // gif
+// const gifRoutes = require("./src/routes/upload/gifRoute");
+// app.use("/api/gifs", gifRoutes);
+
+// // notification
+// const notificationRoutes = require("./src/routes/notification/notificationRoute");
+// app.use("/api", notificationRoutes);
+
+// // ranking
+// const rankRoutes = require("./src/routes/rank/rankRoute");
+// app.use("/api", rankRoutes);
+
+// // reports
+// const reportRoutes = require("./src/routes/report/reportPostRoute");
+// app.use("/api", reportRoutes);
+
+// // history recorder post
+// const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
+// app.use("/api", postHistoryRoutes);
+
+// // mutual
+// const mutualRoutes = require("./src/routes/friend/mutualRoute");
+// app.use("/api", mutualRoutes);
+
+// const pokeRoutes = require("./src/routes/poke/pokeRoute");
+// app.use("/api", pokeRoutes);
+
+
 // chat 
 const userChatRoute = require("./src/routes/chat/getChatUserRoute");
 app.use('/api', userChatRoute);
+console.log("✅ userChatRoute mounted");
 
 // user authentication
 const authRoutes = require("./src/routes/authentication/authRoutes");
 app.use("/api", authRoutes);
+console.log("✅ authRoutes mounted");
 
 // mutual logic
 const followRoutes = require("./src/routes/mutuals/followRoute");
 app.use("/api", followRoutes);
+console.log("✅ followRoutes mounted");
 
 // post
 const postRoutes = require("./src/routes/upload/postRoutes");
 app.use("/api", postRoutes);
+console.log("✅ postRoutes mounted");
 
 // view recorder post
 const viewPostRoutes = require("./src/routes/view/viewPostRoute");
 app.use("/api", viewPostRoutes);
+console.log("✅ viewPostRoutes mounted");
 
 // answer question
 try {
@@ -511,40 +588,45 @@ try {
   console.error(err.stack);
 }
 
-
 // comment and reply
 const commentsRoutes = require("./src/routes/upload/commentRoute");
 app.use("/api", commentsRoutes);
+console.log("✅ commentsRoutes mounted");
 
 // gif
 const gifRoutes = require("./src/routes/upload/gifRoute");
 app.use("/api/gifs", gifRoutes);
+console.log("✅ gifRoutes mounted");
 
 // notification
 const notificationRoutes = require("./src/routes/notification/notificationRoute");
 app.use("/api", notificationRoutes);
+console.log("✅ notificationRoutes mounted");
 
 // ranking
 const rankRoutes = require("./src/routes/rank/rankRoute");
 app.use("/api", rankRoutes);
+console.log("✅ rankRoutes mounted");
 
 // reports
 const reportRoutes = require("./src/routes/report/reportPostRoute");
 app.use("/api", reportRoutes);
+console.log("✅ reportRoutes mounted");
 
 // history recorder post
 const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
 app.use("/api", postHistoryRoutes);
+console.log("✅ postHistoryRoutes mounted");
 
 // mutual
 const mutualRoutes = require("./src/routes/friend/mutualRoute");
 app.use("/api", mutualRoutes);
+console.log("✅ mutualRoutes mounted");
 
+// poke
 const pokeRoutes = require("./src/routes/poke/pokeRoute");
 app.use("/api", pokeRoutes);
-
-
-
+console.log("✅ pokeRoutes mounted");
 
 app.get("/", (req, res) => {
   res.send("API Server Running");

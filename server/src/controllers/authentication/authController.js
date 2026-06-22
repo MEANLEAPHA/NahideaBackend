@@ -659,7 +659,7 @@ const updateUser = async (req, res) => {
     // Handle banner upload (if file exists)
     if (req.files?.banner) {
       try {
-        const uploadedUrl = await convertAndUpload(req.files.banner[0], "banner");
+        const uploadedUrl = await convertAndUpload(req.files?.banner?.[0], "banner");
         bannerUrl = uploadedUrl;
       } catch (uploadError) {
         console.error("Banner upload error:", uploadError);
@@ -673,7 +673,7 @@ const updateUser = async (req, res) => {
     // Handle avatar
     if (avatarType === 'file' && req.files?.avatar) {
       try {
-        const uploadedUrl = await convertAndUpload(req.files.avatar[0], "avatar");
+        const uploadedUrl = await convertAndUpload(req.files?.avatar?.[0], "avatar");
         avatarUrl = uploadedUrl;
       } catch (uploadError) {
         console.error("Avatar upload error:", uploadError);
