@@ -744,15 +744,7 @@ const updateUser = async (req, res) => {
   }
 };
 
-// Route
-router.put(
-  "/update-user",
-  upload.fields([
-    { name: 'avatar', maxCount: 1 },
-    { name: 'banner', maxCount: 1 }
-  ]),
-  updateUser
-);
+
 
 // const updateUser = async (
 //   req,
