@@ -542,32 +542,61 @@ app.use(globalLimiter); // global rate limit
 
 // const pokeRoutes = require("./src/routes/poke/pokeRoute");
 // app.use("/api", pokeRoutes);
-
+/*
+|--------------------------------------------------------------------------
+| ROUTES
+|--------------------------------------------------------------------------
+*/
 
 // chat 
-const userChatRoute = require("./src/routes/chat/getChatUserRoute");
-app.use('/api', userChatRoute);
-console.log("✅ userChatRoute mounted");
+try {
+  const userChatRoute = require("./src/routes/chat/getChatUserRoute");
+  app.use('/api', userChatRoute);
+  console.log("✅ userChatRoute mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading userChatRoute:", err.message);
+  console.error(err.stack);
+}
 
 // user authentication
-const authRoutes = require("./src/routes/authentication/authRoutes");
-app.use("/api", authRoutes);
-console.log("✅ authRoutes mounted");
+try {
+  const authRoutes = require("./src/routes/authentication/authRoutes");
+  app.use("/api", authRoutes);
+  console.log("✅ authRoutes mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading authRoutes:", err.message);
+  console.error(err.stack);
+}
 
 // mutual logic
-const followRoutes = require("./src/routes/mutuals/followRoute");
-app.use("/api", followRoutes);
-console.log("✅ followRoutes mounted");
+try {
+  const followRoutes = require("./src/routes/mutuals/followRoute");
+  app.use("/api", followRoutes);
+  console.log("✅ followRoutes mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading followRoutes:", err.message);
+  console.error(err.stack);
+}
 
 // post
-const postRoutes = require("./src/routes/upload/postRoutes");
-app.use("/api", postRoutes);
-console.log("✅ postRoutes mounted");
+try {
+  const postRoutes = require("./src/routes/upload/postRoutes");
+  app.use("/api", postRoutes);
+  console.log("✅ postRoutes mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading postRoutes:", err.message);
+  console.error(err.stack);
+}
 
 // view recorder post
-const viewPostRoutes = require("./src/routes/view/viewPostRoute");
-app.use("/api", viewPostRoutes);
-console.log("✅ viewPostRoutes mounted");
+try {
+  const viewPostRoutes = require("./src/routes/view/viewPostRoute");
+  app.use("/api", viewPostRoutes);
+  console.log("✅ viewPostRoutes mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading viewPostRoutes:", err.message);
+  console.error(err.stack);
+}
 
 // answer question
 try {
@@ -579,6 +608,7 @@ try {
   console.error(err.stack);
 }
 
+// spammy
 try {
   const spammyRoutes = require("./src/routes/spammy/spammyRoute");
   app.use("/api", spammyRoutes);
@@ -589,44 +619,87 @@ try {
 }
 
 // comment and reply
-const commentsRoutes = require("./src/routes/upload/commentRoute");
-app.use("/api", commentsRoutes);
-console.log("✅ commentsRoutes mounted");
+try {
+  const commentsRoutes = require("./src/routes/upload/commentRoute");
+  app.use("/api", commentsRoutes);
+  console.log("✅ commentsRoutes mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading commentsRoutes:", err.message);
+  console.error(err.stack);
+}
 
 // gif
-const gifRoutes = require("./src/routes/upload/gifRoute");
-app.use("/api/gifs", gifRoutes);
-console.log("✅ gifRoutes mounted");
+try {
+  const gifRoutes = require("./src/routes/upload/gifRoute");
+  app.use("/api/gifs", gifRoutes);
+  console.log("✅ gifRoutes mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading gifRoutes:", err.message);
+  console.error(err.stack);
+}
 
 // notification
-const notificationRoutes = require("./src/routes/notification/notificationRoute");
-app.use("/api", notificationRoutes);
-console.log("✅ notificationRoutes mounted");
+try {
+  const notificationRoutes = require("./src/routes/notification/notificationRoute");
+  app.use("/api", notificationRoutes);
+  console.log("✅ notificationRoutes mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading notificationRoutes:", err.message);
+  console.error(err.stack);
+}
 
 // ranking
-const rankRoutes = require("./src/routes/rank/rankRoute");
-app.use("/api", rankRoutes);
-console.log("✅ rankRoutes mounted");
+try {
+  const rankRoutes = require("./src/routes/rank/rankRoute");
+  app.use("/api", rankRoutes);
+  console.log("✅ rankRoutes mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading rankRoutes:", err.message);
+  console.error(err.stack);
+}
 
 // reports
-const reportRoutes = require("./src/routes/report/reportPostRoute");
-app.use("/api", reportRoutes);
-console.log("✅ reportRoutes mounted");
+try {
+  const reportRoutes = require("./src/routes/report/reportPostRoute");
+  app.use("/api", reportRoutes);
+  console.log("✅ reportRoutes mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading reportRoutes:", err.message);
+  console.error(err.stack);
+}
 
 // history recorder post
-const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
-app.use("/api", postHistoryRoutes);
-console.log("✅ postHistoryRoutes mounted");
+try {
+  const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
+  app.use("/api", postHistoryRoutes);
+  console.log("✅ postHistoryRoutes mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading postHistoryRoutes:", err.message);
+  console.error(err.stack);
+}
 
 // mutual
-const mutualRoutes = require("./src/routes/friend/mutualRoute");
-app.use("/api", mutualRoutes);
-console.log("✅ mutualRoutes mounted");
+try {
+  const mutualRoutes = require("./src/routes/friend/mutualRoute");
+  app.use("/api", mutualRoutes);
+  console.log("✅ mutualRoutes mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading mutualRoutes:", err.message);
+  console.error(err.stack);
+}
 
 // poke
-const pokeRoutes = require("./src/routes/poke/pokeRoute");
-app.use("/api", pokeRoutes);
-console.log("✅ pokeRoutes mounted");
+try {
+  const pokeRoutes = require("./src/routes/poke/pokeRoute");
+  app.use("/api", pokeRoutes);
+  console.log("✅ pokeRoutes mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading pokeRoutes:", err.message);
+  console.error(err.stack);
+}
+
+
+
 
 app.get("/", (req, res) => {
   res.send("API Server Running");
