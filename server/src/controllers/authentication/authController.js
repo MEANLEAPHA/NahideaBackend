@@ -6,6 +6,7 @@ require('dotenv').config();
 const {Errors} = require('../../util/error/error')
 const { sendVerifyCodeEmail, sendResendPinEmail, sendVerifyCodeForgetPasswordEmail} = require('../../service/mail/email');
 const { createToken } = require('../../service/token/jwtHelp'); // adjust path if needed
+const { convertAndUpload } = require("../../service/hostinger/ftp");
 
 // login logical 
 const login = async (req, res) => {
@@ -639,71 +640,86 @@ const getUserInfo = async (req, res) => {
 //   }
 
 // };
-const updateUser = async (
-  req,
-  res
-) => {
+
+const updateUser = async (req, res) => {
   try {
     const {
-      avatar,
       profession,
       location,
       nickname,
       userId,
       email,
       bio,
+      avatarType,
     } = req.body;
 
-    // VALIDATION
+    let avatarUrl = req.body.avatar;
+    let bannerUrl = null;
 
-    if (
-      !avatar ||
-      !profession ||
-      !location ||
-      !nickname ||
-      !userId ||
-      !email ||
-      !bio
-    ) {
+    // Handle banner upload (if file exists)
+    if (req.files?.banner) {
+      try {
+        const uploadedUrl = await convertAndUpload(req.files.banner[0], "banner");
+        bannerUrl = uploadedUrl;
+      } catch (uploadError) {
+        console.error("Banner upload error:", uploadError);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to upload banner image",
+        });
+      }
+    }
+
+    // Handle avatar
+    if (avatarType === 'file' && req.files?.avatar) {
+      try {
+        const uploadedUrl = await convertAndUpload(req.files.avatar[0], "avatar");
+        avatarUrl = uploadedUrl;
+      } catch (uploadError) {
+        console.error("Avatar upload error:", uploadError);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to upload avatar image",
+        });
+      }
+    } else if (avatarType === 'url' && req.body.avatar) {
+      avatarUrl = req.body.avatar;
+    }
+
+    // VALIDATION
+    if (!profession || !location || !nickname || !userId || !email || !bio) {
       return res.status(400).json({
         success: false,
-        message:
-          "Missing required fields",
+        message: "Missing required fields",
       });
     }
 
-    // OPTIONAL:
-    // protect nickname duplicates
-
-    const [nicknameExists] =
-      await pool.query(
-        `
+    // Check for duplicate nickname
+    const [nicknameExists] = await pool.query(
+      `
         SELECT id
         FROM users
         WHERE nickname = ?
         AND id != ?
         LIMIT 1
-        `,
-        [nickname, userId]
-      );
+      `,
+      [nickname, userId]
+    );
 
-    if (
-      nicknameExists.length > 0
-    ) {
+    if (nicknameExists.length > 0) {
       return res.status(409).json({
         success: false,
-        message:
-          "Nickname already taken",
+        message: "Nickname already taken",
       });
     }
 
     // UPDATE USER
-
     await pool.query(
       `
       UPDATE users
       SET
         avatar_url = ?,
+        banner_url = ?,
         profession = ?,
         work_place = ?,
         nickname = ?,
@@ -712,32 +728,131 @@ const updateUser = async (
       WHERE id = ?
       AND email = ?
       `,
-      [
-        avatar,
-        profession,
-        location,
-        nickname,
-        bio,
-        userId,
-        email,
-      ]
+      [avatarUrl, bannerUrl, profession, location, nickname, bio, userId, email]
     );
 
     return res.status(200).json({
       success: true,
-      message:
-        "Profile updated successfully",
+      message: "Profile updated successfully",
     });
   } catch (err) {
     console.log(err);
-
     return res.status(500).json({
       success: false,
-      message:
-        "Internal server error",
+      message: "Internal server error",
     });
   }
 };
+
+// Route
+router.put(
+  "/update-user",
+  upload.fields([
+    { name: 'avatar', maxCount: 1 },
+    { name: 'banner', maxCount: 1 }
+  ]),
+  updateUser
+);
+
+// const updateUser = async (
+//   req,
+//   res
+// ) => {
+//   try {
+//     const {
+//       avatar,
+//       profession,
+//       location,
+//       nickname,
+//       userId,
+//       email,
+//       bio,
+//     } = req.body;
+
+//     // VALIDATION
+
+//     if (
+//       !avatar ||
+//       !profession ||
+//       !location ||
+//       !nickname ||
+//       !userId ||
+//       !email ||
+//       !bio
+//     ) {
+//       return res.status(400).json({
+//         success: false,
+//         message:
+//           "Missing required fields",
+//       });
+//     }
+
+//     // OPTIONAL:
+//     // protect nickname duplicates
+
+//     const [nicknameExists] =
+//       await pool.query(
+//         `
+//         SELECT id
+//         FROM users
+//         WHERE nickname = ?
+//         AND id != ?
+//         LIMIT 1
+//         `,
+//         [nickname, userId]
+//       );
+
+//     if (
+//       nicknameExists.length > 0
+//     ) {
+//       return res.status(409).json({
+//         success: false,
+//         message:
+//           "Nickname already taken",
+//       });
+//     }
+
+//     // UPDATE USER
+
+//     await pool.query(
+//       `
+//       UPDATE users
+//       SET
+//         avatar_url = ?,
+//         profession = ?,
+//         work_place = ?,
+//         nickname = ?,
+//         bio = ?,
+//         updated_at = NOW()
+//       WHERE id = ?
+//       AND email = ?
+//       `,
+//       [
+//         avatar,
+//         profession,
+//         location,
+//         nickname,
+//         bio,
+//         userId,
+//         email,
+//       ]
+//     );
+
+//     return res.status(200).json({
+//       success: true,
+//       message:
+//         "Profile updated successfully",
+//     });
+//   } catch (err) {
+//     console.log(err);
+
+//     return res.status(500).json({
+//       success: false,
+//       message:
+//         "Internal server error",
+//     });
+//   }
+// };
 const getUserInfoById = async (req, res) => {
   try {
     const userId = req.params.userId;

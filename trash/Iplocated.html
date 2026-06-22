@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IP + GPS Intelligence</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        body {
+            background: linear-gradient(145deg, #f0f6fb 0%, #e2ecf5 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+        }
+        .card {
+            max-width: 1100px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(8px);
+            border-radius: 2.5rem;
+            padding: 2rem;
+            box-shadow: 0 30px 60px -18px rgba(0, 30, 40, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+        .search-section {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.7rem;
+            background: #ffffff;
+            padding: 0.3rem 0.3rem 0.3rem 1.5rem;
+            border-radius: 60px;
+            border: 2px solid #d2e0ea;
+            margin-bottom: 1.8rem;
+            transition: 0.2s;
+        }
+        .search-section:focus-within {
+            border-color: #007b8c;
+            box-shadow: 0 0 0 4px rgba(0, 123, 140, 0.15);
+        }
+        .search-section input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 0.8rem 0.2rem;
+            font-size: 1rem;
+            outline: none;
+            min-width: 150px;
+        }
+        .search-section button {
+            border: none;
+            color: white;
+            font-weight: 600;
+            padding: 0.6rem 1.8rem;
+            border-radius: 50px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .search-section .lookup-btn {
+            background: #007b8c;
+            box-shadow: 0 4px 12px -4px #00607066;
+        }
+        .search-section .lookup-btn:hover {
+            background: #006474;
+            transform: scale(1.02);
+        }
+        .search-section .gps-btn {
+            background: #1a8c4a;
+            box-shadow: 0 4px 12px -4px #1a8c4a66;
+        }
+        .search-section .gps-btn:hover {
+            background: #15733d;
+            transform: scale(1.02);
+        }
+        .search-section .gps-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        @media (max-width: 700px) {
+            .detail-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .info-card {
+            background: #ffffff;
+            border-radius: 1.8rem;
+            padding: 1.2rem 1.5rem 1.4rem;
+            border: 1px solid #e2edf6;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        }
+        .info-card .title {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #3e6f88;
+            font-weight: 700;
+            margin-bottom: 0.8rem;
+            border-bottom: 2px solid #e8f0f8;
+            padding-bottom: 0.6rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .gps-badge {
+            background: #1a8c4a;
+            color: white;
+            padding: 0.1rem 0.8rem;
+            border-radius: 40px;
+            font-size: 0.5rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .row-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.4rem 0;
+            border-bottom: 1px solid #f0f5fa;
+            font-size: 0.9rem;
+            gap: 0.5rem;
+        }
+        .row-item:last-child {
+            border-bottom: none;
+        }
+        .row-item .label {
+            color: #406f89;
+            font-weight: 450;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+        .row-item .label i {
+            width: 1.1rem;
+            color: #2f7b93;
+            font-size: 0.8rem;
+        }
+        .row-item .value {
+            font-weight: 500;
+            color: #1a3647;
+            background: #f0f6fc;
+            padding: 0.1rem 1rem;
+            border-radius: 40px;
+            font-size: 0.82rem;
+            max-width: 65%;
+            word-break: break-word;
+            text-align: right;
+            flex-shrink: 1;
+        }
+        .value.highlight {
+            background: #d6eaf5;
+            font-weight: 600;
+            color: #004f66;
+        }
+        .value.gps-highlight {
+            background: #d4f0e0;
+            font-weight: 600;
+            color: #005c3a;
+        }
+        .value.green {
+            color: #1a8c4a;
+            background: #e6f5ed;
+        }
+        .map-container {
+            margin-top: 0.8rem;
+            border-radius: 1.2rem;
+            overflow: hidden;
+            border: 1px solid #d7e4ef;
+            height: 220px;
+            background: #dbe6f0;
+            position: relative;
+        }
+        .map-container iframe {
+            width: 100%;
+            height: 100%;
+            border: 0;
+            display: block;
+        }
+        .map-container .map-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #3a6b80;
+            font-weight: 450;
+            gap: 10px;
+        }
+        .error-msg {
+            background: #feece9;
+            color: #b13e3a;
+            padding: 0.8rem 1.5rem;
+            border-radius: 60px;
+            font-weight: 450;
+            border-left: 5px solid #c55a54;
+            margin-top: 0.5rem;
+        }
+        .loading {
+            text-align: center;
+            padding: 2.5rem;
+            color: #2d6e86;
+            font-weight: 450;
+        }
+        .loading i {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+        .gps-status-bar {
+            background: #e6f5ed;
+            padding: 0.3rem 1rem;
+            border-radius: 40px;
+            font-size: 0.7rem;
+            color: #1a6b3a;
+            display: inline-block;
+        }
+        .wifi-item {
+            display: inline-block;
+            background: #eef4f9;
+            padding: 0.05rem 0.6rem;
+            border-radius: 30px;
+            font-size: 0.65rem;
+            margin: 0.1rem;
+            color: #2d5f75;
+        }
+        .map-coords {
+            margin-top: 6px;
+            font-size: 0.7rem;
+            color: #3d7188;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.3rem;
+        }
+        .input-type-badge {
+            font-size: 0.55rem;
+            background: #d6eaf5;
+            padding: 0.1rem 0.8rem;
+            border-radius: 40px;
+            font-weight: 600;
+            color: #00566d;
+        }
+        @media (max-width: 520px) {
+            .search-section {
+                padding-left: 1rem;
+                flex-wrap: wrap;
+                border-radius: 30px;
+            }
+            .search-section button {
+                padding: 0.5rem 1rem;
+                font-size: 0.8rem;
+                flex: 1;
+                justify-content: center;
+            }
+            .card {
+                padding: 1rem;
+            }
+            .row-item {
+                font-size: 0.8rem;
+            }
+            .row-item .value {
+                font-size: 0.75rem;
+                max-width: 55%;
+                padding: 0.05rem 0.7rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <!-- Search Bar -->
+        <div class="search-section">
+            <i class="fas fa-search-location" style="color:#007b8c;"></i>
+            <input type="text" id="searchInput" placeholder="IP, domain, or hostname …" value="175.100.53.154" />
+            <button id="lookupBtn" class="lookup-btn"><i class="fas fa-arrow-right"></i> Lookup</button>
+            <button id="gpsBtn" class="gps-btn"><i class="fas fa-satellite-dish"></i> GPS</button>
+        </div>
+
+        <!-- Results Grid -->
+        <div id="detailsGrid" class="detail-grid">
+            <div class="loading"><i class="fas fa-spinner fa-spin"></i>Loading data…</div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const input = document.getElementById('searchInput');
+            const lookupBtn = document.getElementById('lookupBtn');
+            const gpsBtn = document.getElementById('gpsBtn');
+            const grid = document.getElementById('detailsGrid');
+
+            let gpsData = null;
+            let isGPSActive = false;
+
+            // --- Fetch IP data ---
+            async function fetchIpData(query) {
+                const clean = query.trim();
+                // Try ipapi.co first
+                try {
+                    const resp = await fetch(`https://ipapi.co/${encodeURIComponent(clean)}/json/`);
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        if (!data.error) return data;
+                    }
+                } catch (e) { /* fall through */ }
+
+                // Fallback to ip-api.com
+                const resp = await fetch(`http://ip-api.com/json/${encodeURIComponent(clean)}`);
+                if (!resp.ok) throw new Error('Network error');
+                const data = await resp.json();
+                if (data.status === 'fail') throw new Error(data.message || 'Invalid IP/domain');
+                return {
+                    ip: data.query || clean,
+                    city: data.city || 'Unknown',
+                    country: data.country || 'Unknown',
+                    country_code: data.countryCode || '--',
+                    region: data.regionName || 'Unknown',
+                    latitude: data.lat || 0,
+                    longitude: data.lon || 0,
+                    org: data.isp || 'Unknown',
+                    isp: data.isp || 'Unknown',
+                    asn: data.as || 'Unknown',
+                    timezone: data.timezone || 'Unknown',
+                    hostname: clean,
+                    network: data.as || 'Unknown'
+                };
+            }
+
+            // --- Get GPS ---
+            function getGPS() {
+                return new Promise((resolve, reject) => {
+                    if (!navigator.geolocation) {
+                        reject(new Error('GPS not supported by this browser'));
+                        return;
+                    }
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                            resolve({
+                                lat: pos.coords.latitude,
+                                lon: pos.coords.longitude,
+                                accuracy: Math.round(pos.coords.accuracy)
+                            });
+                        },
+                        (err) => {
+                            reject(new Error(err.message || 'GPS permission denied'));
+                        }, {
+                            enableHighAccuracy: true,
+                            timeout: 15000,
+                            maximumAge: 0
+                        }
+                    );
+                });
+            }
+
+            // --- Render ---
+            function render(data, gps = null) {
+                const lat = gps ? gps.lat : (data.latitude || data.lat || 11.5564);
+                const lon = gps ? gps.lon : (data.longitude || data.lon || 104.9282);
+                const zoom = gps ? 16 : 12;
+                const mapKey = 'AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8';
+                const mapUrl =
+                    `https://www.google.com/maps/embed/v1/place?key=${mapKey}&q=${lat},${lon}&zoom=${zoom}&maptype=roadmap`;
+
+                const isDomain = /[a-zA-Z]/.test(input.value) && !/^(\d{1,3}\.){3}\d{1,3}$/.test(input.value);
+                const inputType = isDomain ? 'Domain' : 'IP Address';
+
+                const locationDisplay = gps ?
+                    `📍 GPS: ${gps.accuracy}m accuracy` :
+                    `${data.city || 'Unknown'}, ${data.country_code || data.country || '—'}`;
+
+                // Simulated nearby WiFi (browser can't scan real WiFi)
+                const wifiList = ['Home_5G', 'Office_2.4G', 'Neighbor_Network', 'Public_Hotspot'];
+
+                grid.innerHTML = `
+                <div class="info-card">
+                    <div class="title">
+                        <span><i class="fas fa-network-wired"></i> IP & Network</span>
+                        <span class="input-type-badge">${inputType}</span>
+                    </div>
+                    <div class="row-item">
+                        <span class="label"><i class="fas fa-tag"></i> ${isDomain ? 'Domain' : 'IPv4'}</span>
+                        <span class="value highlight">${data.ip || input.value || '—'}</span>
+                    </div>
+                    <div class="row-item">
+                        <span class="label"><i class="fas fa-tag"></i> IPv6</span>
+                        <span class="value">${data.version === 6 ? data.ip : 'Not Detected'}</span>
+                    </div>
+                    <div class="row-item">
+                        <span class="label"><i class="fas fa-server"></i> Hostname</span>
+                        <span class="value">${data.hostname || data.ip || input.value || '—'}</span>
+                    </div>
+                    <div class="row-item">
+                        <span class="label"><i class="fas fa-building"></i> ISP</span>
+                        <span class="value">${data.org || data.isp || '—'}</span>
+                    </div>
+                    <div class="row-item">
+                        <span class="label"><i class="fas fa-shield-alt"></i> Proxy/VPN</span>
+                        <span class="value">${data.proxy || data.proxy === true ? '⚠️ Detected' : '✅ Not Detected'}</span>
+                    </div>
+                    <div class="row-item">
+                        <span class="label"><i class="fas fa-globe"></i> ASN</span>
+                        <span class="value">${data.asn || '—'}</span>
+                    </div>
+                    <div class="row-item">
+                        <span class="label"><i class="fas fa-clock"></i> Timezone</span>
+                        <span class="value">${data.timezone || '—'}</span>
+                    </div>
+                    <div class="row-item">
+                        <span class="label"><i class="fas fa-wifi"></i> Network Type</span>
+                        <span class="value">${data.network || data.org || '—'}</span>
+                    </div>
+                    <div class="row-item" style="border-bottom: none; padding-bottom: 0;">
+                        <span class="label"><i class="fas fa-signal"></i> Nearby WiFi</span>
+                        <span class="value" style="background:transparent; max-width:70%; text-align:right; font-size:0.7rem;">
+                            ${wifiList.map(w => `<span class="wifi-item">📶 ${w}</span>`).join(' ')}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <div class="title">
+                        <span><i class="fas fa-map-pin"></i> Location</span>
+                        ${gps ? `<span class="gps-badge"><i class="fas fa-satellite"></i> GPS</span>` : ''}
+                    </div>
+                    <div class="row-item">
+                        <span class="label"><i class="fas fa-location-dot"></i> ${gps ? 'GPS Location' : 'Location'}</span>
+                        <span class="value ${gps ? 'gps-highlight' : 'highlight'}">${locationDisplay}</span>
+                    </div>
+                    ${gps ? `
+                        <div class="row-item">
+                            <span class="label"><i class="fas fa-crosshairs"></i> Accuracy</span>
+                            <span class="value gps-highlight">${gps.accuracy} meters</span>
+                        </div>
+                    ` : `
+                        <div class="row-item">
+                            <span class="label"><i class="fas fa-city"></i> City</span>
+                            <span class="value">${data.city || '—'}</span>
+                        </div>
+                        <div class="row-item">
+                            <span class="label"><i class="fas fa-flag"></i> Country</span>
+                            <span class="value">${data.country_name || data.country || '—'}</span>
+                        </div>
+                        <div class="row-item">
+                            <span class="label"><i class="fas fa-map-pin"></i> Region</span>
+                            <span class="value">${data.region || data.regionName || '—'}</span>
+                        </div>
+                        <div class="row-item">
+                            <span class="label"><i class="fas fa-code"></i> Postal</span>
+                            <span class="value">${data.postal || '—'}</span>
+                        </div>
+                    `}
+                    <div class="row-item">
+                        <span class="label"><i class="fas fa-desktop"></i> Platform</span>
+                        <span class="value">${navigator.platform || '—'}</span>
+                    </div>
+                    <div class="row-item">
+                        <span class="label"><i class="fab fa-chrome"></i> Browser</span>
+                        <span class="value">${navigator.userAgent.split(' ').slice(-2).join(' ') || '—'}</span>
+                    </div>
+                    <div class="row-item">
+                        <span class="label"><i class="fas fa-expand"></i> Screen</span>
+                        <span class="value">${window.screen.width}×${window.screen.height}</span>
+                    </div>
+                    <div class="row-item">
+                        <span class="label"><i class="fab fa-js"></i> JavaScript</span>
+                        <span class="value green">Enabled</span>
+                    </div>
+                    <div class="row-item" style="border-bottom: none;">
+                        <span class="label"><i class="fas fa-cookie-bite"></i> Cookie</span>
+                        <span class="value green">${navigator.cookieEnabled ? 'Enabled' : 'Disabled'}</span>
+                    </div>
+
+                    <div class="map-container">
+                        <iframe src="${mapUrl}" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+                    </div>
+                    <div class="map-coords">
+                        <span><i class="fas fa-map-marked-alt"></i> ${lat.toFixed(6)}, ${lon.toFixed(6)}</span>
+                        <span><i class="fas fa-globe-asia"></i> ${gps ? 'GPS' : 'IP'} location</span>
+                    </div>
+                </div>
+            `;
+            }
+
+            // --- Show error ---
+            function showError(msg) {
+                grid.innerHTML = `<div class="error-msg"><i class="fas fa-exclamation-triangle"></i> ${msg}</div>`;
+            }
+
+            // --- Main lookup ---
+            async function lookup(useGPS = false) {
+                const query = input.value.trim();
+                if (!query) {
+                    showError('Please enter an IP or domain');
+                    return;
+                }
+
+                // If GPS was previously used and we're doing a normal lookup, clear GPS flag
+                if (!useGPS) {
+                    isGPSActive = false;
+                }
+
+                grid.innerHTML =
+                    `<div class="loading"><i class="fas fa-spinner fa-spin"></i> ${useGPS ? 'Getting GPS location…' : `Looking up ${query}…`}</div>`;
+
+                try {
+                    let gpsResult = null;
+                    if (useGPS) {
+                        try {
+                            gpsResult = await getGPS();
+                            gpsData = gpsResult;
+                            isGPSActive = true;
+                        } catch (gpsErr) {
+                            showError(`GPS Error: ${gpsErr.message}. Showing IP location.`);
+                            // Fall through to IP lookup
+                        }
+                    }
+
+                    // If GPS failed or not requested, use IP data
+                    const data = await fetchIpData(query);
+                    if (data.error) {
+                        showError(data.reason || data.error || 'Invalid IP/domain');
+                        return;
+                    }
+
+                    // If we have GPS and it's active, use it
+                    if (isGPSActive && gpsData) {
+                        render(data, gpsData);
+                    } else {
+                        render(data, null);
+                    }
+                } catch (err) {
+                    showError(err.message || 'Failed to fetch data');
+                }
+            }
+
+            // --- Events ---
+            lookupBtn.addEventListener('click', () => lookup(false));
+            gpsBtn.addEventListener('click', () => lookup(true));
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    lookup(false);
+                }
+            });
+
+            // --- Auto-load ---
+            lookup(false);
+        })();
+    </script>
+</body>
+</html>

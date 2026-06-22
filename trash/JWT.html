@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>JWT Decoder</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    textarea { width: 100%; height: 100px; }
+    pre { background: #f4f4f4; padding: 10px; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h2>JWT to JSON Decoder</h2>
+  <p>Paste your JWT token below:</p>
+  <textarea id="jwtInput"></textarea><br><br>
+  <button onclick="decodeJWT()">Decode</button>
+
+  <h3>Header</h3>
+  <pre id="headerOutput"></pre>
+
+  <h3>Payload</h3>
+  <pre id="payloadOutput"></pre>
+
+  <script>
+    function base64UrlDecode(str) {
+      // Replace URL-safe chars and pad with '='
+      str = str.replace(/-/g, '+').replace(/_/g, '/');
+      while (str.length % 4) {
+        str += '=';
+      }
+      return atob(str);
+    }
+
+    function decodeJWT() {
+      const token = document.getElementById('jwtInput').value.trim();
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        alert("Invalid JWT format. Must have 3 parts separated by '.'");
+        return;
+      }
+
+      try {
+        const header = JSON.parse(base64UrlDecode(parts[0]));
+        const payload = JSON.parse(base64UrlDecode(parts[1]));
+
+        document.getElementById('headerOutput').textContent = JSON.stringify(header, null, 2);
+        document.getElementById('payloadOutput').textContent = JSON.stringify(payload, null, 2);
+      } catch (e) {
+        alert("Error decoding JWT: " + e.message);
+      }
+    }
+  </script>
+</body>
+</html>

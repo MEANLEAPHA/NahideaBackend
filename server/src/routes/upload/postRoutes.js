@@ -29,7 +29,7 @@ const { likeLimiter } = require("../../middleware/rateLimiter");
 router.post("/create-posts", protect, 
    upload.fields([
     // content 
-    { name: "contentFile", maxCount: 5 },
+    { name: "contentFile", maxCount: 5 }, 
 
     // confession
     {name : "confessionFile", maxCount: 1},

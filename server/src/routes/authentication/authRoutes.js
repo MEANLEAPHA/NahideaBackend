@@ -16,6 +16,9 @@ const { register,
       } = require("../../controllers/authentication/authController");
 
 const {protect} = require("../../middleware/authMiddleware");
+const {
+  upload
+} = require("../../controllers/upload/contentController");
 
 router.post("/register", register);
 router.post("/verify-email", verifyEmail);
@@ -32,6 +35,10 @@ router.post("/new-password", newPassword);
 
 router.put(
   "/update-user",
+  upload.fields([
+    { name: 'avatar', maxCount: 1 },
+    { name: 'banner', maxCount: 1 }
+  ]),
   updateUser
 );
 
