@@ -325,10 +325,10 @@ const getVerificationHTML = (pinCode) => `
     <div class="container">
         <div class="header">
             <div class="logo-area">
-                <div class="logo-icon">📄</div>
+             
                 <div class="logo-text">Nahidea <span>• verify</span></div>
             </div>
-            <div class="badge">secure</div>
+      
         </div>
         <div class="content">
             <h1 class="greeting">Confirm your email</h1>
@@ -342,10 +342,7 @@ const getVerificationHTML = (pinCode) => `
                     <span>⏱️ valid for 10 minutes</span>
                 </div>
             </div>
-            <div class="actions">
-                <a href="#" class="btn-primary">✓ Verify Email</a>
-                <a href="#" class="btn-secondary">Copy Code</a>
-            </div>
+
             <div class="info-box">
                 <p>
                     <strong>✉️ Didn't request this?</strong> You can safely ignore this email. 
@@ -355,11 +352,9 @@ const getVerificationHTML = (pinCode) => `
         </div>
         <div class="footer">
             <div class="footer-left">
-                <span>🛡️</span> Nahidea · secure account
+                 Nahidea · secure account
             </div>
-            <div class="footer-right">
-                ⏱️ expires in 10 min
-            </div>
+         
         </div>
         <div class="footer-note">
             This is an automated message from Nahidea. Please do not reply to this email.
@@ -596,10 +591,8 @@ const getResendVerificationHTML = (pinCode) => `
         <div class="header">
             <div class="header-content">
                 <div class="logo-white">
-                    <div class="logo-icon-white">📄</div>
                     <h2>Nahidea <span>• new code</span></h2>
                 </div>
-                <div class="new-badge">🔄 new</div>
             </div>
             <div class="header-sub">
                 A new verification code has been generated for your account
@@ -621,10 +614,6 @@ const getResendVerificationHTML = (pinCode) => `
                     <span>⏱️ valid for 10 minutes</span>
                 </div>
             </div>
-            <div class="actions">
-                <a href="#" class="btn-warning">✓ Verify Now</a>
-                <a href="#" class="btn-outline-dark">Copy Code</a>
-            </div>
             <div class="info-box">
                 <p>
                     <strong>⚠️ This is a new code.</strong> The previous code has been invalidated. 
@@ -634,10 +623,7 @@ const getResendVerificationHTML = (pinCode) => `
         </div>
         <div class="footer">
             <div class="footer-left">
-                <span>🛡️</span> Nahidea · secure account
-            </div>
-            <div class="footer-right">
-                ⏱️ expires in 10 min
+             Nahidea · secure account
             </div>
         </div>
         <div class="footer-note">
