@@ -672,7 +672,7 @@ const getPasswordResetHTML = (pinCode) => `
             overflow: hidden;
         }
         .header {
-            background: linear-gradient(135deg, #c0392b, #e74c3c);
+            background:#fd7648;
             padding: 32px 36px 28px;
         }
         .header-content {
@@ -876,10 +876,9 @@ const getPasswordResetHTML = (pinCode) => `
         <div class="header">
             <div class="header-content">
                 <div class="logo-white">
-                    <div class="logo-icon-white">🔐</div>
                     <h2>Nahidea <span>• security</span></h2>
                 </div>
-                <div class="security-badge">🔒 secure</div>
+               
             </div>
             <div class="header-sub">
                 A password reset request was made for your account
@@ -901,10 +900,6 @@ const getPasswordResetHTML = (pinCode) => `
                     <span>⏱️ valid for 10 minutes</span>
                 </div>
             </div>
-            <div class="actions">
-                <a href="#" class="btn-danger">✓ Reset Password</a>
-                <a href="#" class="btn-outline-dark">Copy Code</a>
-            </div>
             <div class="warning-box">
                 <p>
                     <strong>⚠️ Didn't request this?</strong> 
@@ -915,10 +910,7 @@ const getPasswordResetHTML = (pinCode) => `
         </div>
         <div class="footer">
             <div class="footer-left">
-                <span>🛡️</span> Nahidea · secure account
-            </div>
-            <div class="footer-right">
-                ⏱️ expires in 10 min
+              Nahidea · secure account
             </div>
         </div>
         <div class="footer-note">
@@ -977,7 +969,8 @@ const sendVerifyCodeForgetPasswordEmail = async (to, pinCode) => {
     
     try {
         const info = await transporter.sendMail({
-            from: `"Nahidea" <${process.env.EMAIL_USER}>`,
+            //   from: `"Nahidea-Security" <${process.env.EMAIL_USER}>`,
+            from: `"Nahidea-Security" <${process.env.EMAIL_USER}>`,
             to,
             subject,
             html
