@@ -646,7 +646,7 @@ const updateUser = async (req, res) => {
     return res.status(200).json({
       message: "Profile updated successfully",
     });
-    c
+    
   } catch (err) {
     console.log(err.message);
     return res.status(500).json({
