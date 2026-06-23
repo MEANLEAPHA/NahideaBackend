@@ -639,7 +639,7 @@ const updateUser = async (req, res) => {
       WHERE id = ?
       AND email = ?
       `,
-      [avatarUrl, bannerUrl, profession, location, nickname, bio, userId, email]
+      [avatarUrl, bannerUrl, profession, location, nickname, bio, parseInt(userId), email]
     );
 
     console.log("Profile updated successfully");
