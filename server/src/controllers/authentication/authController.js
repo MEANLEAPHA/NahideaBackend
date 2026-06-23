@@ -2,10 +2,8 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const pool = require('../../config/db');
 require('dotenv').config();
-
-const {Errors} = require('../../util/error/error')
 const { sendVerifyCodeEmail, sendResendPinEmail, sendVerifyCodeForgetPasswordEmail} = require('../../service/mail/email');
-const { createToken } = require('../../service/token/jwtHelp'); // adjust path if needed
+const { createToken } = require('../../service/token/jwtHelp');
 const { convertAndUpload } = require("../../service/hostinger/ftp");
 
 // login logical 
@@ -116,18 +114,8 @@ const register = async (req, res) => {
       emailSent = true;
 
     } catch (emailError) {
-
       console.error("Email send failed:", emailError);
-
       await pool.query("DELETE FROM users WHERE email = ?", [email]);
-
-      await Errors(
-        emailError.message,
-        emailError.code || "EMAIL_ERROR",
-        `sendPinCodeEmail | email:${email}`,
-        emailError.stack
-      );
-      
       return res.status(506).json({ message: "Sever can't send the PIN at this moment. Please try again later" });
     }
 
@@ -142,21 +130,12 @@ const register = async (req, res) => {
   } catch (error) {
 
     console.error("createMember error:", error);
-
-    await Errors(
-      error.message,
-      error.code,
-      "createMember",
-      error.stack
-    );
-
     return res.status(500).json({
       success: false,
       message: "Internal server error"
     });
   }
 };
-
 
 // verifyEmail + send code for fist register
 const verifyEmail = async (req, res) => {
@@ -220,12 +199,6 @@ const verifyEmail = async (req, res) => {
 
   } catch (error) {
     console.error(error);
-    await Errors(
-      error.message,
-      error.code,
-      "verifyEmail",
-      error.stack
-    )
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -276,19 +249,12 @@ const resendverifyEmailPin = async (req, res) => {
 
   } catch (error) {
     console.error(error);
-    await Errors(
-      error.message,
-      error.code,
-      "resendverifyEmailPin",
-      error.stack
-    )
     return res.status(500).json({ message: "Server error" });
   }
 };
 
-// 
+    // USER FORGET PASSWORD //
 
-    // USER FORGET PASSWORD
 //step 1
 const forgetPassword = async (req, res) => {
   try {
@@ -350,8 +316,6 @@ const forgetPassword = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
-
-
 // step 2
 const verifyforgetPasswordPin = async (req, res) => {
   try {
@@ -407,6 +371,7 @@ const verifyforgetPasswordPin = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
+
 const resendForgetPasswordPin = async (req, res) => {
   try {
 
@@ -502,8 +467,6 @@ const setNewPassword = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
-
-
 //  USER WANT TO CHANGE CURRENT PASSWORD
 const changePassword = async (req, res) => {
   const {userId} = req.user.userId;
@@ -569,6 +532,7 @@ const newPassword = async (req, res) => {
     return res.status(500).json({ message: "Server error during password update" });
   }
 };
+
 const getUserInfo = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -587,59 +551,6 @@ const getUserInfo = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
-// const getUserInfoById = async (req, res) => {
-
-//   try {
-
-//     const userId =
-//       req.params.userId;
-
-//     const [rows] =
-//       await pool.query(
-//         `
-//         SELECT
-//           username,
-//           avatar_url,
-//           id,
-//           nickname,
-//           profession,
-//           work_place,
-//           bio,
-//           created_at,
-//           followers_count,
-//           following_count
-//         FROM users
-//         WHERE id = ?
-//         `,
-//         [userId]
-//       );
-
-//     if (!rows.length) {
-
-//       return res.status(404).json({
-//         message: "User not found"
-//       });
-
-//     }
-
-//     return res.status(200).json({
-//       userData: rows[0]
-//     });
-
-//   } catch (err) {
-
-//     console.error(
-//       "Error in getUserInfo:",
-//       err
-//     );
-
-//     return res.status(500).json({
-//       message: "Server error"
-//     });
-
-//   }
-
-// };
 
 const updateUser = async (req, res) => {
   try {
@@ -731,120 +642,19 @@ const updateUser = async (req, res) => {
       [avatarUrl, bannerUrl, profession, location, nickname, bio, userId, email]
     );
 
+    console.log("Profile updated successfully");
     return res.status(200).json({
-      success: true,
       message: "Profile updated successfully",
     });
+    c
   } catch (err) {
-    console.log(err);
+    console.log(err.message);
     return res.status(500).json({
-      success: false,
       message: "Internal server error",
     });
   }
 };
 
-
-
-// const updateUser = async (
-//   req,
-//   res
-// ) => {
-//   try {
-//     const {
-//       avatar,
-//       profession,
-//       location,
-//       nickname,
-//       userId,
-//       email,
-//       bio,
-//     } = req.body;
-
-//     // VALIDATION
-
-//     if (
-//       !avatar ||
-//       !profession ||
-//       !location ||
-//       !nickname ||
-//       !userId ||
-//       !email ||
-//       !bio
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "Missing required fields",
-//       });
-//     }
-
-//     // OPTIONAL:
-//     // protect nickname duplicates
-
-//     const [nicknameExists] =
-//       await pool.query(
-//         `
-//         SELECT id
-//         FROM users
-//         WHERE nickname = ?
-//         AND id != ?
-//         LIMIT 1
-//         `,
-//         [nickname, userId]
-//       );
-
-//     if (
-//       nicknameExists.length > 0
-//     ) {
-//       return res.status(409).json({
-//         success: false,
-//         message:
-//           "Nickname already taken",
-//       });
-//     }
-
-//     // UPDATE USER
-
-//     await pool.query(
-//       `
-//       UPDATE users
-//       SET
-//         avatar_url = ?,
-//         profession = ?,
-//         work_place = ?,
-//         nickname = ?,
-//         bio = ?,
-//         updated_at = NOW()
-//       WHERE id = ?
-//       AND email = ?
-//       `,
-//       [
-//         avatar,
-//         profession,
-//         location,
-//         nickname,
-//         bio,
-//         userId,
-//         email,
-//       ]
-//     );
-
-//     return res.status(200).json({
-//       success: true,
-//       message:
-//         "Profile updated successfully",
-//     });
-//   } catch (err) {
-//     console.log(err);
-
-//     return res.status(500).json({
-//       success: false,
-//       message:
-//         "Internal server error",
-//     });
-//   }
-// };
 const getUserInfoById = async (req, res) => {
   try {
     const userId = req.params.userId;
