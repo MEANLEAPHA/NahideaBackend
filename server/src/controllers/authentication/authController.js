@@ -571,7 +571,7 @@ const updateUser = async (req, res) => {
     if (req.files?.banner) {
       try {
         const uploadedUrl = await convertAndUpload(req.files?.banner?.[0], "banner");
-        bannerUrl = uploadedUrl;
+        bannerUrl = uploadedUrl.url;
       } catch (uploadError) {
         console.error("Banner upload error:", uploadError);
         return res.status(500).json({
@@ -585,7 +585,7 @@ const updateUser = async (req, res) => {
     if (avatarType === 'file' && req.files?.avatar) {
       try {
         const uploadedUrl = await convertAndUpload(req.files?.avatar?.[0], "avatar");
-        avatarUrl = uploadedUrl;
+        avatarUrl = uploadedUrl.url;
       } catch (uploadError) {
         console.error("Avatar upload error:", uploadError);
         return res.status(500).json({
