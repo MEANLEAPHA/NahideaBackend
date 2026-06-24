@@ -1011,17 +1011,15 @@ const upvoteAnswer = async (req, res) => {
               sender_id, 
               type, 
               content, 
-              answer_id,
               post_id,
               aggregate_key, 
               is_viewed
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, 0)`,
             [
               answerOwnerId,
               userId,
               notificationType,
               notificationContent,
-              answerId,
               postId,
               aggregateKey
             ]
