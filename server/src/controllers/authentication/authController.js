@@ -564,7 +564,7 @@ const updateUser = async (req, res) => {
       avatarType,
     } = req.body;
 
-    let avatarUrl = req.body.avatar;
+    let avatarUrl = null;
     let bannerUrl = null;
 
     // Handle banner upload (if file exists)
