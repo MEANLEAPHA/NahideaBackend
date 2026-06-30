@@ -698,6 +698,18 @@ try {
   console.error(err.stack);
 }
 
+      // search logic // 
+      
+// searchUser
+try{
+  const searchUserRoute = require("./src/routes/search/searchUserRoute");
+  app.use("/api", searchUserRoute);
+  console.log("✅ searchUser Routes mounted successfully")
+}
+catch(err){
+  console.error("❌ Error loading searchUserRoutes:", err.message);
+  console.error(err.stack);
+} 
 
 
 
