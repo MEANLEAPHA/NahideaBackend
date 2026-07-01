@@ -1,9 +1,7 @@
 const pool = require("../../config/db");
 
-// Keep this list in sync with the `spammy_options` values used on the frontend.
-const ALLOWED_SPAM_TYPES = ["poke", "goodnight", "sendlove"];
 
-const DAILY_SPAM_LIMIT = 5;
+const DAILY_SPAM_LIMIT = 25;
 
 const sendSpam = async (req, res) => {
   const connection = await pool.getConnection();
@@ -23,13 +21,7 @@ const sendSpam = async (req, res) => {
       });
     }
 
-    if (!ALLOWED_SPAM_TYPES.includes(spam_type)) {
-      connection.release();
-      return res.status(400).json({
-        success: false,
-        message: "Invalid spam_type",
-      });
-    }
+
 
     if (receiverId === senderId) {
       connection.release();
