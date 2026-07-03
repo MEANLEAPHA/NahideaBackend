@@ -285,7 +285,7 @@ const checkAlreadyAnswered = async (req, res) => {
 
     const [[existing]] = await pool.query(
       `SELECT id FROM answers WHERE question_id = ? AND user_id = ? LIMIT 1`,
-      [questionId]
+      [questionId, userId] 
     );
 
     return res.status(200).json({ success: true, alreadyAnswered: !!existing });
