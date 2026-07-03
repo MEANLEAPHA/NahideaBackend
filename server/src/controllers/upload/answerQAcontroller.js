@@ -91,18 +91,13 @@ const answerQA = async (req, res) => {
     await connection.beginTransaction();
 
     const [[question]] = await connection.query(
-      `SELECT title, question_related_to FROM question WHERE id = ?`,
+      `SELECT title FROM question WHERE id = ?`,
       [questionId]
     );
 
     if (!question) {
       await connection.rollback();
       return res.status(404).json({ success: false, message: "Question not found" });
-    }
-
-    if (String(question.question_related_to) !== String(postId)) {
-      await connection.rollback();
-      return res.status(400).json({ success: false, message: "This question does not belong to that post" });
     }
 
     // ── Duplicate-answer guard ──────────────────────────────────────────
