@@ -129,7 +129,7 @@ const report = async (req, res) => {
         } = req.body;
 
 
-        await db.query(
+        await pool.query(
             `INSERT INTO reports
             (
                 to_id,
