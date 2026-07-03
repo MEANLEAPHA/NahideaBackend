@@ -114,4 +114,57 @@ const submitFeedback = async (req, res) => {
     }
 };
 
-module.exports = {createReport, submitFeedback};
+
+const report = async (req, res) => {
+
+    try {
+
+        const userId = req.user.userId;
+        const type = req.params.type;
+        const id = req.params.id;
+
+        const {
+            report_type,
+            reason
+        } = req.body;
+
+
+        await db.query(
+            `INSERT INTO reports
+            (
+                to_id,
+                reporter_id,
+                report_type,
+                reason
+            )
+            VALUES (?, ?, ?, ?)`,
+            [
+                id,
+                userId,
+                report_type,
+                reason || null
+            ]
+        );
+
+        res.status(201).json({
+            message: "Reported successfully"
+        });
+
+    } catch (err) {
+
+        if (err.code === 'ER_DUP_ENTRY') {
+            return res.status(400).json({
+                message: "Already reported"
+            });
+        }
+
+        console.error(err);
+
+        res.status(500).json({
+            message: "Server error"
+        });
+    }
+};
+
+
+module.exports = {createReport, submitFeedback, report};
