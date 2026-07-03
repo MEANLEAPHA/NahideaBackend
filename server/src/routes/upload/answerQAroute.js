@@ -9,12 +9,17 @@ const {
   getAllAnswersByQuestionId,
   upvoteAnswer,
   downvoteAnswer,
+  checkAlreadyAnswered,
   getAnswerById,
   getMostPopularAnswer
 } = require("../../controllers/upload/answerQAcontroller");
 
 router.post("/answers/answer-qa/:postId/:questionId/:questionType", protect, answerQA);
 router.get("/answers/get-question/:questionId/:questionType", getQuestionById);
+router.get("/answers/check-answered/:questionId", protect, checkAlreadyAnswered);
+
+// router.post("/answers/answer-qa/:postId/:questionId/:questionType", protect, answerQA);
+// router.get("/answers/get-question/:questionId/:questionType", getQuestionById);
 
 // Public routes (with auth for vote tracking)
 router.get('/answers/question/:questionId', protect, getAllAnswersByQuestionId);

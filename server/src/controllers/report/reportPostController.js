@@ -134,13 +134,15 @@ const report = async (req, res) => {
             (
                 to_id,
                 reporter_id,
+                type,
                 report_type,
                 reason
             )
-            VALUES (?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?)`,
             [
                 id,
                 userId,
+                type,
                 report_type,
                 reason || null
             ]

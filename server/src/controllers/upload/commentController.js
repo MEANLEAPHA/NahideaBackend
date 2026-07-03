@@ -15,18 +15,27 @@ const generateAnonymousName = () => {
 const generateAnonymousBgColor = () => {
 
     const colors = [
-        "yellowgreen",
-        "skyblue",
-        "tomato",
-        "yellow",
-        "purple",
-        "orange",
-        "grey",
-        "black",
-        "brown",
-        "pink",
-        "cyan"
-    ];
+    "#8B5CF6", // violet
+    "#EC4899", // pink
+    "#38BDF8", // sky
+    "#818CF8", // indigo
+    "#EAB308", // yellow
+    "#4ADE80", // green
+    "#F87171", // red
+    "#FB923C", // orange
+    "#22D3EE", // cyan
+    "#2DD4BF", // teal
+    "#F472B6", // rose
+    "#A78BFA", // purple
+    "#FCA5A5", // soft red
+    "#FACC15", // amber
+    "#60A5FA", // blue
+    "#34D399", // emerald
+    "#FB7185", // pink-red
+    "#6366F1", // indigo
+    "#A855F7", // medium purple
+    "#3B82F6", // medium blue
+  ];
 
     const randomIndex = Math.floor(
         Math.random() * colors.length

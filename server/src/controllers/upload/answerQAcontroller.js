@@ -1,413 +1,376 @@
 const pool = require("../../config/db");
-// const answerQA = async (req, res) => {
-//     try{
-//         const userId = req.user.userId;
-//         const { postId, questionId, questionType } = req.params;
 
-//         const {
-//             is_anonymous, anonymous_name, anonymous_bg_color,
+const ALREADY_ANSWERED_MESSAGE = "You have already answered this question";
 
-//             // opened
-//             answerText,
+const QUESTION_TYPES = [
+  "openend", "closedend", "rating", "range",
+  "singlechoice", "multiplechoice", "rankingorder",
+];
 
-//             // closed
-//             answerYesNo,
-
-//             // rating
-//             ratingValue,
-
-//             // singlechoice
-//             optionId,
-//             optionText,
-
-//             // multiplechoice
-//             optionIds,
-//             optionTexts,
-
-//             // ranking
-//             rankingIds,
-//             rankingTexts,
-
-//             // range
-//             rangeValue
-//         } = req.body;
-
-//         switch(questionType){
-//             case "openend":
-//                 await pool.query(
-//                 `INSERT INTO answers 
-//                     (question_id, post_id, user_id, question_type, text_answer, is_anonymous, anonymous_name, anonymous_bg_color)
-//                     VALUES (?, ?, ?, 'openend', ?, ?, ?, ?)`,
-//                 [questionId, postId, userId, answerText, is_anonymous || null, anonymous_name || null, anonymous_bg_color || null]);
-//                 break;
-//             case "closedend":
-//                 await pool.query(
-//                 `INSERT INTO answers 
-//                     (question_id, post_id, user_id, question_type, yes_no, is_anonymous, anonymous_name, anonymous_bg_color)
-//                     VALUES (?, ?, ?, 'closedend', ?, ?, ?, ?)`,
-//                 [questionId, postId, userId, answerYesNo, is_anonymous, anonymous_name, anonymous_bg_color]);
-//                 break;
-
-//             case "rating":
-//                 await pool.query(
-//                 `INSERT INTO answers 
-//                     (question_id, post_id, user_id, question_type, rating_value, is_anonymous, anonymous_name, anonymous_bg_color)
-//                     VALUES (?, ?, ?, 'rating', ?, ?, ?, ?)`,
-//                 [questionId, postId, userId, ratingValue, is_anonymous, anonymous_name, anonymous_bg_color]);
-//                 break;
-
-//             case "singlechoice":
-//                 await pool.query(
-//                 `INSERT INTO answers 
-//                     (question_id, post_id, user_id, question_type, singlechoice_option_id, singlechoice_option_value, is_anonymous, anonymous_name, anonymous_bg_color)
-//                     VALUES (?, ?, ?, 'singlechoice', ?, ?, ?, ?, ?)`,
-//                 [questionId, postId, userId, optionId, optionText, is_anonymous, anonymous_name, anonymous_bg_color]);
-//                 break;
-
-//             case "multiplechoice":
-//                 await pool.query(
-//                 `INSERT INTO answers 
-//                     (question_id, post_id, user_id, question_type, multiplechoice_option_ids, multiplechoice_option_value,is_anonymous, anonymous_name, anonymous_bg_color)
-//                     VALUES (?, ?, ?, 'multiplechoice', ?, ?, ?, ?, ?)`,
-//                 [questionId, postId, userId, JSON.stringify(optionIds), JSON.stringify(optionTexts), is_anonymous, anonymous_name, anonymous_bg_color]);
-//                 break;
-
-//             case "rankingorder":
-//                 await pool.query(
-//                 `INSERT INTO answers 
-//                     (question_id, post_id, user_id, question_type, ranking_positions, ranking_position_value, is_anonymous, anonymous_name, anonymous_bg_color)
-//                     VALUES (?, ?, ?, 'rankingorder', ?, ?, ?, ?, ?)`,
-//                 [questionId, postId, userId, JSON.stringify(rankingIds) ,JSON.stringify(rankingTexts), is_anonymous, anonymous_name, anonymous_bg_color]);
-//                 break;
-
-//             case "range":
-//                 await pool.query(
-//                 `INSERT INTO answers 
-//                     (question_id, post_id, user_id, question_type, range_value, is_anonymous, anonymous_name, anonymous_bg_color)
-//                     VALUES (?, ?, ?, 'range', ?, ?, ?, ?)`,
-//                 [questionId, postId, userId, rangeValue, is_anonymous, anonymous_name, anonymous_bg_color]);
-//                 break;
-//         }
-//         res.status(200).json(
-//             {
-//                 success: true,
-//                 message: "Answer submitted successfully"
-//             }
-//         );
-
-//     }catch(err){
-//         console.log(err.message);
-//         res.status(500).json({ error: "Something went wrong" });
-//     }
-// }
-const answerQA = async (req, res) => {
-    const connection = await pool.getConnection();
-    
-    try {
-        await connection.beginTransaction();
-        
-        const userId = req.user.userId;
-        const { postId, questionId, questionType } = req.params;
-        
-        // Get username for notification
-        const [[user]] = await connection.query(
-            `SELECT username FROM users WHERE id = ?`,
-            [userId]
-        );
-        const username = user?.username || 'Someone';
-        
-        // Get post owner for notification
-        const [[post]] = await connection.query(
-            `SELECT user_id FROM posts WHERE id = ?`,
-            [postId]
-        );
-        const postOwnerId = post?.user_id;
-        
-        // Get question details for notification
-        const [[question]] = await connection.query(
-            `SELECT title FROM question WHERE id = ?`,
-            [questionId]
-        );
-        const questionTitle = question?.title || 'your question';
-        
-        const today = new Date().toISOString().split("T")[0];
-        const currentDate = today;
-        const currentMonth = today.slice(0, 7).replace("-", "");
-        
-        const aggregateKey = `answer_${postOwnerId}_${questionId}`;
-        
-        const {
-            is_anonymous, anonymous_name, anonymous_bg_color,
-            answerText,
-            answerYesNo,
-            ratingValue,
-            optionId,
-            optionText,
-            optionIds,
-            optionTexts,
-            rankingIds,
-            rankingTexts,
-            rangeValue
-        } = req.body;
-        
-        let answerId;
-        
-        // =========================
-        // INSERT ANSWER
-        // =========================
-        
-        switch(questionType){
-            case "openend":
-                const [openResult] = await connection.query(
-                    `INSERT INTO answers 
-                        (question_id, post_id, user_id, question_type, text_answer, is_anonymous, anonymous_name, anonymous_bg_color)
-                        VALUES (?, ?, ?, 'openend', ?, ?, ?, ?)`,
-                    [questionId, postId, userId, answerText, is_anonymous || 0, anonymous_name || null, anonymous_bg_color || null]
-                );
-                answerId = openResult.insertId;
-                break;
-                
-            case "closedend":
-                const [closedResult] = await connection.query(
-                    `INSERT INTO answers 
-                        (question_id, post_id, user_id, question_type, yes_no, is_anonymous, anonymous_name, anonymous_bg_color)
-                        VALUES (?, ?, ?, 'closedend', ?, ?, ?, ?)`,
-                    [questionId, postId, userId, answerYesNo, is_anonymous || 0, anonymous_name || null, anonymous_bg_color || null]
-                );
-                answerId = closedResult.insertId;
-                break;
-
-            case "rating":
-                const [ratingResult] = await connection.query(
-                    `INSERT INTO answers 
-                        (question_id, post_id, user_id, question_type, rating_value, is_anonymous, anonymous_name, anonymous_bg_color)
-                        VALUES (?, ?, ?, 'rating', ?, ?, ?, ?)`,
-                    [questionId, postId, userId, ratingValue, is_anonymous || 0, anonymous_name || null, anonymous_bg_color || null]
-                );
-                answerId = ratingResult.insertId;
-                break;
-
-            case "singlechoice":
-                const [singleResult] = await connection.query(
-                    `INSERT INTO answers 
-                        (question_id, post_id, user_id, question_type, singlechoice_option_id, singlechoice_option_value, is_anonymous, anonymous_name, anonymous_bg_color)
-                        VALUES (?, ?, ?, 'singlechoice', ?, ?, ?, ?, ?)`,
-                    [questionId, postId, userId, optionId, optionText, is_anonymous || 0, anonymous_name || null, anonymous_bg_color || null]
-                );
-                answerId = singleResult.insertId;
-                break;
-
-            case "multiplechoice":
-                const [multiResult] = await connection.query(
-                    `INSERT INTO answers 
-                        (question_id, post_id, user_id, question_type, multiplechoice_option_ids, multiplechoice_option_value, is_anonymous, anonymous_name, anonymous_bg_color)
-                        VALUES (?, ?, ?, 'multiplechoice', ?, ?, ?, ?, ?)`,
-                    [questionId, postId, userId, JSON.stringify(optionIds), JSON.stringify(optionTexts), is_anonymous || 0, anonymous_name || null, anonymous_bg_color || null]
-                );
-                answerId = multiResult.insertId;
-                break;
-
-            case "rankingorder":
-                const [rankingResult] = await connection.query(
-                    `INSERT INTO answers 
-                        (question_id, post_id, user_id, question_type, ranking_positions, ranking_position_value, is_anonymous, anonymous_name, anonymous_bg_color)
-                        VALUES (?, ?, ?, 'rankingorder', ?, ?, ?, ?, ?)`,
-                    [questionId, postId, userId, JSON.stringify(rankingIds), JSON.stringify(rankingTexts), is_anonymous || 0, anonymous_name || null, anonymous_bg_color || null]
-                );
-                answerId = rankingResult.insertId;
-                break;
-
-            case "range":
-                const [rangeResult] = await connection.query(
-                    `INSERT INTO answers 
-                        (question_id, post_id, user_id, question_type, range_value, is_anonymous, anonymous_name, anonymous_bg_color)
-                        VALUES (?, ?, ?, 'range', ?, ?, ?, ?)`,
-                    [questionId, postId, userId, rangeValue, is_anonymous || 0, anonymous_name || null, anonymous_bg_color || null]
-                );
-                answerId = rangeResult.insertId;
-                break;
-                
-            default:
-                throw new Error("Invalid question type");
-        }
-        
-        // =========================
-        // UPDATE POST ANSWERS COUNT
-        // =========================
-        
-        await connection.query(
-            `UPDATE question SET answers_count = answers_count + 1 WHERE id = ?`,
-            [questionId]
-        );
-        
-        // =========================
-        // NOTIFICATION LOGIC
-        // =========================
-        
-        // Don't notify if user is answering their own question
-        if (Number(postOwnerId) !== Number(userId)) {
-            
-            // Get total answers count for this question
-            const [[answerData]] = await connection.query(
-                `SELECT COUNT(*) as total_answers FROM answers WHERE question_id = ?`,
-                [questionId]
-            );
-            const totalAnswers = answerData.total_answers;
-            
-            // Build notification content
-            let notificationContent = '';
-            let displayName = is_anonymous ? 'Someone' : username;
-            
-            if (totalAnswers === 1) {
-                notificationContent = `${displayName} answered your question: "${questionTitle.slice(0, 50)}${questionTitle.length > 50 ? '...' : ''}"`;
-            } else {
-                notificationContent = `${displayName} and ${totalAnswers - 1} other${totalAnswers - 1 > 1 ? 's' : ''} answered your question: "${questionTitle.slice(0, 50)}${questionTitle.length > 50 ? '...' : ''}"`;
-            }
-            
-            // Check if there's already an existing aggregate notification
-            const [existingNotification] = await connection.query(
-                `SELECT id FROM notifications WHERE aggregate_key = ? AND type = 'answer' LIMIT 1`,
-                [aggregateKey]
-            );
-            
-            if (existingNotification.length > 0) {
-                // Update existing notification
-                await connection.query(
-                    `UPDATE notifications 
-                     SET sender_id = ?,
-                         content = ?,
-                         is_viewed = 0,
-                         created_at = NOW()
-                     WHERE aggregate_key = ? AND type = 'answer'`,
-                    [userId, notificationContent, aggregateKey]
-                );
-            } else {
-                // Create new notification
-                await connection.query(
-                    `INSERT INTO notifications (
-                        receiver_id, 
-                        sender_id, 
-                        type, 
-                        content, 
-                        post_id, 
-                        answer_id,
-                        aggregate_key, 
-                        is_viewed
-                    ) VALUES (?, ?, 'answer', ?, ?, ?, ?, 0)`,
-                    [
-                        postOwnerId,
-                        userId,
-                        notificationContent,
-                        postId,
-                        answerId,
-                        aggregateKey
-                    ]
-                );
-            }
-        }
-        
-        // =========================
-        // TRENDING/RANKING (TODO - implement later)
-        // =========================
-        // await ranking.zIncrBy(`trendingPost:day:${currentDate}`, 5, postId.toString());
-        // await ranking.zIncrBy(`hof:month:${currentMonth}`, 3, userId.toString());
-        
-        await connection.commit();
-        
-        res.status(200).json({
-            success: true,
-            message: "Answer submitted successfully",
-            data: {
-                answer_id: answerId
-            }
-        });
-        
-    } catch(err) {
-        await connection.rollback();
-        console.error("answerQA error:", err);
-        res.status(500).json({ 
-            success: false,
-            error: "Something went wrong",
-            message: err.message 
-        });
-    } finally {
-        connection.release();
-    }
+const REQUIRED_FIELDS = {
+  openend: ["answerText"],
+  closedend: ["answerYesNo"],
+  rating: ["ratingValue"],
+  range: ["rangeValue"],
+  singlechoice: ["optionId", "optionText"],
+  multiplechoice: ["optionIds", "optionTexts"],
+  rankingorder: ["rankingIds", "rankingTexts"],
 };
 
-const getQuestionById = async (req, res) => {
-   try{
-    const { questionId, questionType } = req.params;
-    const [questions] = await pool.query(
+const generateAnonymousName = () => {
+  const num = Array.from({ length: 6 }, () => Math.floor(Math.random() * 10)).join("");
+  return `An${num}nymous`;
+};
+
+const generateAnonymousBgColor = () => {
+  const colors = [
+    "#8B5CF6", "#EC4899", "#38BDF8", "#818CF8", "#EAB308",
+    "#4ADE80", "#F87171", "#FB923C", "#22D3EE", "#2DD4BF",
+    "#F472B6", "#A78BFA", "#FCA5A5", "#FACC15", "#60A5FA",
+    "#34D399", "#FB7185", "#6366F1", "#A855F7", "#3B82F6",
+  ];
+  return colors[Math.floor(Math.random() * colors.length)];
+};
+
+const validateAnswerPayload = (questionType, body) => {
+  const required = REQUIRED_FIELDS[questionType];
+  if (!required) return "Invalid question type";
+
+  for (const field of required) {
+    const value = body[field];
+    if (value === undefined || value === null || value === "") {
+      return `Missing required field: ${field}`;
+    }
+    if (Array.isArray(value) && value.length === 0) {
+      return `Missing required field: ${field}`;
+    }
+  }
+
+  if (questionType === "rating") {
+    const rating = Number(body.ratingValue);
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return "ratingValue must be an integer between 1 and 5";
+    }
+  }
+
+  if (questionType === "closedend" && !["yes", "no"].includes(body.answerYesNo)) {
+    return "answerYesNo must be 'yes' or 'no'";
+  }
+
+  return null;
+};
+
+const answerQA = async (req, res) => {
+  const connection = await pool.getConnection();
+
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      connection.release();
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const { postId, questionId, questionType } = req.params;
+
+    if (!QUESTION_TYPES.includes(questionType)) {
+      connection.release();
+      return res.status(400).json({ success: false, message: "Invalid question type" });
+    }
+
+    if (!Number.isInteger(Number(postId)) || !Number.isInteger(Number(questionId))) {
+      connection.release();
+      return res.status(400).json({ success: false, message: "Invalid postId or questionId" });
+    }
+
+    const validationError = validateAnswerPayload(questionType, req.body);
+    if (validationError) {
+      connection.release();
+      return res.status(400).json({ success: false, message: validationError });
+    }
+
+    await connection.beginTransaction();
+
+    const [[question]] = await connection.query(
       `SELECT title, question_related_to FROM question WHERE id = ?`,
       [questionId]
     );
-    const question = questions[0];
-    let data = {};
-    switch(questionType){
-      case 'openend' :
-        data = {...question};
-        break;
-      case 'closedend' :
-        data = {...question};
-        break;
-      case 'range':
-        const [rangeRows] = await pool.query(
-          `SELECT * FROM question_range WHERE question_id = ?`,
-          [questionId]
-        );
-        const range = rangeRows[0] || null;
-        if (!range) {
-          console.warn("No range data found for question_id:", questionId);
-        }
 
-        data ={ ...question, ...range };
-      break;
-      case 'rating' :
-        const [ratingRows] = await pool.query(
-          `SELECT * FROM rating WHERE question_id = ?`,
-          [questionId]
-        );
-        const rating = ratingRows[0] || null;
-        
-        data = { ...question, ...rating };
-        break;
-      case 'singlechoice' :
-        const [singleRows] = await pool.query(`
-          SELECT sco.*, sc.question_id
-          FROM singlechoice_option sco
-          JOIN singlechoice sc ON sco.singlechoice_id = sc.id
-          WHERE sc.question_id = ?`, [questionId]);
-        data = { ...question, choice: singleRows };
-        break;
-      case 'multiplechoice' :
-        const [multiRows] = await pool.query(`
-          SELECT mco.*, mc.question_id, mc.include_all_above
-          FROM multiplechoice_option mco
-          JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
-          WHERE mc.question_id = ?`, [questionId]);
-          const include_all_above = multiRows[0]?.include_all_above || 0;
-        data = { ...question, include_all_above, choices: multiRows };
-        break;
-      case 'rankingorder' :
-        const [rankRows] = await pool.query(`
-          SELECT ri.*, ro.question_id
-          FROM ranking_item ri
-          JOIN rankingorder ro ON ri.ranking_id = ro.id
-          WHERE ro.question_id = ?`, [questionId]);
-        data = { ...question, items: rankRows };
-        break;
+    if (!question) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: "Question not found" });
     }
 
-    res.status(200).json({
-      source: "pool",
-      datas: data,
+    if (String(question.question_related_to) !== String(postId)) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: "This question does not belong to that post" });
+    }
+
+    // ── Duplicate-answer guard ──────────────────────────────────────────
+    const [[existingAnswer]] = await connection.query(
+      `SELECT id FROM answers WHERE question_id = ? AND user_id = ? LIMIT 1`,
+      [questionId, userId]
+    );
+
+    if (existingAnswer) {
+      await connection.rollback();
+      return res.status(409).json({
+        success: false,
+        code: "ALREADY_ANSWERED",
+        message: ALREADY_ANSWERED_MESSAGE,
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────
+
+    const [[user]] = await connection.query(`SELECT username FROM users WHERE id = ?`, [userId]);
+    const username = user?.username || "Someone";
+
+    const [[post]] = await connection.query(`SELECT user_id FROM posts WHERE id = ?`, [postId]);
+    if (!post) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: "Post not found" });
+    }
+    const postOwnerId = post.user_id;
+    const questionTitle = question.title || "your question";
+
+    const aggregateKey = `answer_${postOwnerId}_${questionId}`;
+
+    const {
+      is_anonymous, answerText, answerYesNo, ratingValue, optionId, optionText,
+      optionIds, optionTexts, rankingIds, rankingTexts, rangeValue,
+    } = req.body;
+
+    const isAnon = Number(is_anonymous) === 1 ? 1 : 0;
+    const anonymousName = isAnon ? generateAnonymousName() : null;
+    const anonymousBgColor = isAnon ? generateAnonymousBgColor() : null;
+
+    let answerId;
+
+    switch (questionType) {
+      case "openend": {
+        const [r] = await connection.query(
+          `INSERT INTO answers (question_id, post_id, user_id, question_type, text_answer, is_anonymous, anonymous_name, anonymous_bg_color)
+           VALUES (?, ?, ?, 'openend', ?, ?, ?, ?)`,
+          [questionId, postId, userId, answerText, isAnon, anonymousName, anonymousBgColor]
+        );
+        answerId = r.insertId;
+        break;
+      }
+      case "closedend": {
+        const [r] = await connection.query(
+          `INSERT INTO answers (question_id, post_id, user_id, question_type, yes_no, is_anonymous, anonymous_name, anonymous_bg_color)
+           VALUES (?, ?, ?, 'closedend', ?, ?, ?, ?)`,
+          [questionId, postId, userId, answerYesNo, isAnon, anonymousName, anonymousBgColor]
+        );
+        answerId = r.insertId;
+        break;
+      }
+      case "rating": {
+        const [r] = await connection.query(
+          `INSERT INTO answers (question_id, post_id, user_id, question_type, rating_value, is_anonymous, anonymous_name, anonymous_bg_color)
+           VALUES (?, ?, ?, 'rating', ?, ?, ?, ?)`,
+          [questionId, postId, userId, ratingValue, isAnon, anonymousName, anonymousBgColor]
+        );
+        answerId = r.insertId;
+        break;
+      }
+      case "singlechoice": {
+        const [r] = await connection.query(
+          `INSERT INTO answers (question_id, post_id, user_id, question_type, singlechoice_option_id, singlechoice_option_value, is_anonymous, anonymous_name, anonymous_bg_color)
+           VALUES (?, ?, ?, 'singlechoice', ?, ?, ?, ?, ?)`,
+          [questionId, postId, userId, optionId, optionText, isAnon, anonymousName, anonymousBgColor]
+        );
+        answerId = r.insertId;
+        break;
+      }
+      case "multiplechoice": {
+        const [r] = await connection.query(
+          `INSERT INTO answers (question_id, post_id, user_id, question_type, multiplechoice_option_ids, multiplechoice_option_value, is_anonymous, anonymous_name, anonymous_bg_color)
+           VALUES (?, ?, ?, 'multiplechoice', ?, ?, ?, ?, ?)`,
+          [questionId, postId, userId, JSON.stringify(optionIds), JSON.stringify(optionTexts), isAnon, anonymousName, anonymousBgColor]
+        );
+        answerId = r.insertId;
+        break;
+      }
+      case "rankingorder": {
+        const [r] = await connection.query(
+          `INSERT INTO answers (question_id, post_id, user_id, question_type, ranking_positions, ranking_position_value, is_anonymous, anonymous_name, anonymous_bg_color)
+           VALUES (?, ?, ?, 'rankingorder', ?, ?, ?, ?, ?)`,
+          [questionId, postId, userId, JSON.stringify(rankingIds), JSON.stringify(rankingTexts), isAnon, anonymousName, anonymousBgColor]
+        );
+        answerId = r.insertId;
+        break;
+      }
+      case "range": {
+        const [r] = await connection.query(
+          `INSERT INTO answers (question_id, post_id, user_id, question_type, range_value, is_anonymous, anonymous_name, anonymous_bg_color)
+           VALUES (?, ?, ?, 'range', ?, ?, ?, ?)`,
+          [questionId, postId, userId, rangeValue, isAnon, anonymousName, anonymousBgColor]
+        );
+        answerId = r.insertId;
+        break;
+      }
+    }
+
+    await connection.query(`UPDATE question SET answers_count = answers_count + 1 WHERE id = ?`, [questionId]);
+
+    if (Number(postOwnerId) !== Number(userId)) {
+      const [[answerData]] = await connection.query(
+        `SELECT COUNT(*) as total_answers FROM answers WHERE question_id = ?`,
+        [questionId]
+      );
+      const totalAnswers = answerData.total_answers;
+      const displayName = isAnon ? "Someone" : username;
+      const truncatedTitle = `${questionTitle.slice(0, 50)}${questionTitle.length > 50 ? "..." : ""}`;
+
+      const notificationContent =
+        totalAnswers === 1
+          ? `${displayName} answered your question: "${truncatedTitle}"`
+          : `${displayName} and ${totalAnswers - 1} other${totalAnswers - 1 > 1 ? "s" : ""} answered your question: "${truncatedTitle}"`;
+
+      const [existingNotification] = await connection.query(
+        `SELECT id FROM notifications WHERE aggregate_key = ? AND type = 'answer' LIMIT 1`,
+        [aggregateKey]
+      );
+
+      if (existingNotification.length > 0) {
+        await connection.query(
+          `UPDATE notifications SET sender_id = ?, content = ?, is_viewed = 0, created_at = NOW()
+           WHERE aggregate_key = ? AND type = 'answer'`,
+          [userId, notificationContent, aggregateKey]
+        );
+      } else {
+        await connection.query(
+          `INSERT INTO notifications (receiver_id, sender_id, type, content, post_id, answer_id, aggregate_key, is_viewed)
+           VALUES (?, ?, 'answer', ?, ?, ?, ?, 0)`,
+          [postOwnerId, userId, notificationContent, postId, answerId, aggregateKey]
+        );
+      }
+    }
+
+    await connection.commit();
+
+    return res.status(200).json({
+      success: true,
+      message: "Answer submitted successfully",
+      data: { answer_id: answerId },
     });
-   }catch(err){
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-   }
-}
+  } catch (err) {
+    await connection.rollback();
+
+    // Safety net if you add the UNIQUE(question_id, user_id) constraint below —
+    // catches a race where two simultaneous submits both pass the SELECT check.
+    if (err.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        success: false,
+        code: "ALREADY_ANSWERED",
+        message: ALREADY_ANSWERED_MESSAGE,
+      });
+    }
+
+    console.error("answerQA error:", err);
+    return res.status(500).json({ success: false, message: "Something went wrong" });
+  } finally {
+    connection.release();
+  }
+};
+
+const checkAlreadyAnswered = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const { questionId } = req.params;
+
+    const [[existing]] = await pool.query(
+      `SELECT id FROM answers WHERE question_id = ? AND user_id = ? LIMIT 1`,
+      [questionId]
+    );
+
+    return res.status(200).json({ success: true, alreadyAnswered: !!existing });
+  } catch (err) {
+    console.error("checkAlreadyAnswered error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+const getQuestionById = async (req, res) => {
+  try {
+    const { questionId, questionType } = req.params;
+
+    if (!QUESTION_TYPES.includes(questionType)) {
+      return res.status(400).json({ success: false, message: "Invalid question type" });
+    }
+
+    const [questions] = await pool.query(
+      `SELECT id, title, question_related_to FROM question WHERE id = ?`,
+      [questionId]
+    );
+    const question = questions[0];
+
+    if (!question) {
+      return res.status(404).json({ success: false, message: "Question not found" });
+    }
+
+    let data = { ...question };
+
+    switch (questionType) {
+      case "openend":
+      case "closedend":
+        break;
+
+      case "range": {
+        const [rows] = await pool.query(`SELECT * FROM question_range WHERE question_id = ?`, [questionId]);
+        data = { ...data, ...(rows[0] || {}) };
+        break;
+      }
+      case "rating": {
+        const [rows] = await pool.query(`SELECT * FROM rating WHERE question_id = ?`, [questionId]);
+        data = { ...data, ...(rows[0] || {}) };
+        break;
+      }
+      case "singlechoice": {
+        const [rows] = await pool.query(
+          `SELECT sco.*, sc.question_id
+           FROM singlechoice_option sco
+           JOIN singlechoice sc ON sco.singlechoice_id = sc.id
+           WHERE sc.question_id = ?`,
+          [questionId]
+        );
+        data = { ...data, choice: rows };
+        break;
+      }
+      case "multiplechoice": {
+        const [rows] = await pool.query(
+          `SELECT mco.*, mc.question_id, mc.include_all_above
+           FROM multiplechoice_option mco
+           JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
+           WHERE mc.question_id = ?`,
+          [questionId]
+        );
+        data = { ...data, include_all_above: rows[0]?.include_all_above || 0, choices: rows };
+        break;
+      }
+      case "rankingorder": {
+        const [rows] = await pool.query(
+          `SELECT ri.*, ro.question_id
+           FROM ranking_item ri
+           JOIN rankingorder ro ON ri.ranking_id = ro.id
+           WHERE ro.question_id = ?`,
+          [questionId]
+        );
+        data = { ...data, items: rows };
+        break;
+      }
+    }
+
+    return res.status(200).json({ success: true, source: "pool", datas: data });
+  } catch (err) {
+    console.error("getQuestionById error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 
 const getAllAnswersByQuestionId = async (req, res) => {
   try {
@@ -622,199 +585,6 @@ const getMostPopularAnswer = async (req, res) => {
     });
   }
 };
-// const upvoteAnswer = async (req, res) => {
-//   try {
-//     const userId = req.user.userId;
-//     const { answerId } = req.params;
-
-//     // Check if answer exists
-//     const [answer] = await pool.query(
-//       `SELECT id, user_id FROM answers WHERE id = ?`,
-//       [answerId]
-//     );
-
-//     if (!answer.length) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Answer not found"
-//       });
-//     }
-
-//     // Check existing vote
-//     const [existingVote] = await pool.query(
-//       `SELECT vote_type FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
-//       [answerId, userId]
-//     );
-
-//     let upvotesChange = 0;
-//     let downvotesChange = 0;
-//     let voteScoreChange = 0;
-//     let newVoteType = null;
-
-//     if (existingVote.length === 0) {
-//       // No existing vote - add upvote
-//       await pool.query(
-//         `INSERT INTO answer_votes (answer_id, user_id, vote_type) VALUES (?, ?, 'upvote')`,
-//         [answerId, userId]
-//       );
-//       upvotesChange = 1;
-//       voteScoreChange = 1;
-//       newVoteType = 'upvote';
-//     } else if (existingVote[0].vote_type === 'upvote') {
-//       // Already upvoted - remove upvote
-//       await pool.query(
-//         `DELETE FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
-//         [answerId, userId]
-//       );
-//       upvotesChange = -1;
-//       voteScoreChange = -1;
-//       newVoteType = null;
-//     } else if (existingVote[0].vote_type === 'downvote') {
-//       // Was downvoted - change to upvote
-//       await pool.query(
-//         `UPDATE answer_votes SET vote_type = 'upvote' WHERE answer_id = ? AND user_id = ?`,
-//         [answerId, userId]
-//       );
-//       upvotesChange = 1;
-//       downvotesChange = -1;
-//       voteScoreChange = 2; // +1 for upvote, -(-1) for removing downvote = +2
-//       newVoteType = 'upvote';
-//     }
-
-//     // Update answer vote counts
-//     await pool.query(
-//       `UPDATE answers 
-//        SET upvotes = upvotes + ?,
-//            downvotes = downvotes + ?,
-//            vote_score = vote_score + ?
-//        WHERE id = ?`,
-//       [upvotesChange, downvotesChange, voteScoreChange, answerId]
-//     );
-
-//     // Get updated counts
-//     const [updatedAnswer] = await pool.query(
-//       `SELECT upvotes, downvotes, vote_score FROM answers WHERE id = ?`,
-//       [answerId]
-//     );
-
-//     res.json({
-//       success: true,
-//       data: {
-//         upvotes: updatedAnswer[0].upvotes,
-//         downvotes: updatedAnswer[0].downvotes,
-//         vote_score: updatedAnswer[0].vote_score,
-//         user_vote_type: newVoteType
-//       },
-//       message: existingVote.length === 0 ? "Answer upvoted" : 
-//                existingVote[0].vote_type === 'upvote' ? "Upvote removed" : 
-//                "Changed from downvote to upvote"
-//     });
-
-//   } catch (err) {
-//     console.error("upvoteAnswer error:", err);
-//     res.status(500).json({
-//       success: false,
-//       message: "Error upvoting answer"
-//     });
-//   }
-// };
-
-// const downvoteAnswer = async (req, res) => {
-//   try {
-//     const userId = req.user.userId;
-//     const { answerId } = req.params;
-
-//     // Check if answer exists
-//     const [answer] = await pool.query(
-//       `SELECT id, user_id FROM answers WHERE id = ?`,
-//       [answerId]
-//     );
-
-//     if (!answer.length) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Answer not found"
-//       });
-//     }
-
-//     // Check existing vote
-//     const [existingVote] = await pool.query(
-//       `SELECT vote_type FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
-//       [answerId, userId]
-//     );
-
-//     let upvotesChange = 0;
-//     let downvotesChange = 0;
-//     let voteScoreChange = 0;
-//     let newVoteType = null;
-
-//     if (existingVote.length === 0) {
-//       // No existing vote - add downvote
-//       await pool.query(
-//         `INSERT INTO answer_votes (answer_id, user_id, vote_type) VALUES (?, ?, 'downvote')`,
-//         [answerId, userId]
-//       );
-//       downvotesChange = 1;
-//       voteScoreChange = -1;
-//       newVoteType = 'downvote';
-//     } else if (existingVote[0].vote_type === 'downvote') {
-//       // Already downvoted - remove downvote
-//       await pool.query(
-//         `DELETE FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
-//         [answerId, userId]
-//       );
-//       downvotesChange = -1;
-//       voteScoreChange = 1;
-//       newVoteType = null;
-//     } else if (existingVote[0].vote_type === 'upvote') {
-//       // Was upvoted - change to downvote
-//       await pool.query(
-//         `UPDATE answer_votes SET vote_type = 'downvote' WHERE answer_id = ? AND user_id = ?`,
-//         [answerId, userId]
-//       );
-//       upvotesChange = -1;
-//       downvotesChange = 1;
-//       voteScoreChange = -2; // -1 for removing upvote, -1 for adding downvote = -2
-//       newVoteType = 'downvote';
-//     }
-
-//     // Update answer vote counts
-//     await pool.query(
-//       `UPDATE answers 
-//        SET upvotes = upvotes + ?,
-//            downvotes = downvotes + ?,
-//            vote_score = vote_score + ?
-//        WHERE id = ?`,
-//       [upvotesChange, downvotesChange, voteScoreChange, answerId]
-//     );
-
-//     // Get updated counts
-//     const [updatedAnswer] = await pool.query(
-//       `SELECT upvotes, downvotes, vote_score FROM answers WHERE id = ?`,
-//       [answerId]
-//     );
-
-//     res.json({
-//       success: true,
-//       data: {
-//         upvotes: updatedAnswer[0].upvotes,
-//         downvotes: updatedAnswer[0].downvotes,
-//         vote_score: updatedAnswer[0].vote_score,
-//         user_vote_type: newVoteType
-//       },
-//       message: existingVote.length === 0 ? "Answer downvoted" : 
-//                existingVote[0].vote_type === 'downvote' ? "Downvote removed" : 
-//                "Changed from upvote to downvote"
-//     });
-
-//   } catch (err) {
-//     console.error("downvoteAnswer error:", err);
-//     res.status(500).json({
-//       success: false,
-//       message: "Error downvoting answer"
-//     });
-//   }
-// };
 
 const upvoteAnswer = async (req, res) => {
   const connection = await pool.getConnection();
@@ -1388,6 +1158,331 @@ module.exports = {
   getAllAnswersByQuestionId,
   upvoteAnswer,
   downvoteAnswer,
+  checkAlreadyAnswered,
   getAnswerById,
   getMostPopularAnswer,
 };
+
+
+
+// const answerQA = async (req, res) => {
+//     const connection = await pool.getConnection();
+    
+//     try {
+//         await connection.beginTransaction();
+        
+//         const userId = req.user.userId;
+//         const { postId, questionId, questionType } = req.params;
+        
+//         // Get username for notification
+//         const [[user]] = await connection.query(
+//             `SELECT username FROM users WHERE id = ?`,
+//             [userId]
+//         );
+//         const username = user?.username || 'Someone';
+        
+//         // Get post owner for notification
+//         const [[post]] = await connection.query(
+//             `SELECT user_id FROM posts WHERE id = ?`,
+//             [postId]
+//         );
+//         const postOwnerId = post?.user_id;
+        
+//         // Get question details for notification
+//         const [[question]] = await connection.query(
+//             `SELECT title FROM question WHERE id = ?`,
+//             [questionId]
+//         );
+//         const questionTitle = question?.title || 'your question';
+        
+//         const today = new Date().toISOString().split("T")[0];
+//         const currentDate = today;
+//         const currentMonth = today.slice(0, 7).replace("-", "");
+        
+//         const aggregateKey = `answer_${postOwnerId}_${questionId}`;
+        
+//         const {
+//             is_anonymous,
+//             answerText,
+//             answerYesNo,
+//             ratingValue,
+//             optionId,
+//             optionText,
+//             optionIds,
+//             optionTexts,
+//             rankingIds,
+//             rankingTexts,
+//             rangeValue
+//         } = req.body;
+        
+//         let answerId;
+
+//         let finalAnonymousName = null;
+//         let finalAnonymousBgColor = null;
+
+//         if(is_anonymous === 1){
+//            finalAnonymousName =
+//           generateAnonymousName();
+
+//         finalAnonymousBgColor =
+//           generateAnonymousBgColor();
+//         }
+        
+
+        
+//         // =========================
+//         // INSERT ANSWER
+    
+        
+//         switch(questionType){
+//             case "openend":
+//                 const [openResult] = await connection.query(
+//                     `INSERT INTO answers 
+//                         (question_id, post_id, user_id, question_type, text_answer, is_anonymous, anonymous_name, anonymous_bg_color)
+//                         VALUES (?, ?, ?, 'openend', ?, ?, ?, ?)`,
+//                     [questionId, postId, userId, answerText, is_anonymous || 0, finalAnonymousName, finalAnonymousBgColor]
+//                 );
+//                 answerId = openResult.insertId;
+//                 break;
+                
+//             case "closedend":
+//                 const [closedResult] = await connection.query(
+//                     `INSERT INTO answers 
+//                         (question_id, post_id, user_id, question_type, yes_no, is_anonymous, anonymous_name, anonymous_bg_color)
+//                         VALUES (?, ?, ?, 'closedend', ?, ?, ?, ?)`,
+//                     [questionId, postId, userId, answerYesNo, is_anonymous || 0, finalAnonymousName, finalAnonymousBgColor]
+//                 );
+//                 answerId = closedResult.insertId;
+//                 break;
+
+//             case "rating":
+//                 const [ratingResult] = await connection.query(
+//                     `INSERT INTO answers 
+//                         (question_id, post_id, user_id, question_type, rating_value, is_anonymous, anonymous_name, anonymous_bg_color)
+//                         VALUES (?, ?, ?, 'rating', ?, ?, ?, ?)`,
+//                     [questionId, postId, userId, ratingValue, is_anonymous || 0, finalAnonymousName, finalAnonymousBgColor]
+//                 );
+//                 answerId = ratingResult.insertId;
+//                 break;
+
+//             case "singlechoice":
+//                 const [singleResult] = await connection.query(
+//                     `INSERT INTO answers 
+//                         (question_id, post_id, user_id, question_type, singlechoice_option_id, singlechoice_option_value, is_anonymous, anonymous_name, anonymous_bg_color)
+//                         VALUES (?, ?, ?, 'singlechoice', ?, ?, ?, ?, ?)`,
+//                     [questionId, postId, userId, optionId, optionText, is_anonymous || 0, finalAnonymousName, finalAnonymousBgColor]
+//                 );
+//                 answerId = singleResult.insertId;
+//                 break;
+
+//             case "multiplechoice":
+//                 const [multiResult] = await connection.query(
+//                     `INSERT INTO answers 
+//                         (question_id, post_id, user_id, question_type, multiplechoice_option_ids, multiplechoice_option_value, is_anonymous, anonymous_name, anonymous_bg_color)
+//                         VALUES (?, ?, ?, 'multiplechoice', ?, ?, ?, ?, ?)`,
+//                     [questionId, postId, userId, JSON.stringify(optionIds), JSON.stringify(optionTexts), is_anonymous || 0, finalAnonymousName, finalAnonymousBgColor]
+//                 );
+//                 answerId = multiResult.insertId;
+//                 break;
+
+//             case "rankingorder":
+//                 const [rankingResult] = await connection.query(
+//                     `INSERT INTO answers 
+//                         (question_id, post_id, user_id, question_type, ranking_positions, ranking_position_value, is_anonymous, anonymous_name, anonymous_bg_color)
+//                         VALUES (?, ?, ?, 'rankingorder', ?, ?, ?, ?, ?)`,
+//                     [questionId, postId, userId, JSON.stringify(rankingIds), JSON.stringify(rankingTexts), is_anonymous || 0, finalAnonymousName, finalAnonymousBgColor]
+//                 );
+//                 answerId = rankingResult.insertId;
+//                 break;
+
+//             case "range":
+//                 const [rangeResult] = await connection.query(
+//                     `INSERT INTO answers 
+//                         (question_id, post_id, user_id, question_type, range_value, is_anonymous, anonymous_name, anonymous_bg_color)
+//                         VALUES (?, ?, ?, 'range', ?, ?, ?, ?)`,
+//                     [questionId, postId, userId, rangeValue, is_anonymous || 0, finalAnonymousName, finalAnonymousBgColor]
+//                 );
+//                 answerId = rangeResult.insertId;
+//                 break;
+                
+//             default:
+//                 throw new Error("Invalid question type");
+//         }
+        
+//         // =========================
+//         // UPDATE POST ANSWERS COUNT
+//         // =========================
+        
+//         await connection.query(
+//             `UPDATE question SET answers_count = answers_count + 1 WHERE id = ?`,
+//             [questionId]
+//         );
+        
+//         // =========================
+//         // NOTIFICATION LOGIC
+//         // =========================
+        
+//         // Don't notify if user is answering their own question
+//         if (Number(postOwnerId) !== Number(userId)) {
+            
+//             // Get total answers count for this question
+//             const [[answerData]] = await connection.query(
+//                 `SELECT COUNT(*) as total_answers FROM answers WHERE question_id = ?`,
+//                 [questionId]
+//             );
+//             const totalAnswers = answerData.total_answers;
+            
+//             // Build notification content
+//             let notificationContent = '';
+//             let displayName = is_anonymous ? 'Someone' : username;
+            
+//             if (totalAnswers === 1) {
+//                 notificationContent = `${displayName} answered your question: "${questionTitle.slice(0, 50)}${questionTitle.length > 50 ? '...' : ''}"`;
+//             } else {
+//                 notificationContent = `${displayName} and ${totalAnswers - 1} other${totalAnswers - 1 > 1 ? 's' : ''} answered your question: "${questionTitle.slice(0, 50)}${questionTitle.length > 50 ? '...' : ''}"`;
+//             }
+            
+//             // Check if there's already an existing aggregate notification
+//             const [existingNotification] = await connection.query(
+//                 `SELECT id FROM notifications WHERE aggregate_key = ? AND type = 'answer' LIMIT 1`,
+//                 [aggregateKey]
+//             );
+            
+//             if (existingNotification.length > 0) {
+//                 // Update existing notification
+//                 await connection.query(
+//                     `UPDATE notifications 
+//                      SET sender_id = ?,
+//                          content = ?,
+//                          is_viewed = 0,
+//                          created_at = NOW()
+//                      WHERE aggregate_key = ? AND type = 'answer'`,
+//                     [userId, notificationContent, aggregateKey]
+//                 );
+//             } else {
+//                 // Create new notification
+//                 await connection.query(
+//                     `INSERT INTO notifications (
+//                         receiver_id, 
+//                         sender_id, 
+//                         type, 
+//                         content, 
+//                         post_id, 
+//                         answer_id,
+//                         aggregate_key, 
+//                         is_viewed
+//                     ) VALUES (?, ?, 'answer', ?, ?, ?, ?, 0)`,
+//                     [
+//                         postOwnerId,
+//                         userId,
+//                         notificationContent,
+//                         postId,
+//                         answerId,
+//                         aggregateKey
+//                     ]
+//                 );
+//             }
+//         }
+        
+//         // =========================
+//         // TRENDING/RANKING (TODO - implement later)
+//         // =========================
+//         // await ranking.zIncrBy(`trendingPost:day:${currentDate}`, 5, postId.toString());
+//         // await ranking.zIncrBy(`hof:month:${currentMonth}`, 3, userId.toString());
+        
+//         await connection.commit();
+        
+//         res.status(200).json({
+//             success: true,
+//             message: "Answer submitted successfully",
+//             data: {
+//                 answer_id: answerId
+//             }
+//         });
+        
+//     } catch(err) {
+//         await connection.rollback();
+//         console.error("answerQA error:", err);
+//         res.status(500).json({ 
+//             success: false,
+//             error: "Something went wrong",
+//             message: err.message 
+//         });
+//     } finally {
+//         connection.release();
+//     }
+// };
+
+// const getQuestionById = async (req, res) => {
+//    try{
+//     const { questionId, questionType } = req.params;
+//     const [questions] = await pool.query(
+//       `SELECT title, question_related_to FROM question WHERE id = ?`,
+//       [questionId]
+//     );
+//     const question = questions[0];
+//     let data = {};
+//     switch(questionType){
+//       case 'openend' :
+//         data = {...question};
+//         break;
+//       case 'closedend' :
+//         data = {...question};
+//         break;
+//       case 'range':
+//         const [rangeRows] = await pool.query(
+//           `SELECT * FROM question_range WHERE question_id = ?`,
+//           [questionId]
+//         );
+//         const range = rangeRows[0] || null;
+//         if (!range) {
+//           console.warn("No range data found for question_id:", questionId);
+//         }
+
+//         data ={ ...question, ...range };
+//       break;
+//       case 'rating' :
+//         const [ratingRows] = await pool.query(
+//           `SELECT * FROM rating WHERE question_id = ?`,
+//           [questionId]
+//         );
+//         const rating = ratingRows[0] || null;
+        
+//         data = { ...question, ...rating };
+//         break;
+//       case 'singlechoice' :
+//         const [singleRows] = await pool.query(`
+//           SELECT sco.*, sc.question_id
+//           FROM singlechoice_option sco
+//           JOIN singlechoice sc ON sco.singlechoice_id = sc.id
+//           WHERE sc.question_id = ?`, [questionId]);
+//         data = { ...question, choice: singleRows };
+//         break;
+//       case 'multiplechoice' :
+//         const [multiRows] = await pool.query(`
+//           SELECT mco.*, mc.question_id, mc.include_all_above
+//           FROM multiplechoice_option mco
+//           JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
+//           WHERE mc.question_id = ?`, [questionId]);
+//           const include_all_above = multiRows[0]?.include_all_above || 0;
+//         data = { ...question, include_all_above, choices: multiRows };
+//         break;
+//       case 'rankingorder' :
+//         const [rankRows] = await pool.query(`
+//           SELECT ri.*, ro.question_id
+//           FROM ranking_item ri
+//           JOIN rankingorder ro ON ri.ranking_id = ro.id
+//           WHERE ro.question_id = ?`, [questionId]);
+//         data = { ...question, items: rankRows };
+//         break;
+//     }
+
+//     res.status(200).json({
+//       source: "pool",
+//       datas: data,
+//     });
+//    }catch(err){
+//     console.error(err);
+//     res.status(500).json({ message: "Server error" });
+//    }
+// }
