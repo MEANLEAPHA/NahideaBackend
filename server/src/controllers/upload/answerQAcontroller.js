@@ -206,7 +206,7 @@ const answerQA = async (req, res) => {
       }
     }
 
-    await connection.query(`UPDATE question SET answers_count = answers_count + 1 WHERE id = ?`, [questionId]);
+    await connection.query(`UPDATE posts SET answers_count = answers_count + 1 WHERE id = ?`, [postId]);
 
     if (Number(postOwnerId) !== Number(userId)) {
       const [[answerData]] = await connection.query(
