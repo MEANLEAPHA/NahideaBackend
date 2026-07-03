@@ -299,7 +299,7 @@ const getQuestionById = async (req, res) => {
     }
 
     const [questions] = await pool.query(
-      `SELECT id, title, question_related_to FROM question WHERE id = ?`,
+      `SELECT id, title FROM question WHERE id = ?`,
       [questionId]
     );
     const question = questions[0];
