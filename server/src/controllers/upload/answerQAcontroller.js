@@ -433,16 +433,12 @@ const getAllAnswersByQuestionId = async (req, res) => {
         a.vote_score,
         a.created_at,
         a.updated_at,
-        
+        u.avatar_url,
+
         CASE
           WHEN a.is_anonymous = 1 THEN a.anonymous_name
           ELSE u.username
         END AS author_name,
-        
-        CASE
-          WHEN a.is_anonymous = 1 THEN NULL
-          ELSE u.avatar_url
-        END AS author_avatar,
         
         CASE
           WHEN a.is_anonymous = 1 THEN a.anonymous_bg_color
