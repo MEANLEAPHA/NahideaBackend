@@ -1045,6 +1045,39 @@ const getCommentsByPostId = async (req, res) => {
 //     });
 //   }
 // };
+// const getAnonIdentity = async (req, res) => {
+//   try {
+//     const userId = req.user.userId;
+//     const { postId } = req.params;
+
+//     if (!postId) {
+//       return res.status(400).json({ message: "Missing postId" });
+//     }
+
+//     const [rows] = await db.query(
+//       "SELECT is_anonymous, anonymous_name, anonymous_bg_color FROM comments WHERE post_id=? AND user_id=? LIMIT 1",
+//       [postId, userId]
+//     );
+
+//     if (rows.length > 0) {
+//       // Found existing identity
+//       return res.json({
+//         exists: true,
+//         is_anonymous: rows[0].is_anonymous,
+//         anonymous_name: rows[0].anonymous_name,
+//         anonymous_bg_color: rows[0].anonymous_bg_color
+//       });
+//     }
+
+//     // No identity yet
+//     return res.json({ exists: false });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
+
+
 const getAnonIdentity = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -1055,21 +1088,22 @@ const getAnonIdentity = async (req, res) => {
     }
 
     const [rows] = await db.query(
-      "SELECT is_anonymous, anonymous_name, anonymous_bg_color FROM comments WHERE post_id=? AND user_id=? LIMIT 1",
+      `SELECT anonymous_name, anonymous_bg_color
+       FROM comments
+       WHERE post_id = ? AND user_id = ? AND is_anonymous = 1 AND is_deleted = 0
+       ORDER BY id ASC
+       LIMIT 1`,
       [postId, userId]
     );
 
     if (rows.length > 0) {
-      // Found existing identity
       return res.json({
         exists: true,
-        is_anonymous: rows[0].is_anonymous,
         anonymous_name: rows[0].anonymous_name,
-        anonymous_bg_color: rows[0].anonymous_bg_color
+        anonymous_bg_color: rows[0].anonymous_bg_color,
       });
     }
 
-    // No identity yet
     return res.json({ exists: false });
   } catch (err) {
     console.error(err);
