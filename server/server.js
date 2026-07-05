@@ -12,7 +12,7 @@ const app = express();
 app.set("trust proxy", 1);
 
 const { connectRedis } = require("./src/config/redisClient");
-const {globalLimiter} = require("./src/middleware/rateLimiter");
+// const {globalLimiter} = require("./src/middleware/rateLimiter");
 
 // worker
 require("./src/workers/rankStoreToDB");
@@ -462,7 +462,7 @@ socket.on('typing', ({ toUserId, isTyping }) => {
 
 // rate limit
 
-app.use(globalLimiter); // global rate limit
+
 
 
 

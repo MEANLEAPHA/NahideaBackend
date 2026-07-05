@@ -443,7 +443,6 @@ const followUser = async (req, res) => {
             receiverId: followingId,
 
             senderId: followerId,
-
             type: mutual.length
                 ? "follow_back"
                 : "follow",
