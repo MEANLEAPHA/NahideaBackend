@@ -438,12 +438,12 @@ const followUser = async (req, res) => {
         NOTIFICATION
         */
 
-        const res = await connection.query(
+        const [rows] = await connection.query(
             `SELECT username FROM users WHERE id=?`,
             [followerId]
         );
 
-        const followerUsername = res[0].username;
+        const followerUsername = rows[0].username;
 
         await createNotification({
 
