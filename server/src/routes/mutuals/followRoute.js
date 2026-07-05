@@ -29,12 +29,6 @@ router.delete(
     unfollowUser
 );
 
-// router.post(
-//     "/follow/accept/:requestId",
-//     protect,
-//     acceptFollowRequest
-// );
-
 router.get(
   "/follow-status/:userId",
   protect,
