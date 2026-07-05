@@ -700,6 +700,18 @@ try {
 
       // search logic // 
       
+// search All
+try{
+  const searchAllRoute = require("./src/routes/search/searchAllRoute");
+  app.use("/api", searchAllRoute);
+  console.log("✅ searchAll Routes mounted successfully")
+}
+catch(err){
+  console.error("❌ Error loading searchAllRoutes:", err.message);
+  console.error(err.stack);
+} 
+
+
 // searchUser
 try{
   const searchUserRoute = require("./src/routes/search/searchUserRoute");
@@ -717,6 +729,7 @@ app.get("/", (req, res) => {
   res.send("API Server Running");
 });
 
+
 /*
 |--------------------------------------------------------------------------
 | START SERVER
@@ -732,16 +745,12 @@ app.use((err, req, res, next) => {
 async function startServer() {
 
   try {
-
     await connectRedis();
-
     server.listen(process.env.PORT, () => {
-
       console.log(
         "Server is running on port:" +
         process.env.PORT
       );
-
     });
 
   } catch (err) {
