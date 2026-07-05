@@ -104,31 +104,35 @@ const deleteNotification = async (req, res) => {
 }
 
 const deleteAllNotification = async (req, res) => {
-  try {
-    const userId = req.user.userId; // or req.user.userId, confirm which one is correct
+    try {
+        const userId = req.user.userId;
 
-    const [result] = await pool.query(
-      "DELETE FROM notifications WHERE receiver_id = ?",
-      [userId]
-    );
+        console.log("JWT userId:", userId);
 
-    console.log("Rows deleted:", result.affectedRows);
+        const [result] = await pool.query(
+            "DELETE FROM notifications WHERE receiver_id = ?",
+            [userId]
+        );
 
-    const [unreadCount] = await pool.query(
-      "SELECT COUNT(*) as count FROM notifications WHERE receiver_id = ? AND is_viewed = 0",
-      [userId]
-    );
+        console.log("affectedRows:", result.affectedRows);
 
-    res.status(200).json({
-      message: "All notifications deleted",
-      unreadCount: unreadCount[0].count
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to delete all notifications" });
-  }
+        const [rows] = await pool.query(
+            "SELECT * FROM notifications WHERE receiver_id = ?",
+            [userId]
+        );
+
+        console.log("Remaining rows:", rows.length);
+
+        res.status(200).json({
+            success: true,
+            affectedRows: result.affectedRows
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json(err);
+    }
 };
-
 
 const createNotification = async ({
     receiverId,
