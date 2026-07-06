@@ -103,7 +103,7 @@ const deleteNotification = async (req, res) => {
     }
 }
 
-const deleteAllNotification = async (req, res) => {
+const deleteAllNotifications = async (req, res) => {
     try {
         const userId = req.user.userId;
 
@@ -219,7 +219,7 @@ module.exports = {
     markNotificationRead,
     markAllNotification,
     deleteNotification,
-    deleteAllNotification,
+    deleteAllNotifications,
     createNotification,
     getUnreadCount
 };

@@ -7,9 +7,15 @@ const {
     markNotificationRead,
     markAllNotification,
     deleteNotification,
-    deleteAllNotification,
+    deleteAllNotifications,
     getUnreadCount
 } = require("../../controllers/notifications/notificationController");
+
+router.delete(
+    "/notifications/delete-all",
+    protect,
+    deleteAllNotifications
+);
 
 router.get(
     "/notifications/get-all",
@@ -35,11 +41,7 @@ router.delete(
     deleteNotification
 );
 
-router.delete(
-    "/notifications/delete-all",
-    protect,
-    deleteAllNotification
-);
+
 
 
 router.get(
