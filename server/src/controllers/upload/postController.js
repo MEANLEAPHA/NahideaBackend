@@ -8,6 +8,310 @@ require("dotenv").config();
 // Redis Cache
 const {cachePost, ranking} = require("../../config/redisClient");
 
+// const createPost = async (req, res) => {
+//   try{
+//       const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+//       const currentMonth = today.slice(0, 7).replace("-", ""); // YYYYMM
+//       const { 
+//               // post based
+//               post_type, tags = [], isAnonymous,
+
+//                 // content
+//                 content_title, content_type, text_body, content_type_icon,
+
+//                 // confession
+//                 confession_title, confession_type, confession_type_icon,
+
+//                 // question 
+//                 question_type, question_title, question_related_to, question_related_to_icon,
+
+//                 // repost 
+//                 repost_title
+
+//             } = req.body;
+
+//       const userId = req.user.userId;
+
+//       if(!post_type){
+//         return res.status(404).json({ message: "Missing post type." });
+//       };
+
+//         // Generate only if anonymous
+//     let anonName = null;
+//     let anonColor = null;
+
+//     if (Number(isAnonymous) === 1 || isAnonymous === "1") {
+//       const anonymousName = () => {
+//         const generateNum = Array.from({ length: 6 }, () =>
+//           Math.floor(Math.random() * 10)
+//         ).join("");
+//         return `An${generateNum}nymous`;
+//       };
+
+//       const anonymousBgColor = () => {
+//         const colors = [
+//           "yellowgreen", "skyblue", "tomato", "yellow",
+//           "purple", "orange", "grey", "black", "brown",
+//           "pink", "cyan"
+//         ];
+//         const randomIndex = Math.floor(Math.random() * colors.length);
+//         return colors[randomIndex];
+//       };
+
+//       anonName = anonymousName();
+//       anonColor = anonymousBgColor();
+//     }
+
+//       const [result] = await pool.query(
+//         "INSERT INTO posts (user_id, post_type, is_anonymous, anonymous_name, anonymous_bg_color) VALUES (?, ?, ?, ?, ?)",
+//         [userId, post_type, isAnonymous, anonName, anonColor]
+//       );
+
+//       const postId = result.insertId;
+
+//       // Nomalize and storing Tags
+//       if (tags && tags.length > 0) {
+//         await Promise.all(tags.map(async (rawTag) => {
+//           const name = rawTag.trim().toLowerCase();
+//           const label = rawTag.trim();
+
+//           const [rows] = await pool.query("SELECT id FROM tags WHERE name = ?", [name]);
+
+//           let tagId;
+//           if (rows.length > 0) {
+//             tagId = rows[0].id;
+//           } else {
+//             const [insertTags] = await pool.query(
+//               "INSERT INTO tags (name, label) VALUES (?, ?)",
+//               [name, label]
+//             );
+//             tagId = insertTags.insertId;
+//           }
+
+//           await pool.query("INSERT INTO post_tags (post_id, tag_id) VALUES (?, ?)", [postId, tagId]);
+//         }));
+//       }
+
+//       const handler = {
+//         content: async() => {
+//             let mediaUrl = [];
+//             let mediaType = [];
+
+//             const contentFiles = req.files?.contentFile || [];
+//             const uploadPromises = contentFiles.map(f => convertAndUpload(f, "content"));
+//             const results = await Promise.all(uploadPromises);
+
+//             mediaUrl = results.map(r => r.url);
+//             mediaType = results.map(r => r.type);
+
+//             await pool.query(
+//               `INSERT INTO content(user_id, post_id, type, cate_icon, title, text_body, media_type, media_url)
+//                     VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
+//                     [userId, postId, content_type, content_type_icon, content_title, text_body,JSON.stringify(mediaType), JSON.stringify(mediaUrl)]
+//             );
+//         },
+//         confession: async() => {
+//             let mediaUrl;
+//             let mediaType;
+
+//             const confessionFile = req.files?.confessionFile?.[0];
+//             if (confessionFile) {
+//             const result = await convertAndUpload(confessionFile, "confession");
+//             mediaUrl = result.url;
+//             mediaType = result.type;
+//             }
+//             const media_url = mediaUrl || null;
+//             const media_type = mediaType || null;
+
+//             await pool.query(
+//                 `INSERT INTO confession(user_id, post_id, type, cate_icon, title, media_type, media_url) 
+//                 VALUE(?, ?, ?, ?, ?, ?, ?)`,
+//                 [userId, postId, confession_type, confession_type_icon, confession_title, media_type, media_url]
+//             );
+//         },
+//         question: async() => {
+//             let questionMediaUrl;
+//             const questionFile = req.files?.questionFile?.[0];
+//             if (questionFile) {
+//             const result = await convertAndUpload(questionFile, "question");
+//             questionMediaUrl = result.url;
+//             }
+//             const media_url = questionMediaUrl || null;
+            
+//             const [questionResult] = await pool.query(
+//                 "INSERT INTO question(post_id, question_type, title, media_url, type, cate_icon) VALUES (?, ?, ?, ?, ?, ?)",
+//                 [postId, question_type, question_title, media_url, question_related_to, question_related_to_icon]
+//             );
+
+//               const questionId = questionResult.insertId;
+
+//               switch (question_type) {
+//                 case "openend":
+//                   break;
+
+//                 case "closedend":
+//                   break;
+
+//                 case "range":
+//                   await pool.query(
+//                     "INSERT INTO question_range (question_id, range_min, range_max, step, default_range_value) VALUES (?, ?, ?, ?, ?)",
+//                     [questionId, req.body.rangeMin, req.body.rangeMax, req.body.rangeStep, req.body.defaultRangeValue]
+//                   );
+//                   break;
+
+//                case "singlechoice":
+//                   const [sc] = await pool.query(
+//                     "INSERT INTO singlechoice (question_id) VALUES (?)",
+//                     [questionId]
+//                   );
+//                   const singleChoiceId = sc.insertId;
+
+//                   const singleChoices = req.body.choices || req.body["choices[]"] || [];
+//                   await Promise.all(
+//                     singleChoices.map(async (choice) => {
+//                       try {
+//                         await pool.query(
+//                           "INSERT INTO singlechoice_option (singlechoice_id, choice_text) VALUES (?, ?)",
+//                           [singleChoiceId, choice]
+//                         );
+//                       } catch (err) {
+//                         console.error("Error inserting singlechoice option:", choice, err);
+//                       }
+//                     })
+//                   );
+//                   break;
+
+//                 case "multiplechoice":
+//                   const [mc] = await pool.query(
+//                     "INSERT INTO multiplechoice (question_id, include_all_above) VALUES (?, ?)",
+//                     [questionId, req.body.include_all_above]
+//                   );
+//                   const multipleChoiceId = mc.insertId;
+
+//                   const multipleChoices = req.body.choices || req.body["choices[]"] || [];
+//                   await Promise.all(
+//                     multipleChoices.map(async (choice) => {
+//                       try {
+//                         await pool.query(
+//                           "INSERT INTO multiplechoice_option (multiplechoice_id, choice_text) VALUES (?, ?)",
+//                           [multipleChoiceId, choice]
+//                         );
+//                       } catch (err) {
+//                         console.error("Error inserting multiplechoice option:", choice, err);
+//                       }
+//                     })
+//                   );
+//                   break;
+
+//                   case "rankingorder":
+//                     const [ro] = await pool.query(
+//                       "INSERT INTO rankingorder (question_id) VALUES (?)",
+//                       [questionId]
+//                     );
+//                     const rankingId = ro.insertId;
+
+//                     const rankingArray = req.body.ranking || [];
+//                     console.log("Ranking array received:", rankingArray);
+
+//                     await Promise.all(
+//                       rankingArray.map(async (value, index) => {
+//                         if (value) {
+//                             await pool.query(
+//                               "INSERT INTO ranking_item (ranking_id, position, item_text) VALUES (?, ?, ?)",
+//                               [rankingId, index, value]
+//                             );
+//                         }
+//                       })
+//                     );
+//                     break;
+
+//                 case "rating":
+//                   await pool.query(
+//                     "INSERT INTO rating (question_id, rating_icon_id) VALUES (?, ?)",
+//                     [questionId, req.body.rating_icon_id]
+//                   );
+//                   break;
+
+//                 default:
+//                   return res.status(400).json({ error: "Invalid question type" });
+//               }
+//         },
+//         repost: async() => {
+//             await pool.query(
+//               `INSERT INTO repost(post_id, title) VALUE(?,?)`,
+//               [postId, repost_title]
+//             )
+//         }
+//       }
+      
+//      if (!handler[post_type]) {
+//       return res.status(400).json({ code: 400, message: "Invalid post type" });
+//     }
+//     await handler[post_type]();
+
+//    // ====================================
+// // HYDRATE NEW POST FROM DB
+// // ====================================
+// const [basePosts] = await pool.query(`
+//   SELECT
+//     p.id,
+//     p.post_type,
+//     p.is_anonymous,
+//     p.anonymous_name,
+//     p.anonymous_bg_color,
+//     p.likes_count,
+//     p.comments_count,
+//     p.answers_count,
+//     p.views_count,
+//     p.created_at,
+//     p.status,
+//     u.username,
+//     GROUP_CONCAT(tg.label) as tags
+//   FROM posts p
+//   JOIN users u ON p.user_id = u.id
+//   LEFT JOIN post_tags pt ON pt.post_id = p.id
+//   LEFT JOIN tags tg ON tg.id = pt.tag_id
+//   WHERE p.id = ?
+//   GROUP BY p.id
+// `, [postId]);
+
+// const hydratedPost = await hydratePostsFromDb(
+//   [postId],
+//   basePosts
+// );
+
+// const finalPost = hydratedPost[0];
+
+// // cache single post
+// await cachePost.set(
+//   `post:${postId}`,
+//   JSON.stringify(finalPost),
+//   { EX: 300 }
+// );
+
+//     // invalidate page caches
+//     const pageKeys = await cachePost.keys("posts:page:*");
+
+//     if (pageKeys.length) {
+//       await cachePost.del(pageKeys);
+//     }
+
+//     await ranking.zIncrBy(`hof:month:${currentMonth}`, 5, userId.toString());
+//     const postTypeRes = post_type.slice(0, 1).toUpperCase() + post_type.slice(1);
+//     res.status(200).json({ message: `${postTypeRes} uploaded successfully`, postId });
+
+//     }
+//     catch(error){
+//       console.error(error.message);
+//       await Errors(error.message, error.code, "post-controller", error.stack);
+//       return res.status(500).json({ message: "Sorry, Server Error" });
+//     }
+// }; 
+
+
+// all post type
+
+
 const createPost = async (req, res) => {
   try{
       const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
@@ -167,18 +471,22 @@ const createPost = async (req, res) => {
                   const singleChoiceId = sc.insertId;
 
                   const singleChoices = req.body.choices || req.body["choices[]"] || [];
-                  await Promise.all(
-                    singleChoices.map(async (choice) => {
-                      try {
-                        await pool.query(
-                          "INSERT INTO singlechoice_option (singlechoice_id, choice_text) VALUES (?, ?)",
-                          [singleChoiceId, choice]
-                        );
-                      } catch (err) {
-                        console.error("Error inserting singlechoice option:", choice, err);
-                      }
-                    })
-                  );
+                  // Inserted sequentially (not Promise.all) so choice_text rows are
+                  // created in the same order the user arranged them. Promise.all
+                  // fires all inserts concurrently with no guarantee which one's
+                  // connection finishes first, so auto-increment ids (and therefore
+                  // display order) could come back scrambled even though the array
+                  // itself arrived in the correct order.
+                  for (const choice of singleChoices) {
+                    try {
+                      await pool.query(
+                        "INSERT INTO singlechoice_option (singlechoice_id, choice_text) VALUES (?, ?)",
+                        [singleChoiceId, choice]
+                      );
+                    } catch (err) {
+                      console.error("Error inserting singlechoice option:", choice, err);
+                    }
+                  }
                   break;
 
                 case "multiplechoice":
@@ -189,18 +497,17 @@ const createPost = async (req, res) => {
                   const multipleChoiceId = mc.insertId;
 
                   const multipleChoices = req.body.choices || req.body["choices[]"] || [];
-                  await Promise.all(
-                    multipleChoices.map(async (choice) => {
-                      try {
-                        await pool.query(
-                          "INSERT INTO multiplechoice_option (multiplechoice_id, choice_text) VALUES (?, ?)",
-                          [multipleChoiceId, choice]
-                        );
-                      } catch (err) {
-                        console.error("Error inserting multiplechoice option:", choice, err);
-                      }
-                    })
-                  );
+                  // Same fix as singlechoice above: sequential inserts preserve order.
+                  for (const choice of multipleChoices) {
+                    try {
+                      await pool.query(
+                        "INSERT INTO multiplechoice_option (multiplechoice_id, choice_text) VALUES (?, ?)",
+                        [multipleChoiceId, choice]
+                      );
+                    } catch (err) {
+                      console.error("Error inserting multiplechoice option:", choice, err);
+                    }
+                  }
                   break;
 
                   case "rankingorder":
@@ -306,10 +613,7 @@ await cachePost.set(
       await Errors(error.message, error.code, "post-controller", error.stack);
       return res.status(500).json({ message: "Sorry, Server Error" });
     }
-}; 
-
-
-// all post type
+};
 const deletePost = async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
@@ -788,6 +1092,269 @@ async function attachUserStates(posts, userId) {
 }
 
 
+// async function hydratePostsFromDb(ids, basePosts = null) {
+
+//   let posts = basePosts;
+
+//   // fetch posts if not supplied
+//   if (!posts) {
+//     const [rows] = await pool.query(`
+//       SELECT
+//         p.id,
+//         p.post_type,
+//         p.is_anonymous,
+//         p.anonymous_name,
+//         p.anonymous_bg_color,
+//         p.likes_count,
+//         p.comments_count,
+//         p.answers_count,
+//         p.views_count,
+//         p.created_at,
+//         p.status,
+//         p.user_id,
+
+//         u.username,
+//         u.avatar_url,
+
+//         GROUP_CONCAT(tg.label) as tags
+
+//       FROM posts p
+
+//       JOIN users u
+//         ON p.user_id = u.id
+
+//       LEFT JOIN post_tags pt
+//         ON pt.post_id = p.id
+
+//       LEFT JOIN tags tg
+//         ON tg.id = pt.tag_id
+
+//       WHERE p.id IN (?)
+
+//       GROUP BY p.id
+
+//       ORDER BY FIELD(p.id, ?)
+//     `, [ids, ids]);
+
+//     posts = rows;
+//   }
+
+//   // ====================================
+//   // SPLIT IDS
+//   // ====================================
+//   const contentIds = posts
+//     .filter(p => p.post_type === "content")
+//     .map(p => p.id);
+
+//   const confessionIds = posts
+//     .filter(p => p.post_type === "confession")
+//     .map(p => p.id);
+
+//   const questionIds = posts
+//     .filter(p => p.post_type === "question")
+//     .map(p => p.id);
+
+//   // ====================================
+//   // FETCH RELATED TABLES
+//   // ====================================
+//   const [contents] = contentIds.length
+//     ? await pool.query(
+//         `SELECT * FROM content WHERE post_id IN (?)`,
+//         [contentIds]
+//       )
+//     : [[]];
+
+//   const [confessions] = confessionIds.length
+//     ? await pool.query(
+//         `SELECT * FROM confession WHERE post_id IN (?)`,
+//         [confessionIds]
+//       )
+//     : [[]];
+
+//   const [questions] = questionIds.length
+//     ? await pool.query(
+//         `SELECT * FROM question WHERE post_id IN (?)`,
+//         [questionIds]
+//       )
+//     : [[]];
+
+//   const qIds = questions.map(q => q.id);
+
+//   const [closed] = qIds.length
+//     ? await pool.query(
+//         `SELECT * FROM closedend WHERE question_id IN (?)`,
+//         [qIds]
+//       )
+//     : [[]];
+
+//   const [ranges] = qIds.length
+//     ? await pool.query(
+//         `SELECT * FROM question_range WHERE question_id IN (?)`,
+//         [qIds]
+//       )
+//     : [[]];
+
+//   const [ratings] = qIds.length
+//     ? await pool.query(
+//         `SELECT * FROM rating WHERE question_id IN (?)`,
+//         [qIds]
+//       )
+//     : [[]];
+
+//   const [singleOptions] = qIds.length
+//     ? await pool.query(`
+//         SELECT sco.*, sc.question_id
+//         FROM singlechoice_option sco
+//         JOIN singlechoice sc
+//           ON sco.singlechoice_id = sc.id
+//         WHERE sc.question_id IN (?)
+//       `, [qIds])
+//     : [[]];
+
+//   const [multipleOptions] = qIds.length
+//     ? await pool.query(`
+//         SELECT
+//           mco.*,
+//           mc.question_id,
+//           mc.include_all_above
+//         FROM multiplechoice_option mco
+//         JOIN multiplechoice mc
+//           ON mco.multiplechoice_id = mc.id
+//         WHERE mc.question_id IN (?)
+//       `, [qIds])
+//     : [[]];
+
+//   const [rankingItems] = qIds.length
+//     ? await pool.query(`
+//         SELECT ri.*, ro.question_id
+//         FROM ranking_item ri
+//         JOIN rankingorder ro
+//           ON ri.ranking_id = ro.id
+//         WHERE ro.question_id IN (?)
+//       `, [qIds])
+//     : [[]];
+
+//   // ====================================
+//   // MAPS FOR FAST LOOKUP
+//   // ====================================
+//   const contentMap = new Map(
+//     contents.map(c => [c.post_id, c])
+//   );
+
+//   const confessionMap = new Map(
+//     confessions.map(c => [c.post_id, c])
+//   );
+
+//   const questionMap = new Map(
+//     questions.map(q => [q.post_id, q])
+//   );
+
+//   const closedMap = new Map(
+//     closed.map(c => [c.question_id, c])
+//   );
+
+//   const rangeMap = new Map(
+//     ranges.map(r => [r.question_id, r])
+//   );
+
+//   const ratingMap = new Map(
+//     ratings.map(r => [r.question_id, r])
+//   );
+
+//   // ====================================
+//   // BUILD FINAL RESPONSE
+//   // ====================================
+//   return posts.map(post => {
+
+//     let data = null;
+
+//     // ====================================
+//     // CONTENT
+//     // ====================================
+//     if (post.post_type === "content") {
+//       data = contentMap.get(post.id) || null;
+//     }
+
+//     // ====================================
+//     // CONFESSION
+//     // ====================================
+//     if (post.post_type === "confession") {
+//       data = confessionMap.get(post.id) || null;
+//     }
+
+//     // ====================================
+//     // QUESTION
+//     // ====================================
+//     if (post.post_type === "question") {
+
+//       const q = questionMap.get(post.id);
+
+//       if (!q) {
+//         return {
+//           ...post,
+//           data: null
+//         };
+//       }
+
+//       let extra = {};
+
+//       switch (q.question_type) {
+
+//         case "closedend":
+//           extra = closedMap.get(q.id) || {};
+//           break;
+
+//         case "range":
+//           extra = rangeMap.get(q.id) || {};
+//           break;
+
+//         case "singlechoice":
+//           extra = {
+//             choices: singleOptions.filter(
+//               o => o.question_id === q.id
+//             )
+//           };
+//           break;
+
+//         case "multiplechoice":
+//           extra = {
+//             include_all_above:
+//               multipleOptions.find(
+//                 o => o.question_id === q.id
+//               )?.include_all_above || false,
+
+//             choices: multipleOptions.filter(
+//               o => o.question_id === q.id
+//             )
+//           };
+//           break;
+
+//         case "rankingorder":
+//           extra = {
+//             items: rankingItems.filter(
+//               i => i.question_id === q.id
+//             )
+//           };
+//           break;
+
+//         case "rating":
+//           extra = ratingMap.get(q.id) || {};
+//           break;
+//       }
+
+//       data = {
+//         ...q,
+//         ...extra
+//       };
+//     }
+
+//     return {
+//       ...post,
+//       created_at: timeAgo(post.created_at),
+//       data
+//     };
+//   });
+// }
 async function hydratePostsFromDb(ids, basePosts = null) {
 
   let posts = basePosts;
@@ -897,6 +1464,9 @@ async function hydratePostsFromDb(ids, basePosts = null) {
       )
     : [[]];
 
+  // ORDER BY sco.id ASC added: without it MySQL doesn't guarantee row order
+  // for this JOIN, so choices could come back scrambled in the UI even
+  // though they were inserted in the correct order.
   const [singleOptions] = qIds.length
     ? await pool.query(`
         SELECT sco.*, sc.question_id
@@ -904,9 +1474,11 @@ async function hydratePostsFromDb(ids, basePosts = null) {
         JOIN singlechoice sc
           ON sco.singlechoice_id = sc.id
         WHERE sc.question_id IN (?)
+        ORDER BY sco.id ASC
       `, [qIds])
     : [[]];
 
+  // Same fix as singleOptions above.
   const [multipleOptions] = qIds.length
     ? await pool.query(`
         SELECT
@@ -917,9 +1489,13 @@ async function hydratePostsFromDb(ids, basePosts = null) {
         JOIN multiplechoice mc
           ON mco.multiplechoice_id = mc.id
         WHERE mc.question_id IN (?)
+        ORDER BY mco.id ASC
       `, [qIds])
     : [[]];
 
+  // ranking_item already stores an explicit `position` column, which is the
+  // authoritative order regardless of insert timing — sort by that instead
+  // of id, and add it explicitly since it was previously missing here too.
   const [rankingItems] = qIds.length
     ? await pool.query(`
         SELECT ri.*, ro.question_id
@@ -927,6 +1503,7 @@ async function hydratePostsFromDb(ids, basePosts = null) {
         JOIN rankingorder ro
           ON ri.ranking_id = ro.id
         WHERE ro.question_id IN (?)
+        ORDER BY ri.position ASC
       `, [qIds])
     : [[]];
 
@@ -1052,40 +1629,6 @@ async function hydratePostsFromDb(ids, basePosts = null) {
   });
 }
 
-// async function updateCachedPostLike(postId, isLike) {
-
-//   try {
-
-//     const cached = await cachePost.get(`post:${postId}`);
-
-//     if (!cached) return;
-
-//     const parsed = safeJsonParse(cached);
-
-//     if (!parsed) return;
-
-//     parsed.likes_count = isLike
-//       ? parsed.likes_count + 1
-//       : Math.max(parsed.likes_count - 1, 0);
-
-//       console.log("TTL:", ttl);
-//       console.log("Before:", parsed.likes_count);
-
-//     const ttl = await cachePost.ttl(`post:${postId}`);
-
-//     const result = await cachePost.set(
-//       `post:${postId}`,
-//       JSON.stringify(parsed),
-//       ttl > 0 ? { EX: ttl } : {}
-//     );
-//         console.log(result);
-
-//   } catch (err) {
-
-//     console.error("updateCachedPostLike error:", err);
-
-//   }
-// }
 
 async function updateCachedPostLike(postId, isLike) {
 
