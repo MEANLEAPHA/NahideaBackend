@@ -44,6 +44,7 @@ router.post(
 
 
 router.get("/get-anon-identity/:postId", protect, getAnonIdentity);
+
 module.exports = router;
 
 

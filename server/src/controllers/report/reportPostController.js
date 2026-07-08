@@ -168,5 +168,38 @@ const report = async (req, res) => {
     }
 };
 
+const getAllReportByUserId = async (req, res) => {
+  try {
+    const userId = req.user.userId;
 
-module.exports = {createReport, submitFeedback, report};
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT 
+         r.id,
+         r.reporter_id,
+         r.to_id,
+         r.type,
+         r.report_type,
+         r.reason,
+         r.status,
+         r.created_at,
+         u.username AS reported_username,
+         u.avatar_url AS reported_avatar_url
+       FROM reports r
+       LEFT JOIN users u ON u.id = r.to_id
+       WHERE r.reporter_id = ?
+       ORDER BY r.created_at DESC`,
+      [userId]
+    );
+
+    return res.status(200).json(rows);
+  } catch (err) {
+    console.error('getAllReportByUserId error:', err);
+    return res.status(500).json({ message: 'Failed to fetch reports' });
+  }
+};
+
+module.exports = {createReport, submitFeedback, report,  getAllReportByUserId};
