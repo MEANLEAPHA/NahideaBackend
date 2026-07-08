@@ -6,7 +6,7 @@ const pool = require("../config/db");
 
 const hydrateHallOfFame = async (monthKey) => {
   const redisKey = `hof:month:${monthKey}`;
-  const topUsers = await ranking.zRevRangeWithScores(redisKey, 0, 4);
+  const topUsers = await ranking.zRangeWithScores(redisKey, 0, 4, { REV: true });
 
   if (!topUsers.length) {
     console.log(`No Hall of Fame data for ${monthKey}, skipping.`);
@@ -44,7 +44,8 @@ const hydrateHallOfFame = async (monthKey) => {
 
 const hydrateTrendingPost = async (dateKey) => {
   const redisKey = `trendingPost:day:${dateKey}`;
-  const topPosts = await ranking.zRevRangeWithScores(redisKey, 0, 9);
+  const topPosts = await ranking.zRangeWithScores(redisKey, 0, 9, { REV: true });
+
 
   if (!topPosts.length) {
     console.log(`No trending post data for ${dateKey}, skipping.`);
