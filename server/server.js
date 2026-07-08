@@ -462,86 +462,6 @@ socket.on('typing', ({ toUserId, isTyping }) => {
 
 // rate limit
 
-
-
-
-
-/*
-|--------------------------------------------------------------------------
-| ROUTES
-|--------------------------------------------------------------------------
-*/
-
-// // chat 
-// const userChatRoute = require("./src/routes/chat/getChatUserRoute");
-// app.use('/api', userChatRoute);
-
-// // user authentication
-// const authRoutes = require("./src/routes/authentication/authRoutes");
-// app.use("/api", authRoutes);
-
-// // mutual logic
-// const followRoutes = require("./src/routes/mutuals/followRoute");
-// app.use("/api", followRoutes);
-
-// // post
-// const postRoutes = require("./src/routes/upload/postRoutes");
-// app.use("/api", postRoutes);
-
-// // view recorder post
-// const viewPostRoutes = require("./src/routes/view/viewPostRoute");
-// app.use("/api", viewPostRoutes);
-
-// // answer question
-// try {
-//   const answerQARoutes = require("./src/routes/upload/answerQAroute");
-//   app.use("/api", answerQARoutes);
-//   console.log("✅ answerQARoutes mounted successfully");
-// } catch (err) {
-//   console.error("❌ Error loading answerQARoutes:", err.message);
-//   console.error(err.stack);
-// }
-
-// try {
-//   const spammyRoutes = require("./src/routes/spammy/spammyRoute");
-//   app.use("/api", spammyRoutes);
-//   console.log("✅ spammyRoutes mounted successfully");
-// } catch (err) {
-//   console.error("❌ Error loading spammyRoutes:", err.message);
-//   console.error(err.stack);
-// }
-
-
-// // comment and reply
-// const commentsRoutes = require("./src/routes/upload/commentRoute");
-// app.use("/api", commentsRoutes);
-
-// // gif
-// const gifRoutes = require("./src/routes/upload/gifRoute");
-// app.use("/api/gifs", gifRoutes);
-
-// // notification
-// const notificationRoutes = require("./src/routes/notification/notificationRoute");
-// app.use("/api", notificationRoutes);
-
-// // ranking
-// const rankRoutes = require("./src/routes/rank/rankRoute");
-// app.use("/api", rankRoutes);
-
-// // reports
-// const reportRoutes = require("./src/routes/report/reportPostRoute");
-// app.use("/api", reportRoutes);
-
-// // history recorder post
-// const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
-// app.use("/api", postHistoryRoutes);
-
-// // mutual
-// const mutualRoutes = require("./src/routes/friend/mutualRoute");
-// app.use("/api", mutualRoutes);
-
-// const pokeRoutes = require("./src/routes/poke/pokeRoute");
-// app.use("/api", pokeRoutes);
 /*
 |--------------------------------------------------------------------------
 | ROUTES
@@ -668,6 +588,17 @@ try {
   console.error(err.stack);
 }
 
+
+// ban
+try {
+  const banRoutes = require("./src/routes/report/banRoute");
+  app.use("/api", banRoutes);
+  console.log("✅ banRoutes mounted successfully");
+} catch (err) {
+  console.error("❌ Error loading banRoutes:", err.message);
+  console.error(err.stack);
+}
+
 // history recorder post
 try {
   const postHistoryRoutes = require("./src/routes/history/postHistoryRoute");
@@ -730,6 +661,16 @@ app.get("/", (req, res) => {
 });
 
 
+
+
+
+
+
+
+
+
+
+
 /*
 |--------------------------------------------------------------------------
 | START SERVER
@@ -766,5 +707,3 @@ async function startServer() {
 
 startServer();
 
-
-// add some comment
