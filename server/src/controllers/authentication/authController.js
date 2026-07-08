@@ -61,13 +61,6 @@ const login = async (req, res) => {
 
     console.error("loginMember error:", error);
 
-    await logError(
-      error.message,
-      error.code,
-      "loginMember",
-      error.stack
-    );
-
     return res.status(500).json({
       message: "Server Error, Please try again later",
     });

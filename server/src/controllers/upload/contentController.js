@@ -1,5 +1,4 @@
 const pool = require("../../config/db");
-const { Errors } = require("../../util/error/error");
 const { uploadToHostinger } = require("../../service/hostinger/ftp")
 const multer = require("multer");
 
@@ -44,7 +43,6 @@ const content = async (req, res) => {
         res.status(200).json({ success: true, contentId, mediaUrl });
     } catch (error) {
         console.error("Error creating content:", error);
-        await Errors(error.message, error.code, "contentController", error.stack);
         return res.status(500).json({
             success: false,
             error: error.message,
