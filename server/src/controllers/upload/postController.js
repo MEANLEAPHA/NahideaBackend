@@ -1,5 +1,5 @@
 const pool = require("../../config/db"); // pg Pool instance
-const { Errors } = require("../../util/error/error");
+
 const { uploadToHostinger, convertAndUpload } = require("../../service/hostinger/ftp")
 const multer = require("multer");
 const upload = multer({ dest: "temp/" });
@@ -308,7 +308,6 @@ await cachePost.set(
     }
     catch(error){
       console.error(error.message);
-      await Errors(error.message, error.code, "post-controller", error.stack);
       return res.status(500).json({ message: "Sorry, Server Error" });
     }
 };
