@@ -878,12 +878,12 @@ async function hydratePostsFromDb(ids, basePosts = null) {
 
   const qIds = questions.map(q => q.id);
 
-  const closed = qIds.length
-    ? (await pool.query(
-        `SELECT * FROM closedend WHERE question_id = ANY($1)`,
-        [qIds]
-      )).rows
-    : [];
+  // const closed = qIds.length
+  //   ? (await pool.query(
+  //       `SELECT * FROM closedend WHERE question_id = ANY($1)`,
+  //       [qIds]
+  //     )).rows
+  //   : [];
 
   const ranges = qIds.length
     ? (await pool.query(
@@ -957,9 +957,9 @@ async function hydratePostsFromDb(ids, basePosts = null) {
     questions.map(q => [q.post_id, q])
   );
 
-  const closedMap = new Map(
-    closed.map(c => [c.question_id, c])
-  );
+  // const closedMap = new Map(
+  //   closed.map(c => [c.question_id, c])
+  // );
 
   const rangeMap = new Map(
     ranges.map(r => [r.question_id, r])
@@ -1008,9 +1008,9 @@ async function hydratePostsFromDb(ids, basePosts = null) {
 
       switch (q.question_type) {
 
-        case "closedend":
-          extra = closedMap.get(q.id) || {};
-          break;
+        // case "closedend":
+        //   extra = closedMap.get(q.id) || {};
+        //   break;
 
         case "range":
           extra = rangeMap.get(q.id) || {};
