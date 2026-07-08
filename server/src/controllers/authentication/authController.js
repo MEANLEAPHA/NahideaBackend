@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const pool = require('../../config/db');
+const pool = require('../../config/db'); 
 require('dotenv').config();
 const { sendVerifyCodeEmail, sendResendPinEmail, sendVerifyCodeForgetPasswordEmail} = require('../../service/mail/email');
 const { createToken } = require('../../service/token/jwtHelp');
@@ -18,10 +18,11 @@ const login = async (req, res) => {
       });
     }
 
-    const [users] = await pool.query(
-      "SELECT * FROM users WHERE email = ?",
+    const result = await pool.query(
+      "SELECT * FROM users WHERE email = $1",
       [email]
     );
+    const users = result.rows;
 
     if (users.length === 0) {
       return res.status(404).json({
@@ -85,12 +86,12 @@ const register = async (req, res) => {
       });
     }
 
-    const [existingUser] = await pool.query(
-      "SELECT id FROM users WHERE email = ?",
+    const existingResult = await pool.query(
+      "SELECT id FROM users WHERE email = $1",
       [email]
     );
 
-    if (existingUser.length > 0) {
+    if (existingResult.rows.length > 0) {
       return res.status(409).json({
         message: "Oups! This Email is already registered"
       });
@@ -103,7 +104,7 @@ const register = async (req, res) => {
     await pool.query(
       `INSERT INTO users
       (username, email, password_hash, pin_code, pin_created_at)
-      VALUES (?, ?, ?, ?, NOW())`,
+      VALUES ($1, $2, $3, $4, NOW())`,
       [username, email, hashedPassword, pinCode]
     );
 
@@ -115,7 +116,7 @@ const register = async (req, res) => {
 
     } catch (emailError) {
       console.error("Email send failed:", emailError);
-      await pool.query("DELETE FROM users WHERE email = ?", [email]);
+      await pool.query("DELETE FROM users WHERE email = $1", [email]);
       return res.status(506).json({ message: "Sever can't send the PIN at this moment. Please try again later" });
     }
 
@@ -151,10 +152,11 @@ const verifyEmail = async (req, res) => {
 
     const pinTrimmed = pin.trim();
 
-    const [users] = await pool.query(
-      "SELECT * FROM users WHERE email = ? AND pin_code = ?",
+    const result = await pool.query(
+      "SELECT * FROM users WHERE email = $1 AND pin_code = $2",
       [email, pinTrimmed]
     );
+    const users = result.rows;
 
     if (!users.length) {
       return res.status(400).json({ message: "No Registrant found. Please register first" });
@@ -169,7 +171,7 @@ const verifyEmail = async (req, res) => {
 
     if (user.pin_code !== pinTrimmed) {
       await pool.query(
-        "UPDATE users SET pin_attempts = pin_attempts + 1 WHERE id = ?",
+        "UPDATE users SET pin_attempts = pin_attempts + 1 WHERE id = $1",
         [user.id]
       );
 
@@ -186,7 +188,7 @@ const verifyEmail = async (req, res) => {
     }
 
     await pool.query(
-      "UPDATE users SET is_verified = 1, pin_code = NULL, pin_attempts = 0, pin_created_at = NULL WHERE email = ?",
+      "UPDATE users SET is_verified = 1, pin_code = NULL, pin_attempts = 0, pin_created_at = NULL WHERE email = $1",
       [email]
     );
 
@@ -210,10 +212,11 @@ const resendverifyEmailPin = async (req, res) => {
     if(!email){
       return res.status(401).json({ message: "Email is required" });
     }
-    const [[user]] = await pool.query(
-      "SELECT pin_created_at FROM users WHERE email = ?",
+    const result = await pool.query(
+      "SELECT pin_created_at FROM users WHERE email = $1",
       [email]
     );
+    const user = result.rows[0];
  
     if(!user){
       return res.status(404).json({ message: "No Registrant found. Please register first" });
@@ -233,7 +236,7 @@ const resendverifyEmailPin = async (req, res) => {
     const pinCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     await pool.query(
-      "UPDATE users SET pin_code = ?, pin_created_at = NOW(), pin_attempts = 0 WHERE email = ?",
+      "UPDATE users SET pin_code = $1, pin_created_at = NOW(), pin_attempts = 0 WHERE email = $2",
       [pinCode, email]
     );
    
@@ -266,10 +269,11 @@ const forgetPassword = async (req, res) => {
 
     const trimmedEmail = email.trim();
 
-    const [[user]] = await pool.query(
-      "SELECT id, pin_created_at FROM users WHERE email = ?",
+    const result = await pool.query(
+      "SELECT id, pin_created_at FROM users WHERE email = $1",
       [trimmedEmail]
     );
+    const user = result.rows[0];
 
 
     if (!user) {
@@ -295,7 +299,7 @@ const forgetPassword = async (req, res) => {
     const pinCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     await pool.query(
-      "UPDATE users SET pin_code = ?, pin_created_at = NOW() WHERE id = ?",
+      "UPDATE users SET pin_code = $1, pin_created_at = NOW() WHERE id = $2",
       [pinCode, user.id]
     );
 
@@ -325,10 +329,11 @@ const verifyforgetPasswordPin = async (req, res) => {
       return res.status(400).json({ message: "Email and PIN are required" });
     }
 
-    const [[user]] = await pool.query(
-      "SELECT id, pin_code, pin_created_at, pin_attempts FROM users WHERE email = ?",
+    const result = await pool.query(
+      "SELECT id, pin_code, pin_created_at, pin_attempts FROM users WHERE email = $1",
       [email.trim()]
     );
+    const user = result.rows[0];
 
   
     if (!user) {
@@ -344,7 +349,7 @@ const verifyforgetPasswordPin = async (req, res) => {
 
     if (user.pin_code !== pin.trim()) {
       await pool.query(
-        "UPDATE users SET pin_attempts = pin_attempts + 1 WHERE id = ?",
+        "UPDATE users SET pin_attempts = pin_attempts + 1 WHERE id = $1",
         [user.id]
       );
 
@@ -360,7 +365,7 @@ const verifyforgetPasswordPin = async (req, res) => {
 
     // ✅ SUCCESS → clear PIN + attempts
     await pool.query(
-      "UPDATE users SET pin_code = NULL, pin_attempts = 0, reset_verified = 1 WHERE id = ?",
+      "UPDATE users SET pin_code = NULL, pin_attempts = 0, reset_verified = 1 WHERE id = $1",
       [user.id]
     );
 
@@ -381,10 +386,11 @@ const resendForgetPasswordPin = async (req, res) => {
       return res.status(400).json({ message: "Email is required" });
     }
 
-    const [[user]] = await pool.query(
-      "SELECT id, pin_created_at FROM users WHERE email = ?",
+    const result = await pool.query(
+      "SELECT id, pin_created_at FROM users WHERE email = $1",
       [email.trim()]
     );
+    const user = result.rows[0];
 
     
     if (!user) {
@@ -406,7 +412,7 @@ const resendForgetPasswordPin = async (req, res) => {
     const pinCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     await pool.query(
-      "UPDATE users SET pin_code = ?, pin_created_at = NOW(), pin_attempts = 0 WHERE id = ?",
+      "UPDATE users SET pin_code = $1, pin_created_at = NOW(), pin_attempts = 0 WHERE id = $2",
       [pinCode, user.id]
     );
 
@@ -442,10 +448,11 @@ const setNewPassword = async (req, res) => {
       return res.status(401).json({ message: "Password is not strong enough" });
     }
 
-    const [[user]] = await pool.query(
-      "SELECT id, reset_verified FROM users WHERE email = ?",
+    const result = await pool.query(
+      "SELECT id, reset_verified FROM users WHERE email = $1",
       [email.trim()]
     );
+    const user = result.rows[0];
 
     if (!user || user.reset_verified !== 1) {
       return res.status(403).json({ message: "Unauthorized request" });
@@ -455,8 +462,8 @@ const setNewPassword = async (req, res) => {
 
     await pool.query(
       `UPDATE users 
-       SET password_hash = ?, reset_verified = 0 
-       WHERE id = ?`,
+       SET password_hash = $1, reset_verified = 0 
+       WHERE id = $2`,
       [hashedPassword, user.id]
     );
 
@@ -476,7 +483,8 @@ const changePassword = async (req, res) => {
     return res.status(400).json({ message: "Missing current or new password." });
   }
 
-  const [[user]] = await pool.query("SELECT password FROM users WHERE user_id = ?", [userId]);
+  const result = await pool.query("SELECT password FROM users WHERE user_id = $1", [userId]);
+  const user = result.rows[0];
 
   const isMatch = await bcrypt.compare(currentPassword, user.password);
   if (!isMatch) {
@@ -484,7 +492,7 @@ const changePassword = async (req, res) => {
   }
 
   const hashed = await bcrypt.hash(newPassword, 10);
-  await pool.query("UPDATE users SET password = ? WHERE user_id = ?", [hashed, userId]);
+  await pool.query("UPDATE users SET password = $1 WHERE user_id = $2", [hashed, userId]);
 
   res.json({ message: "Password updated successfully." });
 };
@@ -501,10 +509,11 @@ const newPassword = async (req, res) => {
     const trimmedPin = pin.trim();
 
     // Check if the user with matching PIN exists
-    const [[user]] = await pool.query(
-      "SELECT * FROM users WHERE email = ? AND pin_code = ?",
+    const result = await pool.query(
+      "SELECT * FROM users WHERE email = $1 AND pin_code = $2",
       [normalizedEmail, trimmedPin]
     );
+    const user = result.rows[0];
 
     if (!user) {
       return res.status(400).json({ message: "Invalid email or PIN" });
@@ -521,7 +530,7 @@ const newPassword = async (req, res) => {
 
     // Update password and clear PIN
     await pool.query(
-      `UPDATE users SET password = ?, pin_code = NULL, pin_created_at = NULL WHERE email = ?`,
+      `UPDATE users SET password = $1, pin_code = NULL, pin_created_at = NULL WHERE email = $2`,
       [hashedPassword, normalizedEmail]
     );
 
@@ -536,16 +545,16 @@ const newPassword = async (req, res) => {
 const getUserInfo = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const [rows] = await pool.query(
-      "SELECT * FROM users WHERE id = ?",
+    const result = await pool.query(
+      "SELECT * FROM users WHERE id = $1",
       [userId]
     );
 
-    if (rows.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    return res.status(200).json({ userData: rows[0] });
+    return res.status(200).json({ userData: result.rows[0] });
   } catch (err) {
     console.error("Error in getUserInfo:", err);
     return res.status(500).json({ message: "Server error" });
@@ -606,18 +615,18 @@ const updateUser = async (req, res) => {
     }
 
     // Check for duplicate nickname
-    const [nicknameExists] = await pool.query(
+    const nicknameResult = await pool.query(
       `
         SELECT id
         FROM users
-        WHERE nickname = ?
-        AND id != ?
+        WHERE nickname = $1
+        AND id != $2
         LIMIT 1
       `,
       [nickname, userId]
     );
 
-    if (nicknameExists.length > 0) {
+    if (nicknameResult.rows.length > 0) {
       return res.status(409).json({
         success: false,
         message: "Nickname already taken",
@@ -629,15 +638,15 @@ const updateUser = async (req, res) => {
       `
       UPDATE users
       SET
-        avatar_url = ?,
-        banner_url = ?,
-        profession = ?,
-        work_place = ?,
-        nickname = ?,
-        bio = ?,
+        avatar_url = $1,
+        banner_url = $2,
+        profession = $3,
+        work_place = $4,
+        nickname = $5,
+        bio = $6,
         updated_at = NOW()
-      WHERE id = ?
-      AND email = ?
+      WHERE id = $7
+      AND email = $8
       `,
       [avatarUrl, bannerUrl, profession, location, nickname, bio, parseInt(userId), email]
     );
@@ -659,7 +668,7 @@ const getUserInfoById = async (req, res) => {
   try {
     const userId = req.params.userId;
 
-    const [rows] = await pool.query(
+    const result = await pool.query(
       `
       SELECT 
         u.username,
@@ -675,20 +684,20 @@ const getUserInfoById = async (req, res) => {
         COUNT(p.id) as post_count
       FROM users u
       LEFT JOIN posts p ON u.id = p.user_id
-      WHERE u.id = ?
+      WHERE u.id = $1
       GROUP BY u.id
       `,
       [userId]
     );
 
-    if (!rows.length) {
+    if (!result.rows.length) {
       return res.status(404).json({
         message: "User not found"
       });
     }
 
     return res.status(200).json({
-      userData: rows[0]
+      userData: result.rows[0]
     });
 
   } catch (err) {
@@ -725,5 +734,3 @@ module.exports = {
     getUserInfo,
     getUserInfoById
 }
-
-

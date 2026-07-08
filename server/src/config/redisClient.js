@@ -12,8 +12,6 @@ const ranking = createClient({
 });
 ranking.on("error", (err) => console.error("Nahidea Redis Rankinf Error:", err))
 
-
-
 const connectRedis = async () => {
 
   if (!cachePost.isOpen) {
@@ -25,7 +23,7 @@ const connectRedis = async () => {
     await ranking.connect();
     console.log("Redis ranking connected");
   }
-
 };
+
 
 module.exports = { connectRedis, cachePost, ranking };
