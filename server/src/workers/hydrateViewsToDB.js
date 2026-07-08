@@ -1,5 +1,3 @@
-
-// const cron = require("node-cron");
 // const pool = require("../config/db");
 // const { cachePost } = require("../config/redisClient");
 
@@ -13,8 +11,9 @@
 
 //       await pool.query(
 //         `INSERT INTO view_post (user_id, post_id, view_date, created_at)
-//          VALUES (?, ?, ?, NOW())
-//          ON DUPLICATE KEY UPDATE view_date = VALUES(view_date)`,
+//          VALUES ($1, $2, $3, NOW())
+//          ON CONFLICT (user_id, post_id, view_date) 
+//          DO UPDATE SET view_date = EXCLUDED.view_date`,
 //         [userId, postId, viewDate]
 //       );
 
@@ -32,7 +31,7 @@
 //       if (redisCount) {
 //         // update new value to DB
 //         await pool.query(
-//           `UPDATE posts SET views_count = ? WHERE id = ?`,
+//           `UPDATE posts SET views_count = $1 WHERE id = $2`,
 //           [parseInt(redisCount, 10), postId]
 //         );
 
@@ -83,8 +82,9 @@ const hydrateViewsToDB = async () => {
 
         await pool.query(
           `INSERT INTO view_post (user_id, post_id, view_date, created_at)
-           VALUES (?, ?, ?, NOW())
-           ON DUPLICATE KEY UPDATE view_date = VALUES(view_date)`,
+           VALUES ($1, $2, $3, NOW())
+           ON CONFLICT (user_id, post_id, view_date) 
+           DO UPDATE SET view_date = EXCLUDED.view_date`,
           [userId, postId, viewDate]
         );
 
@@ -108,7 +108,7 @@ const hydrateViewsToDB = async () => {
         const count = parseInt(redisCount, 10);
 
         if (!Number.isNaN(count)) {
-          await pool.query(`UPDATE posts SET views_count = ? WHERE id = ?`, [
+          await pool.query(`UPDATE posts SET views_count = $1 WHERE id = $2`, [
             count,
             postId,
           ]);

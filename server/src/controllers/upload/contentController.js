@@ -33,13 +33,14 @@ const content = async (req, res) => {
             mediaType = results.map(r => r.type);
         }
 
-        const [create] = await pool.query(
+        const result = await pool.query(
             `INSERT INTO content(user_id, type, title, media_type, media_url, is_anonymous)
-             VALUES(?, ?, ?, ?, ?, ?)`,
+             VALUES($1, $2, $3, $4, $5, $6)
+             RETURNING id`,
             [userId, type, title, JSON.stringify(mediaType), JSON.stringify(mediaUrl), isAnonymous]
         );
 
-        const contentId = create.insertId;
+        const contentId = result.rows[0].id;
         res.status(200).json({ success: true, contentId, mediaUrl });
     } catch (error) {
         console.error("Error creating content:", error);
@@ -52,6 +53,5 @@ const content = async (req, res) => {
         });
     }
 };
-
 
 module.exports = { content, upload };

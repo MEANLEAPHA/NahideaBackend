@@ -1,4 +1,4 @@
-const pool = require("../../config/db");
+const pool = require("../../config/db"); // pg Pool instance
 const { Errors } = require("../../util/error/error");
 const { uploadToHostinger, convertAndUpload } = require("../../service/hostinger/ftp")
 const multer = require("multer");
@@ -7,310 +7,6 @@ require("dotenv").config();
 
 // Redis Cache
 const {cachePost, ranking} = require("../../config/redisClient");
-
-// const createPost = async (req, res) => {
-//   try{
-//       const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-//       const currentMonth = today.slice(0, 7).replace("-", ""); // YYYYMM
-//       const { 
-//               // post based
-//               post_type, tags = [], isAnonymous,
-
-//                 // content
-//                 content_title, content_type, text_body, content_type_icon,
-
-//                 // confession
-//                 confession_title, confession_type, confession_type_icon,
-
-//                 // question 
-//                 question_type, question_title, question_related_to, question_related_to_icon,
-
-//                 // repost 
-//                 repost_title
-
-//             } = req.body;
-
-//       const userId = req.user.userId;
-
-//       if(!post_type){
-//         return res.status(404).json({ message: "Missing post type." });
-//       };
-
-//         // Generate only if anonymous
-//     let anonName = null;
-//     let anonColor = null;
-
-//     if (Number(isAnonymous) === 1 || isAnonymous === "1") {
-//       const anonymousName = () => {
-//         const generateNum = Array.from({ length: 6 }, () =>
-//           Math.floor(Math.random() * 10)
-//         ).join("");
-//         return `An${generateNum}nymous`;
-//       };
-
-//       const anonymousBgColor = () => {
-//         const colors = [
-//           "yellowgreen", "skyblue", "tomato", "yellow",
-//           "purple", "orange", "grey", "black", "brown",
-//           "pink", "cyan"
-//         ];
-//         const randomIndex = Math.floor(Math.random() * colors.length);
-//         return colors[randomIndex];
-//       };
-
-//       anonName = anonymousName();
-//       anonColor = anonymousBgColor();
-//     }
-
-//       const [result] = await pool.query(
-//         "INSERT INTO posts (user_id, post_type, is_anonymous, anonymous_name, anonymous_bg_color) VALUES (?, ?, ?, ?, ?)",
-//         [userId, post_type, isAnonymous, anonName, anonColor]
-//       );
-
-//       const postId = result.insertId;
-
-//       // Nomalize and storing Tags
-//       if (tags && tags.length > 0) {
-//         await Promise.all(tags.map(async (rawTag) => {
-//           const name = rawTag.trim().toLowerCase();
-//           const label = rawTag.trim();
-
-//           const [rows] = await pool.query("SELECT id FROM tags WHERE name = ?", [name]);
-
-//           let tagId;
-//           if (rows.length > 0) {
-//             tagId = rows[0].id;
-//           } else {
-//             const [insertTags] = await pool.query(
-//               "INSERT INTO tags (name, label) VALUES (?, ?)",
-//               [name, label]
-//             );
-//             tagId = insertTags.insertId;
-//           }
-
-//           await pool.query("INSERT INTO post_tags (post_id, tag_id) VALUES (?, ?)", [postId, tagId]);
-//         }));
-//       }
-
-//       const handler = {
-//         content: async() => {
-//             let mediaUrl = [];
-//             let mediaType = [];
-
-//             const contentFiles = req.files?.contentFile || [];
-//             const uploadPromises = contentFiles.map(f => convertAndUpload(f, "content"));
-//             const results = await Promise.all(uploadPromises);
-
-//             mediaUrl = results.map(r => r.url);
-//             mediaType = results.map(r => r.type);
-
-//             await pool.query(
-//               `INSERT INTO content(user_id, post_id, type, cate_icon, title, text_body, media_type, media_url)
-//                     VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
-//                     [userId, postId, content_type, content_type_icon, content_title, text_body,JSON.stringify(mediaType), JSON.stringify(mediaUrl)]
-//             );
-//         },
-//         confession: async() => {
-//             let mediaUrl;
-//             let mediaType;
-
-//             const confessionFile = req.files?.confessionFile?.[0];
-//             if (confessionFile) {
-//             const result = await convertAndUpload(confessionFile, "confession");
-//             mediaUrl = result.url;
-//             mediaType = result.type;
-//             }
-//             const media_url = mediaUrl || null;
-//             const media_type = mediaType || null;
-
-//             await pool.query(
-//                 `INSERT INTO confession(user_id, post_id, type, cate_icon, title, media_type, media_url) 
-//                 VALUE(?, ?, ?, ?, ?, ?, ?)`,
-//                 [userId, postId, confession_type, confession_type_icon, confession_title, media_type, media_url]
-//             );
-//         },
-//         question: async() => {
-//             let questionMediaUrl;
-//             const questionFile = req.files?.questionFile?.[0];
-//             if (questionFile) {
-//             const result = await convertAndUpload(questionFile, "question");
-//             questionMediaUrl = result.url;
-//             }
-//             const media_url = questionMediaUrl || null;
-            
-//             const [questionResult] = await pool.query(
-//                 "INSERT INTO question(post_id, question_type, title, media_url, type, cate_icon) VALUES (?, ?, ?, ?, ?, ?)",
-//                 [postId, question_type, question_title, media_url, question_related_to, question_related_to_icon]
-//             );
-
-//               const questionId = questionResult.insertId;
-
-//               switch (question_type) {
-//                 case "openend":
-//                   break;
-
-//                 case "closedend":
-//                   break;
-
-//                 case "range":
-//                   await pool.query(
-//                     "INSERT INTO question_range (question_id, range_min, range_max, step, default_range_value) VALUES (?, ?, ?, ?, ?)",
-//                     [questionId, req.body.rangeMin, req.body.rangeMax, req.body.rangeStep, req.body.defaultRangeValue]
-//                   );
-//                   break;
-
-//                case "singlechoice":
-//                   const [sc] = await pool.query(
-//                     "INSERT INTO singlechoice (question_id) VALUES (?)",
-//                     [questionId]
-//                   );
-//                   const singleChoiceId = sc.insertId;
-
-//                   const singleChoices = req.body.choices || req.body["choices[]"] || [];
-//                   await Promise.all(
-//                     singleChoices.map(async (choice) => {
-//                       try {
-//                         await pool.query(
-//                           "INSERT INTO singlechoice_option (singlechoice_id, choice_text) VALUES (?, ?)",
-//                           [singleChoiceId, choice]
-//                         );
-//                       } catch (err) {
-//                         console.error("Error inserting singlechoice option:", choice, err);
-//                       }
-//                     })
-//                   );
-//                   break;
-
-//                 case "multiplechoice":
-//                   const [mc] = await pool.query(
-//                     "INSERT INTO multiplechoice (question_id, include_all_above) VALUES (?, ?)",
-//                     [questionId, req.body.include_all_above]
-//                   );
-//                   const multipleChoiceId = mc.insertId;
-
-//                   const multipleChoices = req.body.choices || req.body["choices[]"] || [];
-//                   await Promise.all(
-//                     multipleChoices.map(async (choice) => {
-//                       try {
-//                         await pool.query(
-//                           "INSERT INTO multiplechoice_option (multiplechoice_id, choice_text) VALUES (?, ?)",
-//                           [multipleChoiceId, choice]
-//                         );
-//                       } catch (err) {
-//                         console.error("Error inserting multiplechoice option:", choice, err);
-//                       }
-//                     })
-//                   );
-//                   break;
-
-//                   case "rankingorder":
-//                     const [ro] = await pool.query(
-//                       "INSERT INTO rankingorder (question_id) VALUES (?)",
-//                       [questionId]
-//                     );
-//                     const rankingId = ro.insertId;
-
-//                     const rankingArray = req.body.ranking || [];
-//                     console.log("Ranking array received:", rankingArray);
-
-//                     await Promise.all(
-//                       rankingArray.map(async (value, index) => {
-//                         if (value) {
-//                             await pool.query(
-//                               "INSERT INTO ranking_item (ranking_id, position, item_text) VALUES (?, ?, ?)",
-//                               [rankingId, index, value]
-//                             );
-//                         }
-//                       })
-//                     );
-//                     break;
-
-//                 case "rating":
-//                   await pool.query(
-//                     "INSERT INTO rating (question_id, rating_icon_id) VALUES (?, ?)",
-//                     [questionId, req.body.rating_icon_id]
-//                   );
-//                   break;
-
-//                 default:
-//                   return res.status(400).json({ error: "Invalid question type" });
-//               }
-//         },
-//         repost: async() => {
-//             await pool.query(
-//               `INSERT INTO repost(post_id, title) VALUE(?,?)`,
-//               [postId, repost_title]
-//             )
-//         }
-//       }
-      
-//      if (!handler[post_type]) {
-//       return res.status(400).json({ code: 400, message: "Invalid post type" });
-//     }
-//     await handler[post_type]();
-
-//    // ====================================
-// // HYDRATE NEW POST FROM DB
-// // ====================================
-// const [basePosts] = await pool.query(`
-//   SELECT
-//     p.id,
-//     p.post_type,
-//     p.is_anonymous,
-//     p.anonymous_name,
-//     p.anonymous_bg_color,
-//     p.likes_count,
-//     p.comments_count,
-//     p.answers_count,
-//     p.views_count,
-//     p.created_at,
-//     p.status,
-//     u.username,
-//     GROUP_CONCAT(tg.label) as tags
-//   FROM posts p
-//   JOIN users u ON p.user_id = u.id
-//   LEFT JOIN post_tags pt ON pt.post_id = p.id
-//   LEFT JOIN tags tg ON tg.id = pt.tag_id
-//   WHERE p.id = ?
-//   GROUP BY p.id
-// `, [postId]);
-
-// const hydratedPost = await hydratePostsFromDb(
-//   [postId],
-//   basePosts
-// );
-
-// const finalPost = hydratedPost[0];
-
-// // cache single post
-// await cachePost.set(
-//   `post:${postId}`,
-//   JSON.stringify(finalPost),
-//   { EX: 300 }
-// );
-
-//     // invalidate page caches
-//     const pageKeys = await cachePost.keys("posts:page:*");
-
-//     if (pageKeys.length) {
-//       await cachePost.del(pageKeys);
-//     }
-
-//     await ranking.zIncrBy(`hof:month:${currentMonth}`, 5, userId.toString());
-//     const postTypeRes = post_type.slice(0, 1).toUpperCase() + post_type.slice(1);
-//     res.status(200).json({ message: `${postTypeRes} uploaded successfully`, postId });
-
-//     }
-//     catch(error){
-//       console.error(error.message);
-//       await Errors(error.message, error.code, "post-controller", error.stack);
-//       return res.status(500).json({ message: "Sorry, Server Error" });
-//     }
-// }; 
-
-
-// all post type
-
 
 const createPost = async (req, res) => {
   try{
@@ -366,12 +62,12 @@ const createPost = async (req, res) => {
       anonColor = anonymousBgColor();
     }
 
-      const [result] = await pool.query(
-        "INSERT INTO posts (user_id, post_type, is_anonymous, anonymous_name, anonymous_bg_color) VALUES (?, ?, ?, ?, ?)",
+      const insertPostResult = await pool.query(
+        "INSERT INTO posts (user_id, post_type, is_anonymous, anonymous_name, anonymous_bg_color) VALUES ($1, $2, $3, $4, $5) RETURNING id",
         [userId, post_type, isAnonymous, anonName, anonColor]
       );
 
-      const postId = result.insertId;
+      const postId = insertPostResult.rows[0].id;
 
       // Nomalize and storing Tags
       if (tags && tags.length > 0) {
@@ -379,20 +75,21 @@ const createPost = async (req, res) => {
           const name = rawTag.trim().toLowerCase();
           const label = rawTag.trim();
 
-          const [rows] = await pool.query("SELECT id FROM tags WHERE name = ?", [name]);
+          const tagResult = await pool.query("SELECT id FROM tags WHERE name = $1", [name]);
+          const rows = tagResult.rows;
 
           let tagId;
           if (rows.length > 0) {
             tagId = rows[0].id;
           } else {
-            const [insertTags] = await pool.query(
-              "INSERT INTO tags (name, label) VALUES (?, ?)",
+            const insertTagsResult = await pool.query(
+              "INSERT INTO tags (name, label) VALUES ($1, $2) RETURNING id",
               [name, label]
             );
-            tagId = insertTags.insertId;
+            tagId = insertTagsResult.rows[0].id;
           }
 
-          await pool.query("INSERT INTO post_tags (post_id, tag_id) VALUES (?, ?)", [postId, tagId]);
+          await pool.query("INSERT INTO post_tags (post_id, tag_id) VALUES ($1, $2)", [postId, tagId]);
         }));
       }
 
@@ -410,7 +107,7 @@ const createPost = async (req, res) => {
 
             await pool.query(
               `INSERT INTO content(user_id, post_id, type, cate_icon, title, text_body, media_type, media_url)
-                    VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
+                    VALUES($1, $2, $3, $4, $5, $6, $7, $8)`,
                     [userId, postId, content_type, content_type_icon, content_title, text_body,JSON.stringify(mediaType), JSON.stringify(mediaUrl)]
             );
         },
@@ -429,7 +126,7 @@ const createPost = async (req, res) => {
 
             await pool.query(
                 `INSERT INTO confession(user_id, post_id, type, cate_icon, title, media_type, media_url) 
-                VALUE(?, ?, ?, ?, ?, ?, ?)`,
+                VALUES($1, $2, $3, $4, $5, $6, $7)`,
                 [userId, postId, confession_type, confession_type_icon, confession_title, media_type, media_url]
             );
         },
@@ -442,12 +139,12 @@ const createPost = async (req, res) => {
             }
             const media_url = questionMediaUrl || null;
             
-            const [questionResult] = await pool.query(
-                "INSERT INTO question(post_id, question_type, title, media_url, type, cate_icon) VALUES (?, ?, ?, ?, ?, ?)",
+            const questionResult = await pool.query(
+                "INSERT INTO question(post_id, question_type, title, media_url, type, cate_icon) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
                 [postId, question_type, question_title, media_url, question_related_to, question_related_to_icon]
             );
 
-              const questionId = questionResult.insertId;
+              const questionId = questionResult.rows[0].id;
 
               switch (question_type) {
                 case "openend":
@@ -458,17 +155,17 @@ const createPost = async (req, res) => {
 
                 case "range":
                   await pool.query(
-                    "INSERT INTO question_range (question_id, range_min, range_max, step, default_range_value) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO question_range (question_id, range_min, range_max, step, default_range_value) VALUES ($1, $2, $3, $4, $5)",
                     [questionId, req.body.rangeMin, req.body.rangeMax, req.body.rangeStep, req.body.defaultRangeValue]
                   );
                   break;
 
                case "singlechoice":
-                  const [sc] = await pool.query(
-                    "INSERT INTO singlechoice (question_id) VALUES (?)",
+                  const scResult = await pool.query(
+                    "INSERT INTO singlechoice (question_id) VALUES ($1) RETURNING id",
                     [questionId]
                   );
-                  const singleChoiceId = sc.insertId;
+                  const singleChoiceId = scResult.rows[0].id;
 
                   const singleChoices = req.body.choices || req.body["choices[]"] || [];
                   // Inserted sequentially (not Promise.all) so choice_text rows are
@@ -480,7 +177,7 @@ const createPost = async (req, res) => {
                   for (const choice of singleChoices) {
                     try {
                       await pool.query(
-                        "INSERT INTO singlechoice_option (singlechoice_id, choice_text) VALUES (?, ?)",
+                        "INSERT INTO singlechoice_option (singlechoice_id, choice_text) VALUES ($1, $2)",
                         [singleChoiceId, choice]
                       );
                     } catch (err) {
@@ -490,18 +187,18 @@ const createPost = async (req, res) => {
                   break;
 
                 case "multiplechoice":
-                  const [mc] = await pool.query(
-                    "INSERT INTO multiplechoice (question_id, include_all_above) VALUES (?, ?)",
+                  const mcResult = await pool.query(
+                    "INSERT INTO multiplechoice (question_id, include_all_above) VALUES ($1, $2) RETURNING id",
                     [questionId, req.body.include_all_above]
                   );
-                  const multipleChoiceId = mc.insertId;
+                  const multipleChoiceId = mcResult.rows[0].id;
 
                   const multipleChoices = req.body.choices || req.body["choices[]"] || [];
                   // Same fix as singlechoice above: sequential inserts preserve order.
                   for (const choice of multipleChoices) {
                     try {
                       await pool.query(
-                        "INSERT INTO multiplechoice_option (multiplechoice_id, choice_text) VALUES (?, ?)",
+                        "INSERT INTO multiplechoice_option (multiplechoice_id, choice_text) VALUES ($1, $2)",
                         [multipleChoiceId, choice]
                       );
                     } catch (err) {
@@ -511,11 +208,11 @@ const createPost = async (req, res) => {
                   break;
 
                   case "rankingorder":
-                    const [ro] = await pool.query(
-                      "INSERT INTO rankingorder (question_id) VALUES (?)",
+                    const roResult = await pool.query(
+                      "INSERT INTO rankingorder (question_id) VALUES ($1) RETURNING id",
                       [questionId]
                     );
-                    const rankingId = ro.insertId;
+                    const rankingId = roResult.rows[0].id;
 
                     const rankingArray = req.body.ranking || [];
                     console.log("Ranking array received:", rankingArray);
@@ -524,7 +221,7 @@ const createPost = async (req, res) => {
                       rankingArray.map(async (value, index) => {
                         if (value) {
                             await pool.query(
-                              "INSERT INTO ranking_item (ranking_id, position, item_text) VALUES (?, ?, ?)",
+                              "INSERT INTO ranking_item (ranking_id, position, item_text) VALUES ($1, $2, $3)",
                               [rankingId, index, value]
                             );
                         }
@@ -534,7 +231,7 @@ const createPost = async (req, res) => {
 
                 case "rating":
                   await pool.query(
-                    "INSERT INTO rating (question_id, rating_icon_id) VALUES (?, ?)",
+                    "INSERT INTO rating (question_id, rating_icon_id) VALUES ($1, $2)",
                     [questionId, req.body.rating_icon_id]
                   );
                   break;
@@ -545,7 +242,7 @@ const createPost = async (req, res) => {
         },
         repost: async() => {
             await pool.query(
-              `INSERT INTO repost(post_id, title) VALUE(?,?)`,
+              `INSERT INTO repost(post_id, title) VALUES($1,$2)`,
               [postId, repost_title]
             )
         }
@@ -559,7 +256,7 @@ const createPost = async (req, res) => {
    // ====================================
 // HYDRATE NEW POST FROM DB
 // ====================================
-const [basePosts] = await pool.query(`
+const basePostsResult = await pool.query(`
   SELECT
     p.id,
     p.post_type,
@@ -573,14 +270,15 @@ const [basePosts] = await pool.query(`
     p.created_at,
     p.status,
     u.username,
-    GROUP_CONCAT(tg.label) as tags
+    STRING_AGG(tg.label, ',') as tags
   FROM posts p
   JOIN users u ON p.user_id = u.id
   LEFT JOIN post_tags pt ON pt.post_id = p.id
   LEFT JOIN tags tg ON tg.id = pt.tag_id
-  WHERE p.id = ?
-  GROUP BY p.id
+  WHERE p.id = $1
+  GROUP BY p.id, u.id
 `, [postId]);
+const basePosts = basePostsResult.rows;
 
 const hydratedPost = await hydratePostsFromDb(
   [postId],
@@ -623,17 +321,17 @@ const deletePost = async (req, res) => {
     const { postId } = req.params ;
 
     // delete from DB
-    const [result] = await pool.query(
+    const result = await pool.query(
       `
       DELETE FROM posts
-      WHERE id = ?
-      AND user_id = ?
+      WHERE id = $1
+      AND user_id = $2
       AND is_deleted = 0
       `,
       [postId, userId]
     );
 
-    if (result.affectedRows === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ message: "Post not found or already deleted" });
     }
 
@@ -785,7 +483,7 @@ const getAllPosts = async (req, res) => {
     // ====================================
     // 2. FETCH FROM DATABASE
     // ====================================
-    const [posts] = await pool.query(`
+    const postsResult = await pool.query(`
       SELECT
         p.id,
         p.post_type,
@@ -801,15 +499,16 @@ const getAllPosts = async (req, res) => {
         u.username,
         u.avatar_url,
         u.id as user_id,
-        GROUP_CONCAT(tg.label) as tags
+        STRING_AGG(tg.label, ',') as tags
       FROM posts p
       JOIN users u ON p.user_id = u.id
       LEFT JOIN post_tags pt ON pt.post_id = p.id
       LEFT JOIN tags tg ON tg.id = pt.tag_id
-      GROUP BY p.id
+      GROUP BY p.id, u.id
       ORDER BY p.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT $1 OFFSET $2
     `, [limit, offset]);
+    const posts = postsResult.rows;
 
     if (!posts.length) {
       return res.status(200).json({
@@ -891,7 +590,7 @@ const getAllTrending = async (req, res) => {
     }
 
     // 2. Fetch from database – top 10 by score
-    const [rows] = await pool.query(`
+    const rowsResult = await pool.query(`
       SELECT
         p.id,
         p.post_type,
@@ -908,16 +607,17 @@ const getAllTrending = async (req, res) => {
         u.username,
         u.avatar_url,
         u.id as user_id,
-        GROUP_CONCAT(tg.label) as tags,
+        STRING_AGG(tg.label, ',') as tags,
         (p.likes_count + p.comments_count + p.views_count) as score
       FROM posts p
       JOIN users u ON p.user_id = u.id
       LEFT JOIN post_tags pt ON pt.post_id = p.id
       LEFT JOIN tags tg ON tg.id = pt.tag_id
-      GROUP BY p.id
+      GROUP BY p.id, u.id
       ORDER BY score DESC
       LIMIT 10
     `);
+    const rows = rowsResult.rows;
 
     if (!rows.length) {
       return res.status(200).json({
@@ -976,7 +676,7 @@ const getUnsolvedQuestions = async (req, res) => {
     }
 
     // 2. Fetch from database - only unsolved questions (status = 'open')
-    const [rows] = await pool.query(`
+    const rowsResult = await pool.query(`
       SELECT
         p.id,
         p.post_type,
@@ -991,7 +691,7 @@ const getUnsolvedQuestions = async (req, res) => {
         p.user_id,
         u.username,
         u.avatar_url,
-        GROUP_CONCAT(DISTINCT tg.label) as tags,
+        STRING_AGG(DISTINCT tg.label, ',') as tags,
         q.id as question_id,
         q.question_type,
         q.status as question_status,
@@ -1006,10 +706,11 @@ const getUnsolvedQuestions = async (req, res) => {
       LEFT JOIN tags tg ON tg.id = pt.tag_id
       WHERE p.post_type = 'question'
         AND q.status = 'open'               
-      GROUP BY p.id, q.id
+      GROUP BY p.id, q.id, u.id
       ORDER BY p.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT $1 OFFSET $2
     `, [limit, offset]);
+    const rows = rowsResult.rows;
 
     if (!rows.length) {
       return res.status(200).json({
@@ -1047,30 +748,30 @@ async function attachUserStates(posts, userId) {
   const postIds = posts.map(p => p.id);
 
   // likes
-  const [likedRows] = postIds.length
-    ? await pool.query(
+  const likedRows = postIds.length
+    ? (await pool.query(
         `
         SELECT post_id
         FROM post_likes
-        WHERE user_id = ?
-        AND post_id IN (?)
+        WHERE user_id = $1
+        AND post_id = ANY($2)
         `,
         [userId, postIds]
-      )
-    : [[]];
+      )).rows
+    : [];
 
   // favorites
-  const [favoriteRows] = postIds.length
-    ? await pool.query(
+  const favoriteRows = postIds.length
+    ? (await pool.query(
         `
         SELECT post_id
         FROM post_favorites
-        WHERE user_id = ?
-        AND post_id IN (?)
+        WHERE user_id = $1
+        AND post_id = ANY($2)
         `,
         [userId, postIds]
-      )
-    : [[]];
+      )).rows
+    : [];
 
   const likedSet = new Set(
     likedRows.map(row => row.post_id)
@@ -1090,278 +791,13 @@ async function attachUserStates(posts, userId) {
       favoriteSet.has(post.id)
   }));
 }
-
-
-// async function hydratePostsFromDb(ids, basePosts = null) {
-
-//   let posts = basePosts;
-
-//   // fetch posts if not supplied
-//   if (!posts) {
-//     const [rows] = await pool.query(`
-//       SELECT
-//         p.id,
-//         p.post_type,
-//         p.is_anonymous,
-//         p.anonymous_name,
-//         p.anonymous_bg_color,
-//         p.likes_count,
-//         p.comments_count,
-//         p.answers_count,
-//         p.views_count,
-//         p.created_at,
-//         p.status,
-//         p.user_id,
-
-//         u.username,
-//         u.avatar_url,
-
-//         GROUP_CONCAT(tg.label) as tags
-
-//       FROM posts p
-
-//       JOIN users u
-//         ON p.user_id = u.id
-
-//       LEFT JOIN post_tags pt
-//         ON pt.post_id = p.id
-
-//       LEFT JOIN tags tg
-//         ON tg.id = pt.tag_id
-
-//       WHERE p.id IN (?)
-
-//       GROUP BY p.id
-
-//       ORDER BY FIELD(p.id, ?)
-//     `, [ids, ids]);
-
-//     posts = rows;
-//   }
-
-//   // ====================================
-//   // SPLIT IDS
-//   // ====================================
-//   const contentIds = posts
-//     .filter(p => p.post_type === "content")
-//     .map(p => p.id);
-
-//   const confessionIds = posts
-//     .filter(p => p.post_type === "confession")
-//     .map(p => p.id);
-
-//   const questionIds = posts
-//     .filter(p => p.post_type === "question")
-//     .map(p => p.id);
-
-//   // ====================================
-//   // FETCH RELATED TABLES
-//   // ====================================
-//   const [contents] = contentIds.length
-//     ? await pool.query(
-//         `SELECT * FROM content WHERE post_id IN (?)`,
-//         [contentIds]
-//       )
-//     : [[]];
-
-//   const [confessions] = confessionIds.length
-//     ? await pool.query(
-//         `SELECT * FROM confession WHERE post_id IN (?)`,
-//         [confessionIds]
-//       )
-//     : [[]];
-
-//   const [questions] = questionIds.length
-//     ? await pool.query(
-//         `SELECT * FROM question WHERE post_id IN (?)`,
-//         [questionIds]
-//       )
-//     : [[]];
-
-//   const qIds = questions.map(q => q.id);
-
-//   const [closed] = qIds.length
-//     ? await pool.query(
-//         `SELECT * FROM closedend WHERE question_id IN (?)`,
-//         [qIds]
-//       )
-//     : [[]];
-
-//   const [ranges] = qIds.length
-//     ? await pool.query(
-//         `SELECT * FROM question_range WHERE question_id IN (?)`,
-//         [qIds]
-//       )
-//     : [[]];
-
-//   const [ratings] = qIds.length
-//     ? await pool.query(
-//         `SELECT * FROM rating WHERE question_id IN (?)`,
-//         [qIds]
-//       )
-//     : [[]];
-
-//   const [singleOptions] = qIds.length
-//     ? await pool.query(`
-//         SELECT sco.*, sc.question_id
-//         FROM singlechoice_option sco
-//         JOIN singlechoice sc
-//           ON sco.singlechoice_id = sc.id
-//         WHERE sc.question_id IN (?)
-//       `, [qIds])
-//     : [[]];
-
-//   const [multipleOptions] = qIds.length
-//     ? await pool.query(`
-//         SELECT
-//           mco.*,
-//           mc.question_id,
-//           mc.include_all_above
-//         FROM multiplechoice_option mco
-//         JOIN multiplechoice mc
-//           ON mco.multiplechoice_id = mc.id
-//         WHERE mc.question_id IN (?)
-//       `, [qIds])
-//     : [[]];
-
-//   const [rankingItems] = qIds.length
-//     ? await pool.query(`
-//         SELECT ri.*, ro.question_id
-//         FROM ranking_item ri
-//         JOIN rankingorder ro
-//           ON ri.ranking_id = ro.id
-//         WHERE ro.question_id IN (?)
-//       `, [qIds])
-//     : [[]];
-
-//   // ====================================
-//   // MAPS FOR FAST LOOKUP
-//   // ====================================
-//   const contentMap = new Map(
-//     contents.map(c => [c.post_id, c])
-//   );
-
-//   const confessionMap = new Map(
-//     confessions.map(c => [c.post_id, c])
-//   );
-
-//   const questionMap = new Map(
-//     questions.map(q => [q.post_id, q])
-//   );
-
-//   const closedMap = new Map(
-//     closed.map(c => [c.question_id, c])
-//   );
-
-//   const rangeMap = new Map(
-//     ranges.map(r => [r.question_id, r])
-//   );
-
-//   const ratingMap = new Map(
-//     ratings.map(r => [r.question_id, r])
-//   );
-
-//   // ====================================
-//   // BUILD FINAL RESPONSE
-//   // ====================================
-//   return posts.map(post => {
-
-//     let data = null;
-
-//     // ====================================
-//     // CONTENT
-//     // ====================================
-//     if (post.post_type === "content") {
-//       data = contentMap.get(post.id) || null;
-//     }
-
-//     // ====================================
-//     // CONFESSION
-//     // ====================================
-//     if (post.post_type === "confession") {
-//       data = confessionMap.get(post.id) || null;
-//     }
-
-//     // ====================================
-//     // QUESTION
-//     // ====================================
-//     if (post.post_type === "question") {
-
-//       const q = questionMap.get(post.id);
-
-//       if (!q) {
-//         return {
-//           ...post,
-//           data: null
-//         };
-//       }
-
-//       let extra = {};
-
-//       switch (q.question_type) {
-
-//         case "closedend":
-//           extra = closedMap.get(q.id) || {};
-//           break;
-
-//         case "range":
-//           extra = rangeMap.get(q.id) || {};
-//           break;
-
-//         case "singlechoice":
-//           extra = {
-//             choices: singleOptions.filter(
-//               o => o.question_id === q.id
-//             )
-//           };
-//           break;
-
-//         case "multiplechoice":
-//           extra = {
-//             include_all_above:
-//               multipleOptions.find(
-//                 o => o.question_id === q.id
-//               )?.include_all_above || false,
-
-//             choices: multipleOptions.filter(
-//               o => o.question_id === q.id
-//             )
-//           };
-//           break;
-
-//         case "rankingorder":
-//           extra = {
-//             items: rankingItems.filter(
-//               i => i.question_id === q.id
-//             )
-//           };
-//           break;
-
-//         case "rating":
-//           extra = ratingMap.get(q.id) || {};
-//           break;
-//       }
-
-//       data = {
-//         ...q,
-//         ...extra
-//       };
-//     }
-
-//     return {
-//       ...post,
-//       created_at: timeAgo(post.created_at),
-//       data
-//     };
-//   });
-// }
 async function hydratePostsFromDb(ids, basePosts = null) {
 
   let posts = basePosts;
 
   // fetch posts if not supplied
   if (!posts) {
-    const [rows] = await pool.query(`
+    const rowsResult = await pool.query(`
       SELECT
         p.id,
         p.post_type,
@@ -1379,7 +815,7 @@ async function hydratePostsFromDb(ids, basePosts = null) {
         u.username,
         u.avatar_url,
 
-        GROUP_CONCAT(tg.label) as tags
+        STRING_AGG(tg.label, ',') as tags
 
       FROM posts p
 
@@ -1392,14 +828,14 @@ async function hydratePostsFromDb(ids, basePosts = null) {
       LEFT JOIN tags tg
         ON tg.id = pt.tag_id
 
-      WHERE p.id IN (?)
+      WHERE p.id = ANY($1)
 
-      GROUP BY p.id
+      GROUP BY p.id, u.id
 
-      ORDER BY FIELD(p.id, ?)
+      ORDER BY array_position($2::int[], p.id)
     `, [ids, ids]);
 
-    posts = rows;
+    posts = rowsResult.rows;
   }
 
   // ====================================
@@ -1420,67 +856,67 @@ async function hydratePostsFromDb(ids, basePosts = null) {
   // ====================================
   // FETCH RELATED TABLES
   // ====================================
-  const [contents] = contentIds.length
-    ? await pool.query(
-        `SELECT * FROM content WHERE post_id IN (?)`,
+  const contents = contentIds.length
+    ? (await pool.query(
+        `SELECT * FROM content WHERE post_id = ANY($1)`,
         [contentIds]
-      )
-    : [[]];
+      )).rows
+    : [];
 
-  const [confessions] = confessionIds.length
-    ? await pool.query(
-        `SELECT * FROM confession WHERE post_id IN (?)`,
+  const confessions = confessionIds.length
+    ? (await pool.query(
+        `SELECT * FROM confession WHERE post_id = ANY($1)`,
         [confessionIds]
-      )
-    : [[]];
+      )).rows
+    : [];
 
-  const [questions] = questionIds.length
-    ? await pool.query(
-        `SELECT * FROM question WHERE post_id IN (?)`,
+  const questions = questionIds.length
+    ? (await pool.query(
+        `SELECT * FROM question WHERE post_id = ANY($1)`,
         [questionIds]
-      )
-    : [[]];
+      )).rows
+    : [];
 
   const qIds = questions.map(q => q.id);
 
-  const [closed] = qIds.length
-    ? await pool.query(
-        `SELECT * FROM closedend WHERE question_id IN (?)`,
+  const closed = qIds.length
+    ? (await pool.query(
+        `SELECT * FROM closedend WHERE question_id = ANY($1)`,
         [qIds]
-      )
-    : [[]];
+      )).rows
+    : [];
 
-  const [ranges] = qIds.length
-    ? await pool.query(
-        `SELECT * FROM question_range WHERE question_id IN (?)`,
+  const ranges = qIds.length
+    ? (await pool.query(
+        `SELECT * FROM question_range WHERE question_id = ANY($1)`,
         [qIds]
-      )
-    : [[]];
+      )).rows
+    : [];
 
-  const [ratings] = qIds.length
-    ? await pool.query(
-        `SELECT * FROM rating WHERE question_id IN (?)`,
+  const ratings = qIds.length
+    ? (await pool.query(
+        `SELECT * FROM rating WHERE question_id = ANY($1)`,
         [qIds]
-      )
-    : [[]];
+      )).rows
+    : [];
 
   // ORDER BY sco.id ASC added: without it MySQL doesn't guarantee row order
   // for this JOIN, so choices could come back scrambled in the UI even
   // though they were inserted in the correct order.
-  const [singleOptions] = qIds.length
-    ? await pool.query(`
+  const singleOptions = qIds.length
+    ? (await pool.query(`
         SELECT sco.*, sc.question_id
         FROM singlechoice_option sco
         JOIN singlechoice sc
           ON sco.singlechoice_id = sc.id
-        WHERE sc.question_id IN (?)
+        WHERE sc.question_id = ANY($1)
         ORDER BY sco.id ASC
-      `, [qIds])
-    : [[]];
+      `, [qIds])).rows
+    : [];
 
   // Same fix as singleOptions above.
-  const [multipleOptions] = qIds.length
-    ? await pool.query(`
+  const multipleOptions = qIds.length
+    ? (await pool.query(`
         SELECT
           mco.*,
           mc.question_id,
@@ -1488,24 +924,24 @@ async function hydratePostsFromDb(ids, basePosts = null) {
         FROM multiplechoice_option mco
         JOIN multiplechoice mc
           ON mco.multiplechoice_id = mc.id
-        WHERE mc.question_id IN (?)
+        WHERE mc.question_id = ANY($1)
         ORDER BY mco.id ASC
-      `, [qIds])
-    : [[]];
+      `, [qIds])).rows
+    : [];
 
   // ranking_item already stores an explicit `position` column, which is the
   // authoritative order regardless of insert timing — sort by that instead
   // of id, and add it explicitly since it was previously missing here too.
-  const [rankingItems] = qIds.length
-    ? await pool.query(`
+  const rankingItems = qIds.length
+    ? (await pool.query(`
         SELECT ri.*, ro.question_id
         FROM ranking_item ri
         JOIN rankingorder ro
           ON ri.ranking_id = ro.id
-        WHERE ro.question_id IN (?)
+        WHERE ro.question_id = ANY($1)
         ORDER BY ri.position ASC
-      `, [qIds])
-    : [[]];
+      `, [qIds])).rows
+    : [];
 
   // ====================================
   // MAPS FOR FAST LOOKUP
@@ -1673,10 +1109,10 @@ async function updateCachedPostLike(postId, isLike) {
   }
 }
 const likePost = async (req, res) => {
-  const connection = await pool.getConnection();
+  const connection = await pool.connect();
   try{
 
-    await connection.beginTransaction();
+    await connection.query('BEGIN');
     const userId = req.user.userId;
     const username = 'test';
 
@@ -1688,15 +1124,16 @@ const likePost = async (req, res) => {
     const currentMonth = today.slice(0, 7).replace("-", ""); // YYYYMM
 
     // check if like already
-    const [existingLike] = await connection.query(
+    const existingLikeResult = await connection.query(
       `
       SELECT id 
       FROM post_likes
-      WHERE post_id = ?
-      AND user_id = ?
+      WHERE post_id = $1
+      AND user_id = $2
       `,
       [postId, userId]
     );
+    const existingLike = existingLikeResult.rows;
 
     // setup aggregateKey
     const aggregateKey = `post_like_${ownerId}_${postId}`;
@@ -1709,8 +1146,8 @@ const likePost = async (req, res) => {
       await connection.query(
         `
         DELETE FROM post_likes
-        WHERE post_id = ? 
-        AND user_id = ?
+        WHERE post_id = $1 
+        AND user_id = $2
         `,
         [postId, userId]
       );
@@ -1720,29 +1157,30 @@ const likePost = async (req, res) => {
         `
         UPDATE posts
         SET likes_count = GREATEST(likes_count - 1, 0)
-        WHERE id = ?
+        WHERE id = $1
         `,
         [postId]
       );
 
       //get updated total likes
-      const [[likeData]] = await connection.query(
+      const likeDataResult = await connection.query(
         `
         SELECT COUNT(*) AS totalLikes
         FROM post_likes
-        WHERE post_id = ?
+        WHERE post_id = $1
         `,
         [postId]
       );
+      const likeData = likeDataResult.rows[0];
 
-      const totalLikes = likeData.totalLikes;
+      const totalLikes = likeData.totallikes;
 
       // if no like left delete notification
       if(totalLikes === 0){
         await connection.query(
           `
           DELETE FROM notifications
-          WHERE aggregate_key = ?
+          WHERE aggregate_key = $1
           `,
           [aggregateKey]
         );
@@ -1750,7 +1188,7 @@ const likePost = async (req, res) => {
       else{
 
         // get newest liker
-                const [[latestLiker]] = await connection.query(
+                const latestLikerResult = await connection.query(
                     `
                     SELECT
                         cl.user_id,
@@ -1758,12 +1196,13 @@ const likePost = async (req, res) => {
                     FROM post_likes cl
                     JOIN users u
                         ON u.id = cl.user_id
-                    WHERE cl.post_id = ?
+                    WHERE cl.post_id = $1
                     ORDER BY cl.id DESC
                     LIMIT 1
                     `,
                     [postId]
                 );
+        const latestLiker = latestLikerResult.rows[0];
 
         let notificationContent;
 
@@ -1781,11 +1220,11 @@ const likePost = async (req, res) => {
           `
           UPDATE notifications
           SET 
-            sender_id = ?,
-            content = ?,
+            sender_id = $1,
+            content = $2,
             is_viewed = 0,
             created_at = NOW()
-          WHERE aggregate_key = ?
+          WHERE aggregate_key = $3
           `,
           [
             latestLiker.user_id,
@@ -1809,7 +1248,7 @@ const likePost = async (req, res) => {
         await ranking.zIncrBy(todayTrendingKey, -2, postId.toString());
       }
       await ranking.zIncrBy(`hof:month:${currentMonth}`, -1, userId.toString());
-      await connection.commit();
+      await connection.query('COMMIT');
 
    
       return res.json({
@@ -1822,7 +1261,7 @@ const likePost = async (req, res) => {
       `
       INSERT INTO post_likes
       (post_id, user_id)
-      VALUES (?, ?)
+      VALUES ($1, $2)
       `,
       [postId, userId]
     );
@@ -1833,7 +1272,7 @@ const likePost = async (req, res) => {
       `
       UPDATE posts
       SET likes_count = likes_count + 1
-      WHERE id = ?
+      WHERE id = $1
       `,
       [postId]
     );
@@ -1850,14 +1289,15 @@ const likePost = async (req, res) => {
       //   `,
       //   [postId]
       // );
-       const [[likeData]] = await connection.query(
+       const likeDataResult2 = await connection.query(
         `
         SELECT likes_count
         FROM posts
-        WHERE id = ?
+        WHERE id = $1
         `,
         [postId]
       );
+      const likeData = likeDataResult2.rows[0];
 
       const totalLikes = likeData.likes_count;
 
@@ -1872,15 +1312,16 @@ const likePost = async (req, res) => {
       }
 
       // find exist aggregated noti
-      const [existingNotification] = await connection.query(
+      const existingNotificationResult = await connection.query(
           `
           SELECT id
           FROM notifications
-          WHERE aggregate_key = ?
+          WHERE aggregate_key = $1
           LIMIT 1
           `,
           [aggregateKey]
       );
+      const existingNotification = existingNotificationResult.rows;
      
 
       // update existing noti
@@ -1890,11 +1331,11 @@ const likePost = async (req, res) => {
               `
               UPDATE notifications
               SET
-                  sender_id = ?,
-                  content = ?,
+                  sender_id = $1,
+                  content = $2,
                   is_viewed = 0,
                   created_at = NOW()
-              WHERE aggregate_key = ?
+              WHERE aggregate_key = $3
               `,
               [
                   userId,
@@ -1917,7 +1358,7 @@ const likePost = async (req, res) => {
                         aggregate_key,
                         is_viewed
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, 0)
+                    VALUES ($1, $2, $3, $4, $5, $6, 0)
                     `,
                     [
                         ownerId,
@@ -1934,7 +1375,7 @@ const likePost = async (req, res) => {
     await updateCachedPostLike(postId, true);
     await ranking.zIncrBy(`trendingPost:day:${currentDay}`, 2, postId.toString());
     await ranking.zIncrBy(`hof:month:${currentMonth}`, 0.5, userId.toString());
-    await connection.commit();
+    await connection.query('COMMIT');
 
 
     return res.json({
@@ -1943,7 +1384,7 @@ const likePost = async (req, res) => {
   }
   catch(err){
 
-    await connection.rollback();
+    await connection.query('ROLLBACK');
 
     console.error(err);
 
@@ -1960,25 +1401,26 @@ const likePost = async (req, res) => {
 // favorite toggle
 const favoritePost = async (req, res) => {
 
-  const connection = await pool.getConnection();
+  const connection = await pool.connect();
 
   try {
 
-    await connection.beginTransaction();
+    await connection.query('BEGIN');
 
     const userId = req.user.userId;
 
     const postId = req.params.postId;
 
-    const [existing] = await connection.query(
+    const existingResult = await connection.query(
       `
       SELECT id
       FROM post_favorites
-      WHERE post_id = ?
-      AND user_id = ?
+      WHERE post_id = $1
+      AND user_id = $2
       `,
       [postId, userId]
     );
+    const existing = existingResult.rows;
 
     // REMOVE FAVORITE
     if (existing.length > 0) {
@@ -1986,13 +1428,13 @@ const favoritePost = async (req, res) => {
       await connection.query(
         `
         DELETE FROM post_favorites
-        WHERE post_id = ?
-        AND user_id = ?
+        WHERE post_id = $1
+        AND user_id = $2
         `,
         [postId, userId]
       );
 
-      await connection.commit();
+      await connection.query('COMMIT');
 
       return res.json({
         favorited: false
@@ -2004,12 +1446,12 @@ const favoritePost = async (req, res) => {
       `
       INSERT INTO post_favorites
       (post_id, user_id)
-      VALUES (?, ?)
+      VALUES ($1, $2)
       `,
       [postId, userId]
     );
 
-    await connection.commit();
+    await connection.query('COMMIT');
 
     return res.json({
       favorited: true
@@ -2017,7 +1459,7 @@ const favoritePost = async (req, res) => {
 
   } catch (err) {
 
-    await connection.rollback();
+    await connection.query('ROLLBACK');
 
     console.error(err);
 
@@ -2046,10 +1488,10 @@ const updatePostBodyContent = async (req, res) => {
     await pool.query(
       `
       UPDATE content
-      SET text_body = ?
-      WHERE id = ?
-      AND user_id = ?
-      AND post_id = ?
+      SET text_body = $1
+      WHERE id = $2
+      AND user_id = $3
+      AND post_id = $4
       `,
       [bodyText, contentId, userId, postId]
     );
@@ -2125,7 +1567,7 @@ const getPostsByPostId = async (req, res) => {
       });
     }
 
-    const [posts] = await pool.query(`
+    const postsResult = await pool.query(`
       SELECT
         p.id,
         p.post_type,
@@ -2141,14 +1583,15 @@ const getPostsByPostId = async (req, res) => {
         u.username,
         u.avatar_url,
         u.id as user_id,
-        GROUP_CONCAT(tg.label) as tags
+        STRING_AGG(tg.label, ',') as tags
       FROM posts p
       JOIN users u ON p.user_id = u.id
       LEFT JOIN post_tags pt ON pt.post_id = p.id
       LEFT JOIN tags tg ON tg.id = pt.tag_id
-      WHERE p.id = ?
-      GROUP BY p.id
+      WHERE p.id = $1
+      GROUP BY p.id, u.id
     `, [postId]);
+    const posts = postsResult.rows;
 
     if (!posts.length) {
       return res.status(404).json({
@@ -2192,7 +1635,7 @@ const getPostsByLike = async (req, res) => {
     const limit = 25;
     const offset = (page - 1) * limit;
 
-    const [rows] = await pool.query(
+    const rowsResult = await pool.query(
       `SELECT 
         p.id, p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color,
         p.created_at, p.user_id,
@@ -2205,11 +1648,12 @@ const getPostsByLike = async (req, res) => {
       LEFT JOIN content c ON p.id = c.post_id
       LEFT JOIN confession cf ON p.id = cf.post_id
       LEFT JOIN question q ON p.id = q.post_id
-      WHERE pl.user_id = ?
+      WHERE pl.user_id = $1
       ORDER BY pl.created_at DESC
-      LIMIT ? OFFSET ?`,
+      LIMIT $2 OFFSET $3`,
       [userId, limit, offset]
     );
+    const rows = rowsResult.rows;
 
     const result = rows.map(r => ({
       id: r.id,
@@ -2240,7 +1684,7 @@ const getPostsByFavorite = async (req, res) => {
     const limit = 25;
     const offset = (page - 1) * limit;
 
-    const [rows] = await pool.query(
+    const rowsResult = await pool.query(
       `SELECT 
         p.id, p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color,
         p.created_at, p.user_id,
@@ -2253,11 +1697,12 @@ const getPostsByFavorite = async (req, res) => {
       LEFT JOIN content c ON p.id = c.post_id
       LEFT JOIN confession cf ON p.id = cf.post_id
       LEFT JOIN question q ON p.id = q.post_id
-      WHERE pl.user_id = ?
+      WHERE pl.user_id = $1
       ORDER BY pl.created_at DESC
-      LIMIT ? OFFSET ?`,
+      LIMIT $2 OFFSET $3`,
       [userId, limit, offset]
     );
+    const rows = rowsResult.rows;
 
     const result = rows.map(r => ({
       id: r.id,
@@ -2282,7 +1727,6 @@ const getPostsByFavorite = async (req, res) => {
   }
 };
 
-// const getPostsByLike = async (req, res) => {
 //   try {
 //     const userId = req.user.userId; // current user
 //     const CACHE_KEY = `likes:user:${userId}`;
@@ -2360,7 +1804,7 @@ const getPostByUserId = async (req, res) => {
     // ====================================
     // FETCH FROM DATABASE
     // ====================================
-    const [posts] = await pool.query(`
+    const postsResult = await pool.query(`
       SELECT
         p.id,
         p.post_type,
@@ -2376,17 +1820,18 @@ const getPostByUserId = async (req, res) => {
         u.username,
         u.avatar_url,
         u.id as user_id,
-        GROUP_CONCAT(tg.label) as tags
+        STRING_AGG(tg.label, ',') as tags
       FROM posts p
       JOIN users u ON p.user_id = u.id
       LEFT JOIN post_tags pt ON pt.post_id = p.id
       LEFT JOIN tags tg ON tg.id = pt.tag_id
-      WHERE p.user_id = ?
+      WHERE p.user_id = $1
         AND p.is_anonymous = 0
-      GROUP BY p.id
+      GROUP BY p.id, u.id
       ORDER BY p.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT $2 OFFSET $3
     `, [targetUserId || userId, limit, offset]);
+    const posts = postsResult.rows;
 
     if (!posts.length) {
       return res.status(200).json({
@@ -2422,18 +1867,19 @@ const markQuestionSolved = async (req, res) => {
     const { postId } = req.params;
 
     // verify ownership first
-    const [owned] = await pool.query(
+    const ownedResult = await pool.query(
       `
       SELECT id
       FROM posts
       WHERE
-        id = ?
-        AND user_id = ?
+        id = $1
+        AND user_id = $2
         AND post_type = 'question'
       LIMIT 1
       `,
       [postId, userId]
     );
+    const owned = ownedResult.rows;
 
     if (!owned.length) {
       return res.status(404).json({
@@ -2441,19 +1887,19 @@ const markQuestionSolved = async (req, res) => {
       });
     }
 
-    const [result] = await pool.query(
+    const result = await pool.query(
       `
       UPDATE question
       SET status = 'solved'
       WHERE
-        post_id = ?
+        post_id = $1
         AND status != 'solved'
       `,
       [postId]
     );
 
    
-    if (!result.affectedRows) {
+    if (!result.rowCount) {
       return res.status(400).json({
         message: "Question already solved"
       });

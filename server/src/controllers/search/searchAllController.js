@@ -4,7 +4,7 @@ const { ranking } = require("../../config/redisClient"); // adjust path to your 
 const MAX_QUERY_LENGTH = 50;
 const AUTOCOMPLETE_KEY = "search:autocomplete"; // sorted set, score = times searched
 
-// Escape LIKE's special characters
+// Escape LIKE's special characters for PostgreSQL
 const escapeLikeValue = (value) => value.replace(/[%_\\]/g, (ch) => `\\${ch}`);
 
 // Normalize + split into words: trims, collapses multi-space, removes stray
@@ -53,7 +53,7 @@ const globalSearch = async (req, res) => {
   if (userLimit > 0) {
     try {
       const wordConditions = words
-        .map(() => `(LOWER(username) LIKE ? OR LOWER(nickname) LIKE ?)`)
+        .map((_, index) => `(LOWER(username) LIKE $${index * 2 + 1} OR LOWER(nickname) LIKE $${index * 2 + 2})`)
         .join(" AND ");
 
       const wordParams = words.flatMap((w) => {
@@ -61,17 +61,17 @@ const globalSearch = async (req, res) => {
         return [pattern, pattern];
       });
 
-      const [rows] = await pool.query(
+      const result = await pool.query(
         `SELECT id, username, avatar_url, nickname
          FROM users
          WHERE (${wordConditions})
-         AND id != ?
+         AND id != $${wordParams.length + 1}
          ORDER BY username ASC
-         LIMIT ? OFFSET ?`,
+         LIMIT $${wordParams.length + 2} OFFSET $${wordParams.length + 3}`,
         [...wordParams, currentUserId, userLimit, userOffset]
       );
 
-      users = rows;
+      users = result.rows;
     } catch (err) {
       userError = err;
       console.error("globalSearch USER query failed:", err.message, err.sql || "");
@@ -84,12 +84,12 @@ const globalSearch = async (req, res) => {
   if (postLimit > 0) {
     try {
       const wordConditions = words
-        .map(() => `LOWER(search_blob) LIKE ?`)
+        .map((_, index) => `LOWER(search_blob) LIKE $${index + 1}`)
         .join(" AND ");
 
       const wordParams = words.map((w) => `%${w.toLowerCase()}%`);
 
-      const [postRows] = await pool.query(
+      const postResult = await pool.query(
         `
         SELECT * FROM (
           SELECT
@@ -107,12 +107,12 @@ const globalSearch = async (req, res) => {
             u.username,
             u.avatar_url,
             u.id as user_id,
-            GROUP_CONCAT(DISTINCT tg.label) as tags,
+            STRING_AGG(DISTINCT tg.label, ' ') as tags,
             LOWER(CONCAT_WS(' ',
               COALESCE(c.title, ''),
               COALESCE(cf.title, ''),
               COALESCE(qs.title, ''),
-              COALESCE(GROUP_CONCAT(DISTINCT tg.label), ''),
+              COALESCE(STRING_AGG(DISTINCT tg.label, ' '), ''),
               p.post_type
             )) as search_blob
           FROM posts p
@@ -122,14 +122,16 @@ const globalSearch = async (req, res) => {
           LEFT JOIN content c ON c.post_id = p.id AND p.post_type = 'content'
           LEFT JOIN confession cf ON cf.post_id = p.id AND p.post_type = 'confession'
           LEFT JOIN question qs ON qs.post_id = p.id AND p.post_type = 'question'
-          GROUP BY p.id
+          GROUP BY p.id, u.id, u.username, u.avatar_url, c.title, cf.title, qs.title
         ) as searchable
         WHERE (${wordConditions})
         ORDER BY created_at DESC
-        LIMIT ? OFFSET ?
+        LIMIT $${wordParams.length + 1} OFFSET $${wordParams.length + 2}
         `,
         [...wordParams, postLimit, postOffset]
       );
+
+      const postRows = postResult.rows;
 
       if (postRows.length) {
         const ids = postRows.map((p) => p.id);
@@ -224,84 +226,84 @@ async function hydratePostsFromDb(ids, basePosts = null) {
 
   try {
     if (!posts) {
-      const [rows] = await pool.query(
+      const result = await pool.query(
         `
         SELECT
           p.id, p.post_type, p.is_anonymous, p.anonymous_name, p.anonymous_bg_color,
           p.likes_count, p.comments_count, p.answers_count, p.views_count,
           p.created_at, p.status, p.user_id, u.username, u.avatar_url,
-          GROUP_CONCAT(tg.label) as tags
+          STRING_AGG(tg.label, ' ') as tags
         FROM posts p
         JOIN users u ON p.user_id = u.id
         LEFT JOIN post_tags pt ON pt.post_id = p.id
         LEFT JOIN tags tg ON tg.id = pt.tag_id
-        WHERE p.id IN (?)
-        GROUP BY p.id
-        ORDER BY FIELD(p.id, ?)
+        WHERE p.id = ANY($1::int[])
+        GROUP BY p.id, u.id, u.username, u.avatar_url
+        ORDER BY array_position($1::int[], p.id)
         `,
-        [ids, ids]
+        [ids]
       );
-      posts = rows;
+      posts = result.rows;
     }
 
     const contentIds = posts.filter((p) => p.post_type === "content").map((p) => p.id);
     const confessionIds = posts.filter((p) => p.post_type === "confession").map((p) => p.id);
     const questionIds = posts.filter((p) => p.post_type === "question").map((p) => p.id);
 
-    const [contents] = contentIds.length
-      ? await pool.query(`SELECT * FROM content WHERE post_id IN (?)`, [contentIds])
-      : [[]];
+    const contents = contentIds.length
+      ? await pool.query(`SELECT * FROM content WHERE post_id = ANY($1::int[])`, [contentIds])
+      : { rows: [] };
 
-    const [confessions] = confessionIds.length
-      ? await pool.query(`SELECT * FROM confession WHERE post_id IN (?)`, [confessionIds])
-      : [[]];
+    const confessions = confessionIds.length
+      ? await pool.query(`SELECT * FROM confession WHERE post_id = ANY($1::int[])`, [confessionIds])
+      : { rows: [] };
 
-    const [questions] = questionIds.length
-      ? await pool.query(`SELECT * FROM question WHERE post_id IN (?)`, [questionIds])
-      : [[]];
+    const questions = questionIds.length
+      ? await pool.query(`SELECT * FROM question WHERE post_id = ANY($1::int[])`, [questionIds])
+      : { rows: [] };
 
-    const qIds = questions.map((q) => q.id);
+    const qIds = questions.rows.map((q) => q.id);
 
-    const [closed] = qIds.length
-      ? await pool.query(`SELECT * FROM closedend WHERE question_id IN (?)`, [qIds])
-      : [[]];
-    const [ranges] = qIds.length
-      ? await pool.query(`SELECT * FROM question_range WHERE question_id IN (?)`, [qIds])
-      : [[]];
-    const [ratings] = qIds.length
-      ? await pool.query(`SELECT * FROM rating WHERE question_id IN (?)`, [qIds])
-      : [[]];
-    const [singleOptions] = qIds.length
+    const closed = qIds.length
+      ? await pool.query(`SELECT * FROM closedend WHERE question_id = ANY($1::int[])`, [qIds])
+      : { rows: [] };
+    const ranges = qIds.length
+      ? await pool.query(`SELECT * FROM question_range WHERE question_id = ANY($1::int[])`, [qIds])
+      : { rows: [] };
+    const ratings = qIds.length
+      ? await pool.query(`SELECT * FROM rating WHERE question_id = ANY($1::int[])`, [qIds])
+      : { rows: [] };
+    const singleOptions = qIds.length
       ? await pool.query(
           `SELECT sco.*, sc.question_id FROM singlechoice_option sco
            JOIN singlechoice sc ON sco.singlechoice_id = sc.id
-           WHERE sc.question_id IN (?)`,
+           WHERE sc.question_id = ANY($1::int[])`,
           [qIds]
         )
-      : [[]];
-    const [multipleOptions] = qIds.length
+      : { rows: [] };
+    const multipleOptions = qIds.length
       ? await pool.query(
           `SELECT mco.*, mc.question_id, mc.include_all_above FROM multiplechoice_option mco
            JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
-           WHERE mc.question_id IN (?)`,
+           WHERE mc.question_id = ANY($1::int[])`,
           [qIds]
         )
-      : [[]];
-    const [rankingItems] = qIds.length
+      : { rows: [] };
+    const rankingItems = qIds.length
       ? await pool.query(
           `SELECT ri.*, ro.question_id FROM ranking_item ri
            JOIN rankingorder ro ON ri.ranking_id = ro.id
-           WHERE ro.question_id IN (?)`,
+           WHERE ro.question_id = ANY($1::int[])`,
           [qIds]
         )
-      : [[]];
+      : { rows: [] };
 
-    const contentMap = new Map(contents.map((c) => [c.post_id, c]));
-    const confessionMap = new Map(confessions.map((c) => [c.post_id, c]));
-    const questionMap = new Map(questions.map((q) => [q.post_id, q]));
-    const closedMap = new Map(closed.map((c) => [c.question_id, c]));
-    const rangeMap = new Map(ranges.map((r) => [r.question_id, r]));
-    const ratingMap = new Map(ratings.map((r) => [r.question_id, r]));
+    const contentMap = new Map(contents.rows.map((c) => [c.post_id, c]));
+    const confessionMap = new Map(confessions.rows.map((c) => [c.post_id, c]));
+    const questionMap = new Map(questions.rows.map((q) => [q.post_id, q]));
+    const closedMap = new Map(closed.rows.map((c) => [c.question_id, c]));
+    const rangeMap = new Map(ranges.rows.map((r) => [r.question_id, r]));
+    const ratingMap = new Map(ratings.rows.map((r) => [r.question_id, r]));
 
     return posts.map((post) => {
       let data = null;
@@ -329,17 +331,17 @@ async function hydratePostsFromDb(ids, basePosts = null) {
             extra = rangeMap.get(q.id) || {};
             break;
           case "singlechoice":
-            extra = { choices: singleOptions.filter((o) => o.question_id === q.id) };
+            extra = { choices: singleOptions.rows.filter((o) => o.question_id === q.id) };
             break;
           case "multiplechoice":
             extra = {
               include_all_above:
-                multipleOptions.find((o) => o.question_id === q.id)?.include_all_above || false,
-              choices: multipleOptions.filter((o) => o.question_id === q.id),
+                multipleOptions.rows.find((o) => o.question_id === q.id)?.include_all_above || false,
+              choices: multipleOptions.rows.filter((o) => o.question_id === q.id),
             };
             break;
           case "rankingorder":
-            extra = { items: rankingItems.filter((i) => i.question_id === q.id) };
+            extra = { items: rankingItems.rows.filter((i) => i.question_id === q.id) };
             break;
           case "rating":
             extra = ratingMap.get(q.id) || {};
@@ -361,22 +363,22 @@ async function attachUserStates(posts, userId) {
   try {
     const postIds = posts.map((p) => p.id);
 
-    const [likedRows] = postIds.length
+    const likedRows = postIds.length
       ? await pool.query(
-          `SELECT post_id FROM post_likes WHERE user_id = ? AND post_id IN (?)`,
+          `SELECT post_id FROM post_likes WHERE user_id = $1 AND post_id = ANY($2::int[])`,
           [userId, postIds]
         )
-      : [[]];
+      : { rows: [] };
 
-    const [favoriteRows] = postIds.length
+    const favoriteRows = postIds.length
       ? await pool.query(
-          `SELECT post_id FROM post_favorites WHERE user_id = ? AND post_id IN (?)`,
+          `SELECT post_id FROM post_favorites WHERE user_id = $1 AND post_id = ANY($2::int[])`,
           [userId, postIds]
         )
-      : [[]];
+      : { rows: [] };
 
-    const likedSet = new Set(likedRows.map((r) => r.post_id));
-    const favoriteSet = new Set(favoriteRows.map((r) => r.post_id));
+    const likedSet = new Set(likedRows.rows.map((r) => r.post_id));
+    const favoriteSet = new Set(favoriteRows.rows.map((r) => r.post_id));
 
     return posts.map((post) => ({
       ...post,

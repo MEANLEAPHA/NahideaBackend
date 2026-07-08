@@ -1,4 +1,3 @@
-
 const db = require("../../config/db");
 const { cachePost, ranking } = require("../../config/redisClient");
 
@@ -44,154 +43,12 @@ const generateAnonymousBgColor = () => {
     return colors[randomIndex];
 };
 
-// const addComment = async (req, res) => {
-//   const connection = await db.getConnection();
-
-//   try {
-//     await connection.beginTransaction();
-
-//     const userId = req.user.userId;
-//     const {
-//       username,
-//       comment_id,//
-//       content,
-//       gif_url,
-//       user_id_mention,
-//       username_mention,
-//       is_anonymous
-//     } = req.body;
-//     const { postId } = req.params;
-
-//     if (!postId) {
-//       return res.status(400).json({ message: "Missing postId" });
-//     }
-//     if (!content && !gif_url) {
-//       return res.status(400).json({ message: "Content or GIF required" });
-//     }
-
-   
-
-//     let finalParentId = null;
-//     let parentOwnerId = null;
-//     let finalAnonymousName = null;
-//     let finalAnonymousBgColor = null;
-
-//     if (Number(is_anonymous) === 1) {
-//       const [existingIdentity] = await connection.query(
-//         `SELECT anonymous_name, anonymous_bg_color
-//          FROM comments
-//          WHERE post_id = ? AND user_id = ? AND is_anonymous = 1 AND is_deleted = 0
-//          LIMIT 1`,
-//         [postId, userId]
-//       );
-//       if (existingIdentity.length > 0) {
-//         finalAnonymousName = existingIdentity[0].anonymous_name;
-//         finalAnonymousBgColor = existingIdentity[0].anonymous_bg_color;
-//       } else {
-//         finalAnonymousName = generateAnonymousName();
-//         finalAnonymousBgColor = generateAnonymousBgColor();
-//       }
-//     }
-
-//     // reply logic
-//     if (comment_id) {
-//       const [parentRows] = await connection.query(
-//         `SELECT id, parent_id, user_id
-//          FROM comments
-//          WHERE id = ?`,
-//         [comment_id]
-//       );
-//       if (!parentRows.length) {
-//         return res.status(404).json({ message: "Parent comment not found" });
-//       }
-//       const parent = parentRows[0];
-//       finalParentId = parent.parent_id || parent.id;
-//       parentOwnerId = parent.user_id;
-//     }
-
-//     // create comment
-//     const [result] = await connection.query(
-//       `INSERT INTO comments
-//        (post_id, parent_id, user_id, username, content, gif_url,
-//         user_id_mention,username_mention, is_anonymous, anonymous_name, anonymous_bg_color)
-//        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-//       [
-//         postId,
-//         finalParentId,
-//         userId,
-
-//         username,
-//         content || null,
-//         gif_url || null,
-//         user_id_mention || null,
-//         username_mention || null,
-//         is_anonymous || 0,
-//         finalAnonymousName,
-//         finalAnonymousBgColor
-//       ]
-//     );
-
-//     // increment reply_count on top-level parent
-//     if (finalParentId) {
-//       await connection.query(
-//         `UPDATE comments SET reply_count = reply_count + 1 WHERE id = ?`,
-//         [finalParentId]
-//       );
-//     }
-
-//     // notify top-level parent owner
-//     if (parentOwnerId && parentOwnerId !== userId ) {
-//       await connection.query(
-//         `INSERT INTO notifications
-//          (receiver_id, sender_id, type, content, post_id, comment_id, is_viewed)
-//          VALUES (?, ?, 'comment_reply', '${username} replied to ${parentOwnerId === user_id_mention ? 'you' : username_mention }${parentOwnerId === user_id_mention ? '' : ' on your comment'}: ${content.slice(0, 100) + (content.length > 100 ? '...' : '')}', ?, ?, 0)`,
-//         [parentOwnerId, userId, postId, result.insertId]
-//       );
-//     }
-
-//     // if replying to a reply, increment that reply’s count and notify its owner
-//     if (comment_id && comment_id !== finalParentId) {
-//       await connection.query(
-//         `UPDATE comments SET reply_count = reply_count + 1 WHERE id = ?`,
-//         [parent_id]
-//       );
-
-//       const [replyRows] = await connection.query(
-//         `SELECT user_id FROM comments WHERE id = ?`,
-//         [comment_id]
-//       );
-//       const replyOwnerId = replyRows[0]?.user_id;
-
-//       if (
-//         replyOwnerId && // check if reply owner id exist
-//         replyOwnerId !== userId && // compare current user with reply owner id prevent self notification
-//         replyOwnerId !== parentOwnerId // if reply comment is not the parent comment owner
-//       ) {
-//         await connection.query(
-//           `INSERT INTO notifications
-//            (receiver_id, sender_id, type, content, post_id, comment_id, is_viewed)
-//            VALUES (?, ?, 'comment_reply', '${username} replied to youss: ${content.slice(0, 100) + (content.length > 100 ? '...' : '')}',?, ?, 0)`,
-//           [replyOwnerId, userId, postId, result.insertId]
-//         );
-//       }
-//     }
-
-//     await connection.commit();
-//     res.status(201).json({ message: "Comment created", comment_id: result.insertId });
-//   } catch (err) {
-//     await connection.rollback();
-//     console.error(err);
-//     res.status(500).json({ message: "Server error" });
-//   } finally {
-//     connection.release();
-//   }
-// };
 const addComment = async (req, res) => {
-  const connection = await db.getConnection();
+  const client = await db.connect();
 
   try {
 
-    await connection.beginTransaction();
+    await client.query("BEGIN");
 
     const userId = req.user.userId;
     const today = new Date().toISOString().split("T")[0]; //  YYYY-MM-DD
@@ -244,18 +101,19 @@ const addComment = async (req, res) => {
 
     if (Number(is_anonymous) === 1) {
 
-      const [existingIdentity] = await connection.query(
+      const existingIdentityResult = await client.query(
         `
         SELECT anonymous_name, anonymous_bg_color
         FROM comments
-        WHERE post_id = ?
-        AND user_id = ?
+        WHERE post_id = $1
+        AND user_id = $2
         AND is_anonymous = 1
         AND is_deleted = 0
         LIMIT 1
         `,
         [postId, userId]
       );
+      const existingIdentity = existingIdentityResult.rows;
 
       if (existingIdentity.length > 0) {
 
@@ -283,14 +141,15 @@ const addComment = async (req, res) => {
 
     if (comment_id) {
 
-      const [parentRows] = await connection.query(
+      const parentRowsResult = await client.query(
         `
         SELECT id, parent_id
         FROM comments
-        WHERE id = ?
+        WHERE id = $1
         `,
         [comment_id]
       );
+      const parentRows = parentRowsResult.rows;
 
       if (!parentRows.length) {
 
@@ -310,7 +169,7 @@ const addComment = async (req, res) => {
     // CREATE COMMENT
     // =========================
 
-    const [result] = await connection.query(
+    const result = await client.query(
       `
       INSERT INTO comments
       (
@@ -326,7 +185,8 @@ const addComment = async (req, res) => {
         anonymous_name,
         anonymous_bg_color
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING id
       `,
       [
         postId,
@@ -342,6 +202,7 @@ const addComment = async (req, res) => {
         finalAnonymousBgColor
       ]
     );
+    const insertedCommentId = result.rows[0].id;
 
     // =========================
     // UPDATE REPLY COUNT
@@ -349,11 +210,11 @@ const addComment = async (req, res) => {
 
     if (finalParentId) {
 
-      await connection.query(
+      await client.query(
         `
         UPDATE comments
         SET reply_count = reply_count + 1
-        WHERE id = ?
+        WHERE id = $1
         `,
         [finalParentId]
       );
@@ -366,14 +227,15 @@ const addComment = async (req, res) => {
     if (comment_id) {
 
       // comment being replied to
-      const [replyRows] = await connection.query(
+      const replyRowsResult = await client.query(
         `
         SELECT id, user_id, username, parent_id
         FROM comments
-        WHERE id = ?
+        WHERE id = $1
         `,
         [comment_id]
       );
+      const replyRows = replyRowsResult.rows;
 
       const replyComment = replyRows[0];
 
@@ -386,14 +248,15 @@ const addComment = async (req, res) => {
           replyComment.username;
 
         // top-level parent comment
-        const [topRows] = await connection.query(
+        const topRowsResult = await client.query(
           `
           SELECT id, user_id, username
           FROM comments
-          WHERE id = ?
+          WHERE id = $1
           `,
           [finalParentId]
         );
+        const topRows = topRowsResult.rows;
 
         const topComment = topRows[0];
 
@@ -412,7 +275,7 @@ const addComment = async (req, res) => {
             parentOwnerId !== userId
           ) {
 
-            await connection.query(
+            await client.query(
               `
               INSERT INTO notifications
               (
@@ -424,14 +287,14 @@ const addComment = async (req, res) => {
                 comment_id,
                 is_viewed
               )
-              VALUES (?, ?, 'comment_reply', ?, ?, ?, 0)
+              VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0)
               `,
               [
                 parentOwnerId,
                 userId,
                 `${username} replied to your comment: ${notificationText}`,
                 postId,
-                result.insertId
+                insertedCommentId
               ]
             );
           }
@@ -463,7 +326,7 @@ const addComment = async (req, res) => {
 
             if (replyOwnerId !== userId) {
 
-              await connection.query(
+              await client.query(
                 `
                 INSERT INTO notifications
                 (
@@ -475,14 +338,14 @@ const addComment = async (req, res) => {
                   comment_id,
                   is_viewed
                 )
-                VALUES (?, ?, 'comment_reply', ?, ?, ?, 0)
+                VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0)
                 `,
                 [
                   replyOwnerId,
                   userId,
                   `${username} replied to you: ${notificationText}`,
                   postId,
-                  result.insertId
+                  insertedCommentId
                 ]
               );
             }
@@ -501,7 +364,7 @@ const addComment = async (req, res) => {
               parentOwnerId !== userId
             ) {
 
-              await connection.query(
+              await client.query(
                 `
                 INSERT INTO notifications
                 (
@@ -513,14 +376,14 @@ const addComment = async (req, res) => {
                   comment_id,
                   is_viewed
                 )
-                VALUES (?, ?, 'comment_reply', ?, ?, ?, 0)
+                VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0)
                 `,
                 [
                   parentOwnerId,
                   userId,
                   `${username} replied to ${replyOwnerUsername} on your comment: ${notificationText}`,
                   postId,
-                  result.insertId
+                  insertedCommentId
                 ]
               );
             }
@@ -532,7 +395,7 @@ const addComment = async (req, res) => {
               replyOwnerId !== userId
             ) {
 
-              await connection.query(
+              await client.query(
                 `
                 INSERT INTO notifications
                 (
@@ -544,14 +407,14 @@ const addComment = async (req, res) => {
                   comment_id,
                   is_viewed
                 )
-                VALUES (?, ?, 'comment_reply', ?, ?, ?, 0)
+                VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0)
                 `,
                 [
                   replyOwnerId,
                   userId,
                   `${username} replied to you: ${notificationText}`,
                   postId,
-                  result.insertId
+                  insertedCommentId
                 ]
               );
             }
@@ -564,23 +427,23 @@ const addComment = async (req, res) => {
     // SUCCESS
     // =========================
 
-    await connection.query(
-        `UPDATE posts SET comments_count = comments_count + 1 WHERE id = ?`,
+    await client.query(
+        `UPDATE posts SET comments_count = comments_count + 1 WHERE id = $1`,
         [postId]
     )
     await ranking.zIncrBy(`trendingPost:day:${currentDate}`, 5, postId.toString());
     await ranking.zIncrBy(`hof:month:${currentMonth}`, 3, userId.toString());
 
-    await connection.commit();
+    await client.query("COMMIT");
 
     return res.status(201).json({
       message: "Comment created",
-      comment_id: result.insertId
+      comment_id: insertedCommentId
     });
 
   } catch (err) {
 
-    await connection.rollback();
+    await client.query("ROLLBACK");
 
     console.error(err);
 
@@ -590,7 +453,7 @@ const addComment = async (req, res) => {
 
   } finally {
 
-    connection.release();
+    client.release();
   }
 };
 const updateComment = async (req, res) => {
@@ -612,17 +475,17 @@ const updateComment = async (req, res) => {
         );
         }
 
-        const [result] = await db.query(
+        const result = await db.query(
             `UPDATE comments
-             SET content = ?,
-                 gif_url = ?,
+             SET content = $1,
+                 gif_url = $2,
                  is_edited = 1
-             WHERE id = ?
-             AND user_id = ? AND is_deleted = 0`,
+             WHERE id = $3
+             AND user_id = $4 AND is_deleted = 0`,
             [content, gif_url, commentId, userId]
         );
 
-        if (result.affectedRows === 0) {
+        if (result.rowCount === 0) {
             return res.status(404).json({
                 message: "Comment not found"
             });
@@ -650,18 +513,18 @@ const deleteComment = async (req, res) => {
     const commentId = req.params.commentId;
     const postId = req.params.postId;
 
-    const [result] = await db.query(
-      "UPDATE comments SET is_deleted = 1, content = '[deleted]' WHERE id = ? AND user_id = ? AND is_deleted = 0",
+    const result = await db.query(
+      "UPDATE comments SET is_deleted = 1, content = '[deleted]' WHERE id = $1 AND user_id = $2 AND is_deleted = 0",
       [commentId, userId]
     );
 
-    if (result.affectedRows === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ message: "Comment not found" });
     }
 
 
     await db.query(
-      "UPDATE posts SET comments_count = comments_count - 1 WHERE id = ?",
+      "UPDATE posts SET comments_count = comments_count - 1 WHERE id = $1",
       [postId]
     )
     // Build today's trending key
@@ -694,14 +557,15 @@ const getCommentsByPostId = async (req, res) => {
     const offset = (page - 1) * limit;
 
     // Get user's liked comments as SET (exactly like attachUserStates)
-    const [likedRows] = await db.query(
-      `SELECT comment_id FROM comment_likes WHERE user_id = ?`,
+    const likedRowsResult = await db.query(
+      `SELECT comment_id FROM comment_likes WHERE user_id = $1`,
       [userId]
     );
+    const likedRows = likedRowsResult.rows;
     const likedSet = new Set(likedRows.map(row => row.comment_id));
 
     // top-level comments only
-    const [topComments] = await db.query(
+    const topCommentsResult = await db.query(
       `SELECT
         c.id,
         c.post_id,
@@ -726,13 +590,14 @@ const getCommentsByPostId = async (req, res) => {
         u.username AS original_username
       FROM comments c
       LEFT JOIN users u ON c.user_id = u.id
-      WHERE c.post_id = ?
+      WHERE c.post_id = $1
       AND c.parent_id IS NULL
       AND c.is_deleted = 0
       ORDER BY c.created_at DESC
-      LIMIT ? OFFSET ?`,
+      LIMIT $2 OFFSET $3`,
       [postId, limit, offset]
     );
+    const topComments = topCommentsResult.rows;
 
     if (!topComments.length) {
       return res.json({
@@ -750,7 +615,7 @@ const getCommentsByPostId = async (req, res) => {
     const parentIds = topComments.map(c => c.id);
 
     // fetch replies
-    const [replies] = await db.query(
+    const repliesResult = await db.query(
       `SELECT
         c.id,
         c.post_id,
@@ -775,11 +640,12 @@ const getCommentsByPostId = async (req, res) => {
         u.username AS original_username
       FROM comments c
       LEFT JOIN users u ON c.user_id = u.id
-      WHERE c.parent_id IN (?)
+      WHERE c.parent_id = ANY($1)
       AND c.is_deleted = 0
       ORDER BY c.created_at ASC`,
       [parentIds]
     );
+    const replies = repliesResult.rows;
 
     // Build response with is_liked from Set
     const commentsMap = {};
@@ -834,14 +700,15 @@ const getCommentsByPostId = async (req, res) => {
       }
     });
 
-    const [countRows] = await db.query(
+    const countRowsResult = await db.query(
       `SELECT COUNT(*) as total
        FROM comments
-       WHERE post_id = ?
+       WHERE post_id = $1
        AND parent_id IS NULL
        AND is_deleted = 0`,
       [postId]
     );
+    const countRows = countRowsResult.rows;
 
     const total = countRows[0].total;
 
@@ -863,220 +730,6 @@ const getCommentsByPostId = async (req, res) => {
     });
   }
 };
-// const getCommentsByPostId = async (req, res) => {
-//   try {
-//     const userId = req.user.userId;
-//     const { postId } = req.params;
-//     let { page = 1, limit = 10 } = req.query;
-
-//     page = Math.max(parseInt(page) || 1, 1);
-//     limit = Math.min(Math.max(parseInt(limit) || 10, 1), 50);
-//     const offset = (page - 1) * limit;
-
-//     // top-level comments only with user data
-//     const [topComments] = await db.query(
-//       `SELECT
-//         c.id,
-//         c.post_id,
-//         c.parent_id,
-//         c.user_id,
-//         CASE
-//           WHEN c.is_deleted = 1 THEN '[deleted]'
-//           ELSE c.content
-//         END AS content,
-//         c.gif_url,
-//         c.username_mention,
-//         c.is_anonymous,
-//         c.anonymous_name,
-//         c.anonymous_bg_color,
-//         c.likes_count,
-//         c.reply_count,
-//         c.is_deleted,
-//         c.is_edited,
-//         c.created_at,
-//         c.updated_at,
-        
-//         -- User information (not anonymous or not deleted)
-//         CASE
-//           WHEN c.is_deleted = 1 THEN NULL
-//           WHEN c.is_anonymous = 1 THEN NULL
-//           ELSE u.avatar_url
-//         END AS avatar_url,
-        
-//         CASE
-//           WHEN c.is_deleted = 1 THEN '[deleted]'
-//           WHEN c.is_anonymous = 1 THEN c.anonymous_name
-//           ELSE u.username
-//         END AS display_name,
-        
-//         -- Check if current user liked this comment
-//         EXISTS(
-//           SELECT 1 FROM comment_likes cl
-//           WHERE cl.comment_id = c.id
-//           AND cl.user_id = ?
-//         ) AS is_liked,
-        
-//         -- Get total replies count (including soft-deleted)
-//         (
-//           SELECT COUNT(*) FROM comments r
-//           WHERE r.parent_id = c.id
-//         ) AS total_replies
-
-//       FROM comments c
-//       LEFT JOIN users u ON c.user_id = u.id
-//       WHERE c.post_id = ?
-//       AND c.parent_id IS NULL
-//       AND c.is_deleted = 0
-//       ORDER BY c.created_at DESC
-//       LIMIT ? OFFSET ?`,
-//       [userId, postId, limit, offset]
-//     );
-
-//     // no comments
-//     if (!topComments.length) {
-//       return res.json({
-//         comments: [],
-//         pagination: {
-//           page,
-//           limit,
-//           total: 0,
-//           total_pages: 0,
-//           has_more: false
-//         }
-//       });
-//     }
-
-//     // get all parent IDs for replies
-//     const parentIds = topComments.map(c => c.id);
-
-//     // fetch replies with user data
-//     const [replies] = await db.query(
-//       `SELECT
-//         c.id,
-//         c.post_id,
-//         c.parent_id,
-//         c.user_id,
-//         CASE
-//           WHEN c.is_deleted = 1 THEN '[deleted]'
-//           ELSE c.content
-//         END AS content,
-//         c.gif_url,
-//         c.username_mention,
-//         c.is_anonymous,
-//         c.anonymous_name,
-//         c.anonymous_bg_color,
-//         c.likes_count,
-//         c.reply_count,
-//         c.is_deleted,
-//         c.is_edited,
-//         c.created_at,
-//         c.updated_at,
-        
-//         -- User information for replies
-//         CASE
-//           WHEN c.is_deleted = 1 THEN NULL
-//           WHEN c.is_anonymous = 1 THEN NULL
-//           ELSE u.avatar_url
-//         END AS avatar_url,
-        
-//         CASE
-//           WHEN c.is_deleted = 1 THEN '[deleted]'
-//           WHEN c.is_anonymous = 1 THEN c.anonymous_name
-//           ELSE u.username
-//         END AS display_name,
-        
-//         -- Check if current user liked this reply
-//         EXISTS(
-//           SELECT 1 FROM comment_likes cl
-//           WHERE cl.comment_id = c.id
-//           AND cl.user_id = ?
-//         ) AS is_liked
-
-//       FROM comments c
-//       LEFT JOIN users u ON c.user_id = u.id
-//       WHERE c.parent_id IN (?)
-//       AND c.is_deleted = 0
-//       ORDER BY c.created_at ASC`,
-//       [userId, parentIds]
-//     );
-
-//     // group replies under their parents
-//     const commentsMap = {};
-//     topComments.forEach(comment => {
-//       commentsMap[comment.id] = {
-//         ...comment,
-//         replies: []
-//       };
-//     });
-
-//     replies.forEach(reply => {
-//       if (commentsMap[reply.parent_id]) {
-//         commentsMap[reply.parent_id].replies.push(reply);
-//       }
-//     });
-
-//     // count total top-level comments
-//     const [countRows] = await db.query(
-//       `SELECT COUNT(*) as total
-//        FROM comments
-//        WHERE post_id = ?
-//        AND parent_id IS NULL
-//        AND is_deleted = 0`,
-//       [postId]
-//     );
-
-//     const total = countRows[0].total;
-
-//     res.json({
-//       comments: Object.values(commentsMap),
-//       pagination: {
-//         page,
-//         limit,
-//         total,
-//         total_pages: Math.ceil(total / limit),
-//         has_more: offset + limit < total
-//       }
-//     });
-
-//   } catch (err) {
-//     console.error("getCommentsByPostId error:", err);
-//     res.status(500).json({
-//       message: "Error fetching comments"
-//     });
-//   }
-// };
-// const getAnonIdentity = async (req, res) => {
-//   try {
-//     const userId = req.user.userId;
-//     const { postId } = req.params;
-
-//     if (!postId) {
-//       return res.status(400).json({ message: "Missing postId" });
-//     }
-
-//     const [rows] = await db.query(
-//       "SELECT is_anonymous, anonymous_name, anonymous_bg_color FROM comments WHERE post_id=? AND user_id=? LIMIT 1",
-//       [postId, userId]
-//     );
-
-//     if (rows.length > 0) {
-//       // Found existing identity
-//       return res.json({
-//         exists: true,
-//         is_anonymous: rows[0].is_anonymous,
-//         anonymous_name: rows[0].anonymous_name,
-//         anonymous_bg_color: rows[0].anonymous_bg_color
-//       });
-//     }
-
-//     // No identity yet
-//     return res.json({ exists: false });
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Server error" });
-//   }
-// };
-
 
 const getAnonIdentity = async (req, res) => {
   try {
@@ -1087,14 +740,15 @@ const getAnonIdentity = async (req, res) => {
       return res.status(400).json({ message: "Missing postId" });
     }
 
-    const [rows] = await db.query(
+    const result = await db.query(
       `SELECT anonymous_name, anonymous_bg_color
        FROM comments
-       WHERE post_id = ? AND user_id = ? AND is_anonymous = 1 AND is_deleted = 0
+       WHERE post_id = $1 AND user_id = $2 AND is_anonymous = 1 AND is_deleted = 0
        ORDER BY id ASC
        LIMIT 1`,
       [postId, userId]
     );
+    const rows = result.rows;
 
     if (rows.length > 0) {
       return res.json({
@@ -1152,7 +806,7 @@ const reportComment = async (req, res) => {
                 report_type,
                 reason
             )
-            VALUES (?, ?, ?, ?)`,
+            VALUES ($1, $2, $3, $4)`,
             [
                 commentId,
                 userId,
@@ -1167,7 +821,7 @@ const reportComment = async (req, res) => {
 
     } catch (err) {
 
-        if (err.code === 'ER_DUP_ENTRY') {
+        if (err.code === '23505') {
             return res.status(400).json({
                 message: "Already reported"
             });
@@ -1184,11 +838,11 @@ const reportComment = async (req, res) => {
 
 const likeComment = async (req, res) => {
 
-    const connection = await db.getConnection();
+    const client = await db.connect();
 
     try {
 
-        await connection.beginTransaction();
+        await client.query("BEGIN");
 
         const userId = req.user.userId;
         const { commentId } = req.params;
@@ -1197,36 +851,38 @@ const likeComment = async (req, res) => {
         // CHECK IF USER ALREADY LIKED
         // =========================================
 
-        const [existingLike] = await connection.query(
+        const existingLikeResult = await client.query(
             `
             SELECT id
             FROM comment_likes
-            WHERE comment_id = ?
-            AND user_id = ?
+            WHERE comment_id = $1
+            AND user_id = $2
             `,
             [commentId, userId]
         );
+        const existingLike = existingLikeResult.rows;
 
         // =========================================
         // GET COMMENT INFO
         // =========================================
 
-        const [commentRows] = await connection.query(
+        const commentRowsResult = await client.query(
             `
             SELECT
                 c.id,
                 c.user_id,
                 c.post_id
             FROM comments c
-            WHERE c.id = ?
+            WHERE c.id = $1
             AND c.is_deleted = 0
             `,
             [commentId]
         );
+        const commentRows = commentRowsResult.rows;
 
         if (!commentRows.length) {
 
-            await connection.rollback();
+            await client.query("ROLLBACK");
 
             return res.status(404).json({
                 message: "Comment not found"
@@ -1250,11 +906,11 @@ const likeComment = async (req, res) => {
             // REMOVE LIKE
             // -------------------------------------
 
-            await connection.query(
+            await client.query(
                 `
                 DELETE FROM comment_likes
-                WHERE comment_id = ?
-                AND user_id = ?
+                WHERE comment_id = $1
+                AND user_id = $2
                 `,
                 [commentId, userId]
             );
@@ -1263,11 +919,11 @@ const likeComment = async (req, res) => {
             // DECREASE LIKE COUNT
             // -------------------------------------
 
-            await connection.query(
+            await client.query(
                 `
                 UPDATE comments
                 SET likes_count = GREATEST(likes_count - 1, 0)
-                WHERE id = ?
+                WHERE id = $1
                 `,
                 [commentId]
             );
@@ -1276,16 +932,17 @@ const likeComment = async (req, res) => {
             // GET UPDATED TOTAL LIKES
             // -------------------------------------
 
-            const [[likeData]] = await connection.query(
+            const likeDataResult = await client.query(
                 `
                 SELECT COUNT(*) AS totalLikes
                 FROM comment_likes
-                WHERE comment_id = ?
+                WHERE comment_id = $1
                 `,
                 [commentId]
             );
+            const likeData = likeDataResult.rows[0];
 
-            const totalLikes = likeData.totalLikes;
+            const totalLikes = likeData.totallikes;
 
             // -------------------------------------
             // IF NO LIKES LEFT
@@ -1294,10 +951,10 @@ const likeComment = async (req, res) => {
 
             if (totalLikes === 0) {
 
-                await connection.query(
+                await client.query(
                     `
                     DELETE FROM notifications
-                    WHERE aggregate_key = ?
+                    WHERE aggregate_key = $1
                     `,
                     [aggregateKey]
                 );
@@ -1310,7 +967,7 @@ const likeComment = async (req, res) => {
             else {
 
                 // get newest liker
-                const [[latestLiker]] = await connection.query(
+                const latestLikerResult = await client.query(
                     `
                     SELECT
                         cl.user_id,
@@ -1318,12 +975,13 @@ const likeComment = async (req, res) => {
                     FROM comment_likes cl
                     JOIN users u
                         ON u.id = cl.user_id
-                    WHERE cl.comment_id = ?
+                    WHERE cl.comment_id = $1
                     ORDER BY cl.id DESC
                     LIMIT 1
                     `,
                     [commentId]
                 );
+                const latestLiker = latestLikerResult.rows[0];
 
                 // build notification text
                 let notificationContent;
@@ -1340,15 +998,15 @@ const likeComment = async (req, res) => {
                 }
 
                 // update notification
-                await connection.query(
+                await client.query(
                     `
                     UPDATE notifications
                     SET
-                        sender_id = ?,
-                        content = ?,
+                        sender_id = $1,
+                        content = $2,
                         is_viewed = 0,
                         created_at = NOW()
-                    WHERE aggregate_key = ?
+                    WHERE aggregate_key = $3
                     `,
                     [
                         latestLiker.user_id,
@@ -1362,7 +1020,7 @@ const likeComment = async (req, res) => {
             // SUCCESS
             // -------------------------------------
 
-            await connection.commit();
+            await client.query("COMMIT");
 
             return res.json({
                 liked: false
@@ -1377,11 +1035,11 @@ const likeComment = async (req, res) => {
         // INSERT LIKE
         // -----------------------------------------
 
-        await connection.query(
+        await client.query(
             `
             INSERT INTO comment_likes
             (comment_id, user_id)
-            VALUES (?, ?)
+            VALUES ($1, $2)
             `,
             [commentId, userId]
         );
@@ -1390,11 +1048,11 @@ const likeComment = async (req, res) => {
         // INCREASE COMMENT LIKE COUNT
         // -----------------------------------------
 
-        await connection.query(
+        await client.query(
             `
             UPDATE comments
             SET likes_count = likes_count + 1
-            WHERE id = ?
+            WHERE id = $1
             `,
             [commentId]
         );
@@ -1410,29 +1068,31 @@ const likeComment = async (req, res) => {
             // GET TOTAL LIKES
             // -------------------------------------
 
-            const [[likeData]] = await connection.query(
+            const likeDataResult = await client.query(
                 `
                 SELECT COUNT(*) AS totalLikes
                 FROM comment_likes
-                WHERE comment_id = ?
+                WHERE comment_id = $1
                 `,
                 [commentId]
             );
+            const likeData = likeDataResult.rows[0];
 
-            const totalLikes = likeData.totalLikes;
+            const totalLikes = likeData.totallikes;
 
             // -------------------------------------
             // GET CURRENT USERNAME
             // -------------------------------------
 
-            const [[currentUser]] = await connection.query(
+            const currentUserResult = await client.query(
                 `
                 SELECT username
                 FROM users
-                WHERE id = ?
+                WHERE id = $1
                 `,
                 [userId]
             );
+            const currentUser = currentUserResult.rows[0];
 
             // -------------------------------------
             // BUILD NOTIFICATION CONTENT
@@ -1455,15 +1115,16 @@ const likeComment = async (req, res) => {
             // FIND EXISTING AGGREGATED NOTIFICATION
             // -------------------------------------
 
-            const [existingNotification] = await connection.query(
+            const existingNotificationResult = await client.query(
                 `
                 SELECT id
                 FROM notifications
-                WHERE aggregate_key = ?
+                WHERE aggregate_key = $1
                 LIMIT 1
                 `,
                 [aggregateKey]
             );
+            const existingNotification = existingNotificationResult.rows;
 
             // -------------------------------------
             // UPDATE EXISTING NOTIFICATION
@@ -1471,15 +1132,15 @@ const likeComment = async (req, res) => {
 
             if (existingNotification.length > 0) {
 
-                await connection.query(
+                await client.query(
                     `
                     UPDATE notifications
                     SET
-                        sender_id = ?,
-                        content = ?,
+                        sender_id = $1,
+                        content = $2,
                         is_viewed = 0,
                         created_at = NOW()
-                    WHERE aggregate_key = ?
+                    WHERE aggregate_key = $3
                     `,
                     [
                         userId,
@@ -1495,7 +1156,7 @@ const likeComment = async (req, res) => {
 
             else {
 
-                await connection.query(
+                await client.query(
                     `
                     INSERT INTO notifications
                     (
@@ -1508,7 +1169,7 @@ const likeComment = async (req, res) => {
                         aggregate_key,
                         is_viewed
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, 0)
                     `,
                     [
                         commentOwnerId,
@@ -1527,7 +1188,7 @@ const likeComment = async (req, res) => {
         // SUCCESS
         // =========================================
 
-        await connection.commit();
+        await client.query("COMMIT");
 
         return res.json({
             liked: true
@@ -1535,7 +1196,7 @@ const likeComment = async (req, res) => {
 
     } catch (err) {
 
-        await connection.rollback();
+        await client.query("ROLLBACK");
 
         console.error(err);
 
@@ -1545,7 +1206,7 @@ const likeComment = async (req, res) => {
 
     } finally {
 
-        connection.release();
+        client.release();
     }
 };
 
@@ -1558,5 +1219,3 @@ module.exports = {
      reportComment,
      likeComment
 };
-
-

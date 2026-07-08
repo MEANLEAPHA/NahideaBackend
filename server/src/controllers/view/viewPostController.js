@@ -1,5 +1,4 @@
-
-const pool = require("../../config/db");
+const db = require("../../config/db");
 const { cachePost, ranking } = require("../../config/redisClient");
 // // Get total views
 const getTotalViewsByPost = async (req, res) => {
@@ -19,10 +18,11 @@ const getTotalViewsByPost = async (req, res) => {
     }
 
     // Fallback to DB
-    const [rows] = await pool.query(
-      `SELECT views_count AS total_views FROM posts WHERE id = ?`,
+    const result = await db.query(
+      `SELECT views_count AS total_views FROM posts WHERE id = $1`,
       [postId]
     );
+    const rows = result.rows;
 
     res.status(200).json({ success: true, total_views: rows[0].total_views, fallback: true });
   } catch (error) {
@@ -54,10 +54,11 @@ const recordViewPost = async (req, res) => {
         // NX here prevents a race where two requests both hit the "seed from DB" path.
         const exists = await cachePost.exists(postKey);
         if (!exists) {
-          const [rows] = await pool.query(
-            `SELECT views_count FROM posts WHERE id = ?`,
+          const result = await db.query(
+            `SELECT views_count FROM posts WHERE id = $1`,
             [postId]
           );
+          const rows = result.rows;
           const baseline = rows[0]?.views_count || 0;
           await cachePost.set(postKey, baseline, {
             EX: 60 * 10, // 10 min — must be longer than the hydration cron interval (5 min)
@@ -77,21 +78,22 @@ const recordViewPost = async (req, res) => {
       console.error("Redis error, fallback to DB:", redisErr);
 
       // Fallback to DB — dedup first so retries/outages don't double-count
-      const [existing] = await pool.query(
-        `SELECT 1 FROM view_post WHERE user_id = ? AND post_id = ? AND view_date = CURDATE()`,
+      const existingResult = await db.query(
+        `SELECT 1 FROM view_post WHERE user_id = $1 AND post_id = $2 AND view_date = CURRENT_DATE`,
         [userId, postId]
       );
+      const existing = existingResult.rows;
 
       if (!existing.length) {
-        await pool.query(
+        await db.query(
           `INSERT INTO view_post (user_id, post_id, view_date, created_at)
-           VALUES (?, ?, CURDATE(), NOW())
-           ON DUPLICATE KEY UPDATE view_date = CURDATE()`,
+           VALUES ($1, $2, CURRENT_DATE, NOW())
+           ON CONFLICT (user_id, post_id, view_date) DO UPDATE SET view_date = EXCLUDED.view_date`,
           [userId, postId]
         );
 
-        await pool.query(
-          `UPDATE posts SET views_count = views_count + 1 WHERE id = ?`,
+        await db.query(
+          `UPDATE posts SET views_count = views_count + 1 WHERE id = $1`,
           [postId]
         );
 
@@ -105,66 +107,5 @@ const recordViewPost = async (req, res) => {
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 };
-
-// const recordViewPost = async (req, res) => {
-//   try {
-//     const userId = req.user.userId;
-//     const { postId } = req.params;
-//     const today = new Date().toISOString().split("T")[0]; // "2026-05-20"
-//     const currentDate = today; // keep full YYYY-MM-DD
-//     const userKey = `view:${postId}:${userId}:${today}`;
-//     const postKey = `views:post:${postId}`;
-
-//     try {
-//       // Redis first
-//       const alreadyViewed = await cachePost.exists(userKey);
-//       if (!alreadyViewed) {
-//         // Mark user as viewed today (expires in 24h)
-//         await cachePost.set(userKey, 1, { EX: 60 * 60 * 24 });
-
-//         // Increment Redis total (always holds real total)
-//         let currentTotal = await cachePost.get(postKey);
-//         if (currentTotal === null) {
-//           // If Redis empty, fallback to DB to get baseline
-//           const [rows] = await pool.query(
-//             `SELECT views_count FROM posts WHERE id = ?`,
-//             [postId]
-//           );
-//           currentTotal = rows[0].views_count || 0;
-//         }
-
-//         // Set new total with TTL 3 minutes
-//         await cachePost.set(postKey, parseInt(currentTotal, 10) + 1, { EX: 60 * 3 });
-
-//         // 🔥 Trending Post logic (only once per day per user)
-//         await ranking.zIncrBy(`trendingPost:day:${currentDate}`, 1, postId.toString());
-//       }
-//       return res.status(200).json({ success: true });
-//     } catch (redisErr) {
-//       console.error("Redis error, fallback to DB:", redisErr);
-
-//       // Fallback to DB
-//       await pool.query(
-//         `INSERT INTO view_post (user_id, post_id, view_date, created_at)
-//          VALUES (?, ?, CURDATE(), NOW())
-//          ON DUPLICATE KEY UPDATE view_date = CURDATE()`,
-//         [userId, postId]
-//       );
-
-//       await pool.query(
-//         `UPDATE posts SET views_count = views_count + 1 WHERE id = ?`,
-//         [postId]
-//       );
-
-//       await ranking.zIncrBy(`trendingPost:day:${currentDate}`, 1, postId.toString());
-
-//       return res.status(200).json({ success: true, fallback: true });
-//     }
-//   } catch (error) {
-//     console.error("Error recording view post:", error);
-//     res.status(500).json({ success: false, error: "Internal server error" });
-//   }
-// };
-
 
 module.exports = { recordViewPost, getTotalViewsByPost };

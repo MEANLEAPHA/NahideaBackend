@@ -19,17 +19,17 @@ const searchUser = async (req, res) => {
     const currentUserId = req.user.userId;
 
     // Search by username OR nickname, excluding the requester themselves
-    const [rows] = await pool.query(
+    const result = await pool.query(
       `SELECT id, username, avatar_url, nickname
        FROM users
-       WHERE (username LIKE ? OR nickname LIKE ?)
-       AND id != ?
+       WHERE (username LIKE $1 OR nickname LIKE $2)
+       AND id != $3
        ORDER BY username ASC
        LIMIT 10`,
       [likePattern, likePattern, currentUserId]
     );
 
-    return res.status(200).json(rows);
+    return res.status(200).json(result.rows);
   } catch (err) {
     console.error("Search user error:", err.message);
     return res.status(500).json({

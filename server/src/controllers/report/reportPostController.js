@@ -1,5 +1,5 @@
-
 const pool = require("../../config/db");
+
 const createReport = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -16,25 +16,25 @@ const createReport = async (req, res) => {
     }
 
     // prevent duplicate spam reporting
-    const [existing] = await pool.query(
+    const existing = await pool.query(
       `SELECT id FROM reports 
-       WHERE reporter_id = ? AND post_id = ?`,
+       WHERE reporter_id = $1 AND post_id = $2`,
       [userId, post_id]
     );
 
-    if (existing.length > 0) {
+    if (existing.rows.length > 0) {
       return res.status(409).json({
         message: "You already reported this post"
       });
     }
 
     // verify post exists
-    const [post] = await pool.query(
-      `SELECT id FROM posts WHERE id = ?`,
+    const post = await pool.query(
+      `SELECT id FROM posts WHERE id = $1`,
       [post_id]
     );
 
-    if (post.length === 0) {
+    if (post.rows.length === 0) {
       return res.status(404).json({
         message: "Post not found"
       });
@@ -43,7 +43,7 @@ const createReport = async (req, res) => {
     await pool.query(
       `INSERT INTO reports
       (reporter_id, post_id, report_type, reason)
-      VALUES (?, ?, ?, ?)`,
+      VALUES ($1, $2, $3, $4)`,
       [
         userId,
         post_id,
@@ -97,15 +97,16 @@ const submitFeedback = async (req, res) => {
         // Calculate sentiment if score exists
         const sentiment = score !== undefined ? getSentimentFromScore(score, feedback_type) : null;
 
-        const [result] = await pool.query(
+        const result = await pool.query(
             `INSERT INTO user_feedback (user_id, feedback_type, score, sentiment, category, message, page_url) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             RETURNING id`,
             [user_id, feedback_type, score, sentiment, category || null, message?.trim() || null, page_url || null]
         );
 
         res.status(201).json({ 
             success: true, 
-            id: result.insertId, 
+            id: result.rows[0].id, 
             message: 'Thank you for your feedback! Your insights help us build a better product.' 
         });
     } catch (err) {
@@ -114,11 +115,8 @@ const submitFeedback = async (req, res) => {
     }
 };
 
-
 const report = async (req, res) => {
-
     try {
-
         const userId = req.user.userId;
         const type = req.params.type;
         const id = req.params.id;
@@ -127,7 +125,6 @@ const report = async (req, res) => {
             report_type,
             reason
         } = req.body;
-
 
         await pool.query(
             `INSERT INTO reports
@@ -138,7 +135,7 @@ const report = async (req, res) => {
                 report_type,
                 reason
             )
-            VALUES (?, ?, ?, ?, ?)`,
+            VALUES ($1, $2, $3, $4, $5)`,
             [
                 id,
                 userId,
@@ -153,8 +150,8 @@ const report = async (req, res) => {
         });
 
     } catch (err) {
-
-        if (err.code === 'ER_DUP_ENTRY') {
+        // PostgreSQL unique violation error code is '23505'
+        if (err.code === '23505') {
             return res.status(400).json({
                 message: "Already reported"
             });
@@ -176,7 +173,7 @@ const getAllReportByUserId = async (req, res) => {
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    const [rows] = await pool.query(
+    const result = await pool.query(
       `SELECT 
          r.id,
          r.reporter_id,
@@ -190,12 +187,12 @@ const getAllReportByUserId = async (req, res) => {
          u.avatar_url AS reported_avatar_url
        FROM reports r
        LEFT JOIN users u ON u.id = r.to_id
-       WHERE r.reporter_id = ?
+       WHERE r.reporter_id = $1
        ORDER BY r.created_at DESC`,
       [userId]
     );
 
-    return res.status(200).json(rows);
+    return res.status(200).json(result.rows);
   } catch (err) {
     console.error('getAllReportByUserId error:', err);
     return res.status(500).json({ message: 'Failed to fetch reports' });

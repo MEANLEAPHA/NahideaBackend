@@ -1,15 +1,14 @@
 const db = require("../../config/db");
 
-
 // Check if user already sent signal today
 async function hasSentToday(senderId, receiverId, signalType) {
-  const [rows] = await db.execute(
+  const result = await db.query(
     `SELECT id FROM user_poke 
-     WHERE sender_id = ? AND receiver_id = ? AND signal_type = ? 
-       AND DATE(created_at) = CURDATE()`,
+     WHERE sender_id = $1 AND receiver_id = $2 AND signal_type = $3 
+       AND DATE(created_at) = CURRENT_DATE`,
     [senderId, receiverId, signalType]
   );
-  return rows.length > 0;
+  return result.rows.length > 0;
 }
 
 const sendPoke = async (req, res) => {
@@ -23,8 +22,8 @@ const sendPoke = async (req, res) => {
     }
 
     // Insert new signal
-    await db.execute(
-      `INSERT INTO user_poke (sender_id, receiver_id, signal_type) VALUES (?, ?, ?)`,
+    await db.query(
+      `INSERT INTO user_poke (sender_id, receiver_id, signal_type) VALUES ($1, $2, $3)`,
       [senderId, receiverId, signalType]
     );
 
@@ -36,16 +35,15 @@ const sendPoke = async (req, res) => {
 
 const getPoke = async (req, res) => {
   try {
-    const { userId } = req.user.userId;
-    const [rows] = await db.execute(
-      `SELECT * FROM user_poke WHERE receiver_id = ? ORDER BY created_at DESC`,
+    const userId = req.user.userId;
+    const result = await db.query(
+      `SELECT * FROM user_poke WHERE receiver_id = $1 ORDER BY created_at DESC`,
       [userId]
     );
-    res.json(rows);
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 }
-
 
 module.exports = { sendPoke, getPoke };

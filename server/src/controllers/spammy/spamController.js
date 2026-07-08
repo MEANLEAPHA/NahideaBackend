@@ -1,10 +1,9 @@
 const pool = require("../../config/db");
 
-
 const DAILY_SPAM_LIMIT = 25;
 
 const sendSpam = async (req, res) => {
-  const connection = await pool.getConnection();
+  const client = await pool.connect();
 
   try {
     const senderId = req.user.userId;
@@ -14,68 +13,65 @@ const sendSpam = async (req, res) => {
     const receiverId = Number(receiver_id);
 
     if (!receiver_id || !Number.isInteger(receiverId) || receiverId <= 0) {
-      connection.release();
+      client.release();
       return res.status(400).json({
         success: false,
         message: "A valid receiver_id is required",
       });
     }
 
-
-
     if (receiverId === senderId) {
-      connection.release();
+      client.release();
       return res.status(400).json({
         success: false,
         message: "You can't send spam to yourself",
       });
     }
 
-    const [receiverRows] = await connection.query(
-      `SELECT id FROM users WHERE id = ? LIMIT 1`,
+    const receiverResult = await client.query(
+      `SELECT id FROM users WHERE id = $1 LIMIT 1`,
       [receiverId]
     );
 
-    if (receiverRows.length === 0) {
-      connection.release();
+    if (receiverResult.rows.length === 0) {
+      client.release();
       return res.status(404).json({
         success: false,
         message: "Receiver not found",
       });
     }
 
-    await connection.beginTransaction();
+    await client.query('BEGIN');
 
-    const [result] = await connection.query(
+    const result = await client.query(
       `
       INSERT INTO user_spams (sender_id, receiver_id, spam_type)
-      SELECT ?, ?, ?
-      FROM DUAL
+      SELECT $1, $2, $3
       WHERE (
         SELECT COUNT(*) FROM user_spams
-        WHERE sender_id = ?
-        AND DATE(created_at) = CURDATE()
-      ) < ?
+        WHERE sender_id = $4
+        AND DATE(created_at) = CURRENT_DATE
+      ) < $5
       `,
       [senderId, receiverId, spam_type, senderId, DAILY_SPAM_LIMIT]
     );
 
-    if (result.affectedRows === 0) {
-      await connection.rollback();
-      connection.release();
+    if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(429).json({
         success: false,
         message: "Daily spam limit reached",
       });
     }
 
-    await connection.commit();
-    connection.release();
+    await client.query('COMMIT');
+    client.release();
 
     return res.json({ success: true });
   } catch (err) {
-    await connection.rollback().catch(() => {});
-    connection.release();
+    await client.query('ROLLBACK').catch(() => {});
+    client.release();
     console.error(err);
     return res.status(500).json({ success: false, message: "Server Error" });
   }
@@ -88,7 +84,7 @@ const getInboxSpam = async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
     const offset = (page - 1) * limit;
 
-    const [rows] = await pool.query(
+    const result = await pool.query(
       `
       SELECT
         s.spam_id,
@@ -102,15 +98,15 @@ const getInboxSpam = async (req, res) => {
         u.avatar_url AS sender_avatar_url
       FROM user_spams s
       LEFT JOIN users u ON u.id = s.sender_id
-      WHERE s.receiver_id = ?
+      WHERE s.receiver_id = $1
       AND s.receiver_deleted = 0
       ORDER BY s.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT $2 OFFSET $3
       `,
       [userId, limit, offset]
     );
 
-    res.json(rows);
+    res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Server Error" });
@@ -121,18 +117,18 @@ const getUnreadSpam = async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    const [rows] = await pool.query(
+    const result = await pool.query(
       `
-      SELECT COUNT(*) total
+      SELECT COUNT(*) as total
       FROM user_spams
-      WHERE receiver_id = ?
+      WHERE receiver_id = $1
       AND is_viewed = 0
       AND receiver_deleted = 0
       `,
       [userId]
     );
 
-    res.json({ unread: rows[0].total });
+    res.json({ unread: parseInt(result.rows[0].total, 10) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Server Error" });
@@ -148,18 +144,18 @@ const markSpamViewed = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid spam id" });
     }
 
-    const [result] = await pool.query(
+    const result = await pool.query(
       `
       UPDATE user_spams
       SET is_viewed = 1, viewed_at = NOW()
-      WHERE spam_id = ?
-      AND receiver_id = ?
+      WHERE spam_id = $1
+      AND receiver_id = $2
       AND receiver_deleted = 0
       `,
       [spamId, userId]
     );
 
-    if (result.affectedRows === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
         message: "Spam not found or you don't have access to it",
@@ -182,7 +178,7 @@ const markAllViewed = async (req, res) => {
       `
       UPDATE user_spams
       SET is_viewed = 1, viewed_at = NOW()
-      WHERE receiver_id = ?
+      WHERE receiver_id = $1
       AND is_viewed = 0
       AND receiver_deleted = 0
       `,
@@ -203,7 +199,7 @@ const getSentSpam = async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
     const offset = (page - 1) * limit;
 
-    const [rows] = await pool.query(
+    const result = await pool.query(
       `
       SELECT
         s.spam_id,
@@ -216,15 +212,15 @@ const getSentSpam = async (req, res) => {
         u.avatar_url AS receiver_avatar_url
       FROM user_spams s
       LEFT JOIN users u ON u.id = s.receiver_id
-      WHERE s.sender_id = ?
+      WHERE s.sender_id = $1
       AND s.sender_deleted = 0
       ORDER BY s.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT $2 OFFSET $3
       `,
       [userId, limit, offset]
     );
 
-    res.json(rows);
+    res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Server Error" });
@@ -236,36 +232,36 @@ const getSentSpam = async (req, res) => {
 // not trusted from the client — so it can't be spoofed. Once both sides
 // have deleted their copy, the row is hard-deleted for good.
 const deleteOneSpam = async (req, res) => {
-  const connection = await pool.getConnection();
+  const client = await pool.connect();
 
   try {
     const userId = req.user.userId;
     const spamId = Number(req.params.spamId);
 
     if (!Number.isInteger(spamId) || spamId <= 0) {
-      connection.release();
+      client.release();
       return res.status(400).json({ success: false, message: "Invalid spam id" });
     }
 
-    await connection.beginTransaction();
+    await client.query('BEGIN');
 
-    const [rows] = await connection.query(
+    const result = await client.query(
       `
       SELECT spam_id, sender_id, receiver_id, sender_deleted, receiver_deleted
       FROM user_spams
-      WHERE spam_id = ?
+      WHERE spam_id = $1
       FOR UPDATE
       `,
       [spamId]
     );
 
-    if (rows.length === 0) {
-      await connection.rollback();
-      connection.release();
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(404).json({ success: false, message: "Spam not found" });
     }
 
-    const spam = rows[0];
+    const spam = result.rows[0];
     let senderDeleted = spam.sender_deleted;
     let receiverDeleted = spam.receiver_deleted;
 
@@ -274,8 +270,8 @@ const deleteOneSpam = async (req, res) => {
     } else if (Number(spam.receiver_id) === Number(userId)) {
       receiverDeleted = 1;
     } else {
-      await connection.rollback();
-      connection.release();
+      await client.query('ROLLBACK');
+      client.release();
       return res.status(403).json({
         success: false,
         message: "You don't have access to this spam",
@@ -283,20 +279,20 @@ const deleteOneSpam = async (req, res) => {
     }
 
     if (senderDeleted && receiverDeleted) {
-      await connection.query(`DELETE FROM user_spams WHERE spam_id = ?`, [spamId]);
+      await client.query(`DELETE FROM user_spams WHERE spam_id = $1`, [spamId]);
     } else {
-      await connection.query(
-        `UPDATE user_spams SET sender_deleted = ?, receiver_deleted = ? WHERE spam_id = ?`,
+      await client.query(
+        `UPDATE user_spams SET sender_deleted = $1, receiver_deleted = $2 WHERE spam_id = $3`,
         [senderDeleted, receiverDeleted, spamId]
       );
     }
 
-    await connection.commit();
-    connection.release();
+    await client.query('COMMIT');
+    client.release();
     return res.json({ success: true });
   } catch (err) {
-    await connection.rollback().catch(() => {});
-    connection.release();
+    await client.query('ROLLBACK').catch(() => {});
+    client.release();
     console.error(err);
     return res.status(500).json({ success: false, message: "Server Error" });
   }
@@ -306,36 +302,36 @@ const deleteOneSpam = async (req, res) => {
 // received; `?type=sent` clears everything they've sent. Rows that end up
 // deleted on both sides get swept away permanently.
 const deleteAllSpam = async (req, res) => {
-  const connection = await pool.getConnection();
+  const client = await pool.connect();
 
   try {
     const userId = req.user.userId;
     const type = req.query.type === "sent" ? "sent" : "inbox";
 
-    await connection.beginTransaction();
+    await client.query('BEGIN');
 
     if (type === "inbox") {
-      await connection.query(
-        `UPDATE user_spams SET receiver_deleted = 1 WHERE receiver_id = ? AND receiver_deleted = 0`,
+      await client.query(
+        `UPDATE user_spams SET receiver_deleted = 1 WHERE receiver_id = $1 AND receiver_deleted = 0`,
         [userId]
       );
     } else {
-      await connection.query(
-        `UPDATE user_spams SET sender_deleted = 1 WHERE sender_id = ? AND sender_deleted = 0`,
+      await client.query(
+        `UPDATE user_spams SET sender_deleted = 1 WHERE sender_id = $1 AND sender_deleted = 0`,
         [userId]
       );
     }
 
-    await connection.query(
+    await client.query(
       `DELETE FROM user_spams WHERE sender_deleted = 1 AND receiver_deleted = 1`
     );
 
-    await connection.commit();
-    connection.release();
+    await client.query('COMMIT');
+    client.release();
     return res.json({ success: true });
   } catch (err) {
-    await connection.rollback().catch(() => {});
-    connection.release();
+    await client.query('ROLLBACK').catch(() => {});
+    client.release();
     console.error(err);
     return res.status(500).json({ success: false, message: "Server Error" });
   }

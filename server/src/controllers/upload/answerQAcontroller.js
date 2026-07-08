@@ -1,4 +1,4 @@
-const pool = require("../../config/db");
+const db = require("../../config/db");
 
 const ALREADY_ANSWERED_MESSAGE = "You have already answered this question";
 
@@ -61,53 +61,55 @@ const validateAnswerPayload = (questionType, body) => {
 };
 
 const answerQA = async (req, res) => {
-  const connection = await pool.getConnection();
+  const client = await db.connect();
 
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      connection.release();
+      client.release();
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
     const { postId, questionId, questionType } = req.params;
 
     if (!QUESTION_TYPES.includes(questionType)) {
-      connection.release();
+      client.release();
       return res.status(400).json({ success: false, message: "Invalid question type" });
     }
 
     if (!Number.isInteger(Number(postId)) || !Number.isInteger(Number(questionId))) {
-      connection.release();
+      client.release();
       return res.status(400).json({ success: false, message: "Invalid postId or questionId" });
     }
 
     const validationError = validateAnswerPayload(questionType, req.body);
     if (validationError) {
-      connection.release();
+      client.release();
       return res.status(400).json({ success: false, message: validationError });
     }
 
-    await connection.beginTransaction();
+    await client.query("BEGIN");
 
-    const [[question]] = await connection.query(
-      `SELECT title FROM question WHERE id = ?`,
+    const questionResult = await client.query(
+      `SELECT title FROM question WHERE id = $1`,
       [questionId]
     );
+    const question = questionResult.rows[0];
 
     if (!question) {
-      await connection.rollback();
+      await client.query("ROLLBACK");
       return res.status(404).json({ success: false, message: "Question not found" });
     }
 
     // ── Duplicate-answer guard ──────────────────────────────────────────
-    const [[existingAnswer]] = await connection.query(
-      `SELECT id FROM answers WHERE question_id = ? AND user_id = ? LIMIT 1`,
+    const existingAnswerResult = await client.query(
+      `SELECT id FROM answers WHERE question_id = $1 AND user_id = $2 LIMIT 1`,
       [questionId, userId]
     );
+    const existingAnswer = existingAnswerResult.rows[0];
 
     if (existingAnswer) {
-      await connection.rollback();
+      await client.query("ROLLBACK");
       return res.status(409).json({
         success: false,
         code: "ALREADY_ANSWERED",
@@ -116,12 +118,14 @@ const answerQA = async (req, res) => {
     }
     // ─────────────────────────────────────────────────────────────────
 
-    const [[user]] = await connection.query(`SELECT username FROM users WHERE id = ?`, [userId]);
+    const userResult = await client.query(`SELECT username FROM users WHERE id = $1`, [userId]);
+    const user = userResult.rows[0];
     const username = user?.username || "Someone";
 
-    const [[post]] = await connection.query(`SELECT user_id FROM posts WHERE id = ?`, [postId]);
+    const postResult = await client.query(`SELECT user_id FROM posts WHERE id = $1`, [postId]);
+    const post = postResult.rows[0];
     if (!post) {
-      await connection.rollback();
+      await client.query("ROLLBACK");
       return res.status(404).json({ success: false, message: "Post not found" });
     }
     const postOwnerId = post.user_id;
@@ -142,78 +146,79 @@ const answerQA = async (req, res) => {
 
     switch (questionType) {
       case "openend": {
-        const [r] = await connection.query(
+        const r = await client.query(
           `INSERT INTO answers (question_id, post_id, user_id, question_type, text_answer, is_anonymous, anonymous_name, anonymous_bg_color)
-           VALUES (?, ?, ?, 'openend', ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, 'openend', $4, $5, $6, $7) RETURNING id`,
           [questionId, postId, userId, answerText, isAnon, anonymousName, anonymousBgColor]
         );
-        answerId = r.insertId;
+        answerId = r.rows[0].id;
         break;
       }
       case "closedend": {
-        const [r] = await connection.query(
+        const r = await client.query(
           `INSERT INTO answers (question_id, post_id, user_id, question_type, yes_no, is_anonymous, anonymous_name, anonymous_bg_color)
-           VALUES (?, ?, ?, 'closedend', ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, 'closedend', $4, $5, $6, $7) RETURNING id`,
           [questionId, postId, userId, answerYesNo, isAnon, anonymousName, anonymousBgColor]
         );
-        answerId = r.insertId;
+        answerId = r.rows[0].id;
         break;
       }
       case "rating": {
-        const [r] = await connection.query(
+        const r = await client.query(
           `INSERT INTO answers (question_id, post_id, user_id, question_type, rating_value, is_anonymous, anonymous_name, anonymous_bg_color)
-           VALUES (?, ?, ?, 'rating', ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, 'rating', $4, $5, $6, $7) RETURNING id`,
           [questionId, postId, userId, ratingValue, isAnon, anonymousName, anonymousBgColor]
         );
-        answerId = r.insertId;
+        answerId = r.rows[0].id;
         break;
       }
       case "singlechoice": {
-        const [r] = await connection.query(
+        const r = await client.query(
           `INSERT INTO answers (question_id, post_id, user_id, question_type, singlechoice_option_id, singlechoice_option_value, is_anonymous, anonymous_name, anonymous_bg_color)
-           VALUES (?, ?, ?, 'singlechoice', ?, ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, 'singlechoice', $4, $5, $6, $7, $8) RETURNING id`,
           [questionId, postId, userId, optionId, optionText, isAnon, anonymousName, anonymousBgColor]
         );
-        answerId = r.insertId;
+        answerId = r.rows[0].id;
         break;
       }
       case "multiplechoice": {
-        const [r] = await connection.query(
+        const r = await client.query(
           `INSERT INTO answers (question_id, post_id, user_id, question_type, multiplechoice_option_ids, multiplechoice_option_value, is_anonymous, anonymous_name, anonymous_bg_color)
-           VALUES (?, ?, ?, 'multiplechoice', ?, ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, 'multiplechoice', $4, $5, $6, $7, $8) RETURNING id`,
           [questionId, postId, userId, JSON.stringify(optionIds), JSON.stringify(optionTexts), isAnon, anonymousName, anonymousBgColor]
         );
-        answerId = r.insertId;
+        answerId = r.rows[0].id;
         break;
       }
       case "rankingorder": {
-        const [r] = await connection.query(
+        const r = await client.query(
           `INSERT INTO answers (question_id, post_id, user_id, question_type, ranking_positions, ranking_position_value, is_anonymous, anonymous_name, anonymous_bg_color)
-           VALUES (?, ?, ?, 'rankingorder', ?, ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, 'rankingorder', $4, $5, $6, $7, $8) RETURNING id`,
           [questionId, postId, userId, JSON.stringify(rankingIds), JSON.stringify(rankingTexts), isAnon, anonymousName, anonymousBgColor]
         );
-        answerId = r.insertId;
+        answerId = r.rows[0].id;
         break;
       }
       case "range": {
-        const [r] = await connection.query(
+        const r = await client.query(
           `INSERT INTO answers (question_id, post_id, user_id, question_type, range_value, is_anonymous, anonymous_name, anonymous_bg_color)
-           VALUES (?, ?, ?, 'range', ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, 'range', $4, $5, $6, $7) RETURNING id`,
           [questionId, postId, userId, rangeValue, isAnon, anonymousName, anonymousBgColor]
         );
-        answerId = r.insertId;
+        answerId = r.rows[0].id;
         break;
       }
     }
 
-    await connection.query(`UPDATE posts SET answers_count = answers_count + 1 WHERE id = ?`, [postId]);
+    await client.query(`UPDATE posts SET answers_count = answers_count + 1 WHERE id = $1`, [postId]);
 
     if (Number(postOwnerId) !== Number(userId)) {
-      const [[answerData]] = await connection.query(
-        `SELECT COUNT(*) as total_answers FROM answers WHERE question_id = ?`,
+      const answerDataResult = await client.query(
+        `SELECT COUNT(*) as total_answers FROM answers WHERE question_id = $1`,
         [questionId]
       );
-      const totalAnswers = answerData.total_answers;
+      const answerData = answerDataResult.rows[0];
+      const totalAnswers = Number(answerData.total_answers);
       const displayName = isAnon ? "Someone" : username;
       const truncatedTitle = `${questionTitle.slice(0, 50)}${questionTitle.length > 50 ? "..." : ""}`;
 
@@ -222,27 +227,27 @@ const answerQA = async (req, res) => {
           ? `${displayName} answered your question: "${truncatedTitle}"`
           : `${displayName} and ${totalAnswers - 1} other${totalAnswers - 1 > 1 ? "s" : ""} answered your question: "${truncatedTitle}"`;
 
-      const [existingNotification] = await connection.query(
-        `SELECT id FROM notifications WHERE aggregate_key = ? AND type = 'answer' LIMIT 1`,
+      const existingNotificationResult = await client.query(
+        `SELECT id FROM notifications WHERE aggregate_key = $1 AND type = 'answer' LIMIT 1`,
         [aggregateKey]
       );
 
-      if (existingNotification.length > 0) {
-        await connection.query(
-          `UPDATE notifications SET sender_id = ?, content = ?, is_viewed = 0, created_at = NOW()
-           WHERE aggregate_key = ? AND type = 'answer'`,
+      if (existingNotificationResult.rowCount > 0) {
+        await client.query(
+          `UPDATE notifications SET sender_id = $1, content = $2, is_viewed = 0, created_at = NOW()
+           WHERE aggregate_key = $3 AND type = 'answer'`,
           [userId, notificationContent, aggregateKey]
         );
       } else {
-        await connection.query(
+        await client.query(
           `INSERT INTO notifications (receiver_id, sender_id, type, content, post_id, answer_id, aggregate_key, is_viewed)
-           VALUES (?, ?, 'answer', ?, ?, ?, ?, 0)`,
+           VALUES ($1, $2, 'answer', $3, $4, $5, $6, 0)`,
           [postOwnerId, userId, notificationContent, postId, answerId, aggregateKey]
         );
       }
     }
 
-    await connection.commit();
+    await client.query("COMMIT");
 
     return res.status(200).json({
       success: true,
@@ -250,11 +255,11 @@ const answerQA = async (req, res) => {
       data: { answer_id: answerId },
     });
   } catch (err) {
-    await connection.rollback();
+    await client.query("ROLLBACK");
 
     // Safety net if you add the UNIQUE(question_id, user_id) constraint below —
     // catches a race where two simultaneous submits both pass the SELECT check.
-    if (err.code === "ER_DUP_ENTRY") {
+    if (err.code === "23505") {
       return res.status(409).json({
         success: false,
         code: "ALREADY_ANSWERED",
@@ -265,7 +270,7 @@ const answerQA = async (req, res) => {
     console.error("answerQA error:", err);
     return res.status(500).json({ success: false, message: "Something went wrong" });
   } finally {
-    connection.release();
+    client.release();
   }
 };
 
@@ -278,10 +283,11 @@ const checkAlreadyAnswered = async (req, res) => {
 
     const { questionId } = req.params;
 
-    const [[existing]] = await pool.query(
-      `SELECT id FROM answers WHERE question_id = ? AND user_id = ? LIMIT 1`,
-      [questionId, userId] 
+    const existingResult = await db.query(
+      `SELECT id FROM answers WHERE question_id = $1 AND user_id = $2 LIMIT 1`,
+      [questionId, userId]
     );
+    const existing = existingResult.rows[0];
 
     return res.status(200).json({ success: true, alreadyAnswered: !!existing });
   } catch (err) {
@@ -298,11 +304,11 @@ const getQuestionById = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid question type" });
     }
 
-    const [questions] = await pool.query(
-      `SELECT id, title FROM question WHERE id = ?`,
+    const questionsResult = await db.query(
+      `SELECT id, title FROM question WHERE id = $1`,
       [questionId]
     );
-    const question = questions[0];
+    const question = questionsResult.rows[0];
 
     if (!question) {
       return res.status(404).json({ success: false, message: "Question not found" });
@@ -316,46 +322,46 @@ const getQuestionById = async (req, res) => {
         break;
 
       case "range": {
-        const [rows] = await pool.query(`SELECT * FROM question_range WHERE question_id = ?`, [questionId]);
-        data = { ...data, ...(rows[0] || {}) };
+        const rowsResult = await db.query(`SELECT * FROM question_range WHERE question_id = $1`, [questionId]);
+        data = { ...data, ...(rowsResult.rows[0] || {}) };
         break;
       }
       case "rating": {
-        const [rows] = await pool.query(`SELECT * FROM rating WHERE question_id = ?`, [questionId]);
-        data = { ...data, ...(rows[0] || {}) };
+        const rowsResult = await db.query(`SELECT * FROM rating WHERE question_id = $1`, [questionId]);
+        data = { ...data, ...(rowsResult.rows[0] || {}) };
         break;
       }
       case "singlechoice": {
-        const [rows] = await pool.query(
+        const rowsResult = await db.query(
           `SELECT sco.*, sc.question_id
            FROM singlechoice_option sco
            JOIN singlechoice sc ON sco.singlechoice_id = sc.id
-           WHERE sc.question_id = ?`,
+           WHERE sc.question_id = $1`,
           [questionId]
         );
-        data = { ...data, choice: rows };
+        data = { ...data, choice: rowsResult.rows };
         break;
       }
       case "multiplechoice": {
-        const [rows] = await pool.query(
+        const rowsResult = await db.query(
           `SELECT mco.*, mc.question_id, mc.include_all_above
            FROM multiplechoice_option mco
            JOIN multiplechoice mc ON mco.multiplechoice_id = mc.id
-           WHERE mc.question_id = ?`,
+           WHERE mc.question_id = $1`,
           [questionId]
         );
-        data = { ...data, include_all_above: rows[0]?.include_all_above || 0, choices: rows };
+        data = { ...data, include_all_above: rowsResult.rows[0]?.include_all_above || 0, choices: rowsResult.rows };
         break;
       }
       case "rankingorder": {
-        const [rows] = await pool.query(
+        const rowsResult = await db.query(
           `SELECT ri.*, ro.question_id
            FROM ranking_item ri
            JOIN rankingorder ro ON ri.ranking_id = ro.id
-           WHERE ro.question_id = ?`,
+           WHERE ro.question_id = $1`,
           [questionId]
         );
-        data = { ...data, items: rows };
+        data = { ...data, items: rowsResult.rows };
         break;
       }
     }
@@ -378,11 +384,12 @@ const getAllAnswersByQuestionId = async (req, res) => {
     const offset = (page - 1) * limit;
 
     // Get user's votes on answers
-    const [userVotes] = await pool.query(
-      `SELECT answer_id, vote_type FROM answer_votes WHERE user_id = ?`,
+    const userVotesResult = await db.query(
+      `SELECT answer_id, vote_type FROM answer_votes WHERE user_id = $1`,
       [userId]
     );
-    
+    const userVotes = userVotesResult.rows;
+
     const voteMap = new Map();
     userVotes.forEach(vote => {
       voteMap.set(vote.answer_id, vote.vote_type);
@@ -408,7 +415,7 @@ const getAllAnswersByQuestionId = async (req, res) => {
     }
 
     // Get answers with user info
-    const [answers] = await pool.query(
+    const answersResult = await db.query(
       `SELECT 
         a.id,
         a.question_id,
@@ -446,18 +453,19 @@ const getAllAnswersByQuestionId = async (req, res) => {
         END AS author_bg_color,
         
         -- Check if current user voted
-        ? AS user_vote_type,
+        $1 AS user_vote_type,
         
         -- Get total answers count
         COUNT(*) OVER() AS total_count
         
       FROM answers a
       LEFT JOIN users u ON a.user_id = u.id
-      WHERE a.question_id = ?
+      WHERE a.question_id = $2
       ${orderBy}
-      LIMIT ? OFFSET ?`,
+      LIMIT $3 OFFSET $4`,
       [userId, questionId, limit, offset]
     );
+    const answers = answersResult.rows;
 
     // Add user_vote_type to each answer
     const answersWithVotes = answers.map(answer => ({
@@ -493,17 +501,18 @@ const getMostPopularAnswer = async (req, res) => {
     const { questionId } = req.params;
 
     // Get user's votes
-    const [userVotes] = await pool.query(
-      `SELECT answer_id, vote_type FROM answer_votes WHERE user_id = ?`,
+    const userVotesResult = await db.query(
+      `SELECT answer_id, vote_type FROM answer_votes WHERE user_id = $1`,
       [userId]
     );
-    
+    const userVotes = userVotesResult.rows;
+
     const voteMap = new Map();
     userVotes.forEach(vote => {
       voteMap.set(vote.answer_id, vote.vote_type);
     });
 
-    const [answer] = await pool.query(
+    const answerResult = await db.query(
       `SELECT 
         a.id,
         a.question_id,
@@ -546,11 +555,12 @@ const getMostPopularAnswer = async (req, res) => {
         
       FROM answers a
       LEFT JOIN users u ON a.user_id = u.id
-      WHERE a.question_id = ?
+      WHERE a.question_id = $1
       ORDER BY a.vote_score DESC, a.upvotes DESC
       LIMIT 1`,
       [questionId]
     );
+    const answer = answerResult.rows;
 
     if (!answer.length) {
       return res.json({
@@ -578,28 +588,30 @@ const getMostPopularAnswer = async (req, res) => {
 };
 
 const upvoteAnswer = async (req, res) => {
-  const connection = await pool.getConnection();
+  const client = await db.connect();
   try {
-    await connection.beginTransaction();
+    await client.query("BEGIN");
     
     const userId = req.user.userId;
     const { answerId } = req.params;
     
     // Get username for notification
-    const [[user]] = await connection.query(
-      `SELECT username FROM users WHERE id = ?`,
+    const userResult = await client.query(
+      `SELECT username FROM users WHERE id = $1`,
       [userId]
     );
+    const user = userResult.rows[0];
     const username = user?.username || 'Someone';
 
     // Check if answer exists
-    const [answer] = await connection.query(
-      `SELECT id, user_id, question_id, post_id FROM answers WHERE id = ?`,
+    const answerResult = await client.query(
+      `SELECT id, user_id, question_id, post_id FROM answers WHERE id = $1`,
       [answerId]
     );
+    const answer = answerResult.rows;
 
     if (!answer.length) {
-      await connection.rollback();
+      await client.query("ROLLBACK");
       return res.status(404).json({
         success: false,
         message: "Answer not found"
@@ -612,10 +624,11 @@ const upvoteAnswer = async (req, res) => {
     const aggregateKey = `answer_vote_${answerOwnerId}_${answerId}`;
 
     // Check existing vote
-    const [existingVote] = await connection.query(
-      `SELECT vote_type FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
+    const existingVoteResult = await client.query(
+      `SELECT vote_type FROM answer_votes WHERE answer_id = $1 AND user_id = $2`,
       [answerId, userId]
     );
+    const existingVote = existingVoteResult.rows;
 
     let upvotesChange = 0;
     let downvotesChange = 0;
@@ -625,8 +638,8 @@ const upvoteAnswer = async (req, res) => {
 
     if (existingVote.length === 0) {
       // No existing vote - add upvote
-      await connection.query(
-        `INSERT INTO answer_votes (answer_id, user_id, vote_type) VALUES (?, ?, 'upvote')`,
+      await client.query(
+        `INSERT INTO answer_votes (answer_id, user_id, vote_type) VALUES ($1, $2, 'upvote')`,
         [answerId, userId]
       );
       upvotesChange = 1;
@@ -636,8 +649,8 @@ const upvoteAnswer = async (req, res) => {
       
     } else if (existingVote[0].vote_type === 'upvote') {
       // Already upvoted - remove upvote
-      await connection.query(
-        `DELETE FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
+      await client.query(
+        `DELETE FROM answer_votes WHERE answer_id = $1 AND user_id = $2`,
         [answerId, userId]
       );
       upvotesChange = -1;
@@ -647,8 +660,8 @@ const upvoteAnswer = async (req, res) => {
       
     } else if (existingVote[0].vote_type === 'downvote') {
       // Was downvoted - change to upvote
-      await connection.query(
-        `UPDATE answer_votes SET vote_type = 'upvote' WHERE answer_id = ? AND user_id = ?`,
+      await client.query(
+        `UPDATE answer_votes SET vote_type = 'upvote' WHERE answer_id = $1 AND user_id = $2`,
         [answerId, userId]
       );
       upvotesChange = 1;
@@ -659,20 +672,21 @@ const upvoteAnswer = async (req, res) => {
     }
 
     // Update answer vote counts
-    await connection.query(
+    await client.query(
       `UPDATE answers 
-       SET upvotes = upvotes + ?,
-           downvotes = downvotes + ?,
-           vote_score = vote_score + ?
-       WHERE id = ?`,
+       SET upvotes = upvotes + $1,
+           downvotes = downvotes + $2,
+           vote_score = vote_score + $3
+       WHERE id = $4`,
       [upvotesChange, downvotesChange, voteScoreChange, answerId]
     );
 
     // Get updated vote counts
-    const [[updatedAnswer]] = await connection.query(
-      `SELECT upvotes, downvotes, vote_score FROM answers WHERE id = ?`,
+    const updatedAnswerResult = await client.query(
+      `SELECT upvotes, downvotes, vote_score FROM answers WHERE id = $1`,
       [answerId]
     );
+    const updatedAnswer = updatedAnswerResult.rows[0];
 
     // ============================================
     // NOTIFICATION LOGIC
@@ -682,10 +696,11 @@ const upvoteAnswer = async (req, res) => {
     if (Number(answerOwnerId) !== Number(userId)) {
       
       // Get total upvotes for this answer
-      const [[voteData]] = await connection.query(
-        `SELECT upvotes FROM answers WHERE id = ?`,
+      const voteDataResult = await client.query(
+        `SELECT upvotes FROM answers WHERE id = $1`,
         [answerId]
       );
+      const voteData = voteDataResult.rows[0];
       const totalUpvotes = voteData.upvotes;
       
       let notificationContent = '';
@@ -700,25 +715,26 @@ const upvoteAnswer = async (req, res) => {
         }
         
         // Check if there's already an existing aggregate notification
-        const [existingNotification] = await connection.query(
-          `SELECT id FROM notifications WHERE aggregate_key = ? LIMIT 1`,
+        const existingNotificationResult = await client.query(
+          `SELECT id FROM notifications WHERE aggregate_key = $1 LIMIT 1`,
           [aggregateKey]
         );
+        const existingNotification = existingNotificationResult.rows;
         
         if (existingNotification.length > 0) {
           // Update existing notification
-          await connection.query(
+          await client.query(
             `UPDATE notifications 
-             SET sender_id = ?,
-                 content = ?,
+             SET sender_id = $1,
+                 content = $2,
                  is_viewed = 0,
                  created_at = NOW()
-             WHERE aggregate_key = ?`,
+             WHERE aggregate_key = $3`,
             [userId, notificationContent, aggregateKey]
           );
         } else {
           // Create new notification
-          await connection.query(
+          await client.query(
             `INSERT INTO notifications (
               receiver_id, 
               sender_id, 
@@ -727,7 +743,7 @@ const upvoteAnswer = async (req, res) => {
               post_id,
               aggregate_key, 
               is_viewed
-            ) VALUES (?, ?, ?, ?, ?, ?, 0)`,
+            ) VALUES ($1, $2, $3, $4, $5, $6, 0)`,
             [
               answerOwnerId,
               userId,
@@ -748,23 +764,24 @@ const upvoteAnswer = async (req, res) => {
         }
         
         // Update existing notification
-        const [existingNotification] = await connection.query(
-          `SELECT id FROM notifications WHERE aggregate_key = ? LIMIT 1`,
+        const existingNotificationResult = await client.query(
+          `SELECT id FROM notifications WHERE aggregate_key = $1 LIMIT 1`,
           [aggregateKey]
         );
+        const existingNotification = existingNotificationResult.rows;
         
         if (existingNotification.length > 0) {
-          await connection.query(
+          await client.query(
             `UPDATE notifications 
-             SET sender_id = ?,
-                 content = ?,
+             SET sender_id = $1,
+                 content = $2,
                  is_viewed = 0,
                  created_at = NOW()
-             WHERE aggregate_key = ?`,
+             WHERE aggregate_key = $3`,
             [userId, notificationContent, aggregateKey]
           );
         } else {
-          await connection.query(
+          await client.query(
             `INSERT INTO notifications (
               receiver_id, 
               sender_id, 
@@ -773,7 +790,7 @@ const upvoteAnswer = async (req, res) => {
               post_id,
               aggregate_key, 
               is_viewed
-            ) VALUES (?, ?, ?, ?, ?, ?, 0)`,
+            ) VALUES ($1, $2, $3, $4, $5, $6, 0)`,
             [
               answerOwnerId,
               userId,
@@ -789,24 +806,25 @@ const upvoteAnswer = async (req, res) => {
         // Remove upvote - check if there are any other upvotes
         if (totalUpvotes === 0) {
           // No upvotes left, delete notification
-          await connection.query(
-            `DELETE FROM notifications WHERE aggregate_key = ?`,
+          await client.query(
+            `DELETE FROM notifications WHERE aggregate_key = $1`,
             [aggregateKey]
           );
         } else {
           // Still have upvotes, update notification with latest liker
-          const [[latestUpvoter]] = await connection.query(
+          const latestUpvoterResult = await client.query(
             `SELECT 
                av.user_id,
                u.username
              FROM answer_votes av
              JOIN users u ON u.id = av.user_id
-             WHERE av.answer_id = ? 
+             WHERE av.answer_id = $1 
                AND av.vote_type = 'upvote'
              ORDER BY av.id DESC
              LIMIT 1`,
             [answerId]
           );
+          const latestUpvoter = latestUpvoterResult.rows[0];
           
           if (latestUpvoter) {
             if (totalUpvotes === 1) {
@@ -815,13 +833,13 @@ const upvoteAnswer = async (req, res) => {
               notificationContent = `${latestUpvoter.username} and ${totalUpvotes - 1} other${totalUpvotes - 1 > 1 ? 's' : ''} upvoted your answer`;
             }
             
-            await connection.query(
+            await client.query(
               `UPDATE notifications 
-               SET sender_id = ?,
-                   content = ?,
+               SET sender_id = $1,
+                   content = $2,
                    is_viewed = 0,
                    created_at = NOW()
-               WHERE aggregate_key = ?`,
+               WHERE aggregate_key = $3`,
               [latestUpvoter.user_id, notificationContent, aggregateKey]
             );
           }
@@ -836,7 +854,7 @@ const upvoteAnswer = async (req, res) => {
     // await ranking.zIncrBy(`trendingAnswer:day:${currentDay}`, 1, answerId.toString());
     // await ranking.zIncrBy(`hof:month:${currentDay.slice(0, 7).replace("-", "")}`, 0.5, userId.toString());
 
-    await connection.commit();
+    await client.query("COMMIT");
 
     res.json({
       success: true,
@@ -852,40 +870,42 @@ const upvoteAnswer = async (req, res) => {
     });
 
   } catch (err) {
-    await connection.rollback();
+    await client.query("ROLLBACK");
     console.error("upvoteAnswer error:", err);
     res.status(500).json({
       success: false,
       message: "Error upvoting answer"
     });
   } finally {
-    connection.release();
+    client.release();
   }
 };
 
 const downvoteAnswer = async (req, res) => {
-  const connection = await pool.getConnection();
+  const client = await db.connect();
   try {
-    await connection.beginTransaction();
+    await client.query("BEGIN");
     
     const userId = req.user.userId;
     const { answerId } = req.params;
     
     // Get username for notification
-    const [[user]] = await connection.query(
-      `SELECT username FROM users WHERE id = ?`,
+    const userResult = await client.query(
+      `SELECT username FROM users WHERE id = $1`,
       [userId]
     );
+    const user = userResult.rows[0];
     const username = user?.username || 'Someone';
 
     // Check if answer exists
-    const [answer] = await connection.query(
-      `SELECT id, user_id, question_id, post_id FROM answers WHERE id = ?`,
+    const answerResult = await client.query(
+      `SELECT id, user_id, question_id, post_id FROM answers WHERE id = $1`,
       [answerId]
     );
+    const answer = answerResult.rows;
 
     if (!answer.length) {
-      await connection.rollback();
+      await client.query("ROLLBACK");
       return res.status(404).json({
         success: false,
         message: "Answer not found"
@@ -898,10 +918,11 @@ const downvoteAnswer = async (req, res) => {
     const aggregateKey = `answer_vote_${answerOwnerId}_${answerId}`;
 
     // Check existing vote
-    const [existingVote] = await connection.query(
-      `SELECT vote_type FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
+    const existingVoteResult = await client.query(
+      `SELECT vote_type FROM answer_votes WHERE answer_id = $1 AND user_id = $2`,
       [answerId, userId]
     );
+    const existingVote = existingVoteResult.rows;
 
     let upvotesChange = 0;
     let downvotesChange = 0;
@@ -911,8 +932,8 @@ const downvoteAnswer = async (req, res) => {
 
     if (existingVote.length === 0) {
       // No existing vote - add downvote
-      await connection.query(
-        `INSERT INTO answer_votes (answer_id, user_id, vote_type) VALUES (?, ?, 'downvote')`,
+      await client.query(
+        `INSERT INTO answer_votes (answer_id, user_id, vote_type) VALUES ($1, $2, 'downvote')`,
         [answerId, userId]
       );
       downvotesChange = 1;
@@ -922,8 +943,8 @@ const downvoteAnswer = async (req, res) => {
       
     } else if (existingVote[0].vote_type === 'downvote') {
       // Already downvoted - remove downvote
-      await connection.query(
-        `DELETE FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
+      await client.query(
+        `DELETE FROM answer_votes WHERE answer_id = $1 AND user_id = $2`,
         [answerId, userId]
       );
       downvotesChange = -1;
@@ -933,8 +954,8 @@ const downvoteAnswer = async (req, res) => {
       
     } else if (existingVote[0].vote_type === 'upvote') {
       // Was upvoted - change to downvote
-      await connection.query(
-        `UPDATE answer_votes SET vote_type = 'downvote' WHERE answer_id = ? AND user_id = ?`,
+      await client.query(
+        `UPDATE answer_votes SET vote_type = 'downvote' WHERE answer_id = $1 AND user_id = $2`,
         [answerId, userId]
       );
       upvotesChange = -1;
@@ -945,20 +966,21 @@ const downvoteAnswer = async (req, res) => {
     }
 
     // Update answer vote counts
-    await connection.query(
+    await client.query(
       `UPDATE answers 
-       SET upvotes = upvotes + ?,
-           downvotes = downvotes + ?,
-           vote_score = vote_score + ?
-       WHERE id = ?`,
+       SET upvotes = upvotes + $1,
+           downvotes = downvotes + $2,
+           vote_score = vote_score + $3
+       WHERE id = $4`,
       [upvotesChange, downvotesChange, voteScoreChange, answerId]
     );
 
     // Get updated vote counts
-    const [[updatedAnswer]] = await connection.query(
-      `SELECT upvotes, downvotes, vote_score FROM answers WHERE id = ?`,
+    const updatedAnswerResult = await client.query(
+      `SELECT upvotes, downvotes, vote_score FROM answers WHERE id = $1`,
       [answerId]
     );
+    const updatedAnswer = updatedAnswerResult.rows[0];
 
     // ============================================
     // NOTIFICATION LOGIC FOR DOWNVOTES
@@ -972,10 +994,11 @@ const downvoteAnswer = async (req, res) => {
     /*
     if (Number(answerOwnerId) !== Number(userId)) {
       
-      const [[voteData]] = await connection.query(
-        `SELECT downvotes FROM answers WHERE id = ?`,
+      const voteDataResult = await client.query(
+        `SELECT downvotes FROM answers WHERE id = $1`,
         [answerId]
       );
+      const voteData = voteDataResult.rows[0];
       const totalDownvotes = voteData.downvotes;
       
       let notificationContent = '';
@@ -988,39 +1011,41 @@ const downvoteAnswer = async (req, res) => {
           notificationContent = `${username} and ${totalDownvotes - 1} other${totalDownvotes - 1 > 1 ? 's' : ''} downvoted your answer`;
         }
         
-        const [existingNotification] = await connection.query(
-          `SELECT id FROM notifications WHERE aggregate_key = ? AND type = 'answer_downvote' LIMIT 1`,
+        const existingNotificationResult = await client.query(
+          `SELECT id FROM notifications WHERE aggregate_key = $1 AND type = 'answer_downvote' LIMIT 1`,
           [aggregateKey]
         );
+        const existingNotification = existingNotificationResult.rows;
         
         if (existingNotification.length > 0) {
-          await connection.query(
+          await client.query(
             `UPDATE notifications 
-             SET sender_id = ?,
-                 content = ?,
+             SET sender_id = $1,
+                 content = $2,
                  is_viewed = 0,
                  created_at = NOW()
-             WHERE aggregate_key = ? AND type = 'answer_downvote'`,
+             WHERE aggregate_key = $3 AND type = 'answer_downvote'`,
             [userId, notificationContent, aggregateKey]
           );
         } else {
-          await connection.query(
+          await client.query(
             `INSERT INTO notifications (
               receiver_id, sender_id, type, content, answer_id, post_id, aggregate_key, is_viewed
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, 0)`,
             [answerOwnerId, userId, notificationType, notificationContent, answerId, postId, aggregateKey]
           );
         }
         
       } else if (notificationAction === 'delete') {
-        const [existingDownvote] = await connection.query(
-          `SELECT id FROM answer_votes WHERE answer_id = ? AND vote_type = 'downvote' LIMIT 1`,
+        const existingDownvoteResult = await client.query(
+          `SELECT id FROM answer_votes WHERE answer_id = $1 AND vote_type = 'downvote' LIMIT 1`,
           [answerId]
         );
+        const existingDownvote = existingDownvoteResult.rows;
         
         if (!existingDownvote.length) {
-          await connection.query(
-            `DELETE FROM notifications WHERE aggregate_key = ? AND type = 'answer_downvote'`,
+          await client.query(
+            `DELETE FROM notifications WHERE aggregate_key = $1 AND type = 'answer_downvote'`,
             [aggregateKey]
           );
         }
@@ -1035,7 +1060,7 @@ const downvoteAnswer = async (req, res) => {
     // For downvotes, you might want to decrement trending score
     // await ranking.zIncrBy(`trendingAnswer:day:${currentDay}`, -1, answerId.toString());
 
-    await connection.commit();
+    await client.query("COMMIT");
 
     res.json({
       success: true,
@@ -1051,14 +1076,14 @@ const downvoteAnswer = async (req, res) => {
     });
 
   } catch (err) {
-    await connection.rollback();
+    await client.query("ROLLBACK");
     console.error("downvoteAnswer error:", err);
     res.status(500).json({
       success: false,
       message: "Error downvoting answer"
     });
   } finally {
-    connection.release();
+    client.release();
   }
 };
 const getAnswerById = async (req, res) => {
@@ -1067,12 +1092,13 @@ const getAnswerById = async (req, res) => {
     const { answerId } = req.params;
 
     // Get user's vote
-    const [userVote] = await pool.query(
-      `SELECT vote_type FROM answer_votes WHERE answer_id = ? AND user_id = ?`,
+    const userVoteResult = await db.query(
+      `SELECT vote_type FROM answer_votes WHERE answer_id = $1 AND user_id = $2`,
       [answerId, userId]
     );
+    const userVote = userVoteResult.rows;
 
-    const [answer] = await pool.query(
+    const answerResult = await db.query(
       `SELECT 
         a.id,
         a.question_id,
@@ -1115,9 +1141,10 @@ const getAnswerById = async (req, res) => {
         
       FROM answers a
       LEFT JOIN users u ON a.user_id = u.id
-      WHERE a.id = ?`,
+      WHERE a.id = $1`,
       [answerId]
     );
+    const answer = answerResult.rows;
 
     if (!answer.length) {
       return res.status(404).json({
@@ -1153,5 +1180,3 @@ module.exports = {
   getAnswerById,
   getMostPopularAnswer,
 };
-
-

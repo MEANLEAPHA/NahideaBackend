@@ -5,26 +5,26 @@ const getNotifications = async (req, res) => {
         const userId = req.user.userId;
         
         // Get notifications with unread count
-        const [rows] = await pool.query(
+        const rows = await pool.query(
             `SELECT n.*, 
                     u.username as sender_username,
                     u.avatar_url as sender_avatar
              FROM notifications n
              LEFT JOIN users u ON n.sender_id = u.id
-             WHERE n.receiver_id = ? 
+             WHERE n.receiver_id = $1 
              ORDER BY n.created_at DESC`,
             [userId]
         );
         
         // Get unread count
-        const [unreadCount] = await pool.query(
-            "SELECT COUNT(*) as count FROM notifications WHERE receiver_id = ? AND is_viewed = 0",
+        const unreadCount = await pool.query(
+            "SELECT COUNT(*) as count FROM notifications WHERE receiver_id = $1 AND is_viewed = 0",
             [userId]
         );
         
         res.status(200).json({
-            notifications: rows,
-            unreadCount: unreadCount[0].count
+            notifications: rows.rows,
+            unreadCount: unreadCount.rows[0].count
         });
     } catch (error) {
         console.error(error);
@@ -38,19 +38,19 @@ const markNotificationRead = async (req, res) => {
         const { notificationId } = req.params;
         
         await pool.query(
-            "UPDATE notifications SET is_viewed = 1 WHERE id = ? AND receiver_id = ?",
+            "UPDATE notifications SET is_viewed = 1 WHERE id = $1 AND receiver_id = $2",
             [notificationId, userId]
         );
         
         // Get updated unread count
-        const [unreadCount] = await pool.query(
-            "SELECT COUNT(*) as count FROM notifications WHERE receiver_id = ? AND is_viewed = 0",
+        const unreadCount = await pool.query(
+            "SELECT COUNT(*) as count FROM notifications WHERE receiver_id = $1 AND is_viewed = 0",
             [userId]
         );
         
         res.status(200).json({ 
             message: "Notification marked as read",
-            unreadCount: unreadCount[0].count
+            unreadCount: unreadCount.rows[0].count
         });
     } catch (error) {
         console.error(error);
@@ -63,7 +63,7 @@ const markAllNotification = async (req, res) => {
         const userId = req.user.userId;
         
         await pool.query(
-            "UPDATE notifications SET is_viewed = 1 WHERE receiver_id = ? AND is_viewed = 0",
+            "UPDATE notifications SET is_viewed = 1 WHERE receiver_id = $1 AND is_viewed = 0",
             [userId]
         );
         
@@ -83,19 +83,19 @@ const deleteNotification = async (req, res) => {
         const { notificationId } = req.params;
         
         await pool.query(
-            "DELETE FROM notifications WHERE id = ? AND receiver_id = ?",
+            "DELETE FROM notifications WHERE id = $1 AND receiver_id = $2",
             [notificationId, userId]
         );
         
         // Get updated unread count
-        const [unreadCount] = await pool.query(
-            "SELECT COUNT(*) as count FROM notifications WHERE receiver_id = ? AND is_viewed = 0",
+        const unreadCount = await pool.query(
+            "SELECT COUNT(*) as count FROM notifications WHERE receiver_id = $1 AND is_viewed = 0",
             [userId]
         );
         
         res.status(200).json({ 
             message: "Notification deleted",
-            unreadCount: unreadCount[0].count
+            unreadCount: unreadCount.rows[0].count
         });
     } catch (error) {
         console.error(error);
@@ -109,23 +109,23 @@ const deleteAllNotifications = async (req, res) => {
 
         console.log("JWT userId:", userId);
 
-        const [result] = await pool.query(
-            "DELETE FROM notifications WHERE receiver_id = ?",
+        const result = await pool.query(
+            "DELETE FROM notifications WHERE receiver_id = $1",
             [userId]
         );
 
-        console.log("affectedRows:", result.affectedRows);
+        console.log("affectedRows:", result.rowCount);
 
-        const [rows] = await pool.query(
-            "SELECT * FROM notifications WHERE receiver_id = ?",
+        const rows = await pool.query(
+            "SELECT * FROM notifications WHERE receiver_id = $1",
             [userId]
         );
 
-        console.log("Remaining rows:", rows.length);
+        console.log("Remaining rows:", rows.rowCount);
 
         res.status(200).json({
             success: true,
-            affectedRows: result.affectedRows
+            affectedRows: result.rowCount
         });
 
     } catch (err) {
@@ -146,25 +146,25 @@ const createNotification = async ({
     try {
         // Check if we should aggregate similar notifications
         if (aggregateKey) {
-            const [existing] = await pool.query(
+            const existing = await pool.query(
                 `SELECT id, created_at 
                  FROM notifications 
-                 WHERE receiver_id = ? 
-                 AND aggregate_key = ? 
+                 WHERE receiver_id = $1 
+                 AND aggregate_key = $2 
                  AND is_viewed = 0
                  ORDER BY created_at DESC 
                  LIMIT 1`,
                 [receiverId, aggregateKey]
             );
             
-            if (existing.length > 0) {
+            if (existing.rows.length > 0) {
                 // Update existing notification instead of creating new one
                 await pool.query(
                     `UPDATE notifications 
                      SET created_at = CURRENT_TIMESTAMP,
-                         content = ?
-                     WHERE id = ?`,
-                    [content, existing[0].id]
+                         content = $1
+                     WHERE id = $2`,
+                    [content, existing.rows[0].id]
                 );
                 return;
             }
@@ -180,7 +180,7 @@ const createNotification = async ({
                 comment_id,
                 aggregate_key
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [
                 receiverId,
                 senderId,
@@ -200,13 +200,13 @@ const getUnreadCount = async (req, res) => {
     try {
         const userId = req.user.userId;
         
-        const [result] = await pool.query(
-            "SELECT COUNT(*) as count FROM notifications WHERE receiver_id = ? AND is_viewed = 0",
+        const result = await pool.query(
+            "SELECT COUNT(*) as count FROM notifications WHERE receiver_id = $1 AND is_viewed = 0",
             [userId]
         );
         
         res.status(200).json({ 
-            unreadCount: result[0].count 
+            unreadCount: result.rows[0].count 
         });
     } catch (error) {
         console.error(error);

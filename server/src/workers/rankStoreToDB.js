@@ -22,8 +22,9 @@ const hydrateHallOfFame = async (monthKey) => {
     try {
       await pool.query(
         `INSERT INTO hall_of_fame_history (month, user_id, score, ranking)
-         VALUES (?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE score = VALUES(score), ranking = VALUES(ranking)`,
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (month, user_id) 
+         DO UPDATE SET score = EXCLUDED.score, ranking = EXCLUDED.ranking`,
         [monthKey, userId, score, rankPosition]
       );
     } catch (err) {
@@ -46,7 +47,6 @@ const hydrateTrendingPost = async (dateKey) => {
   const redisKey = `trendingPost:day:${dateKey}`;
   const topPosts = await ranking.zRangeWithScores(redisKey, 0, 9, { REV: true });
 
-
   if (!topPosts.length) {
     console.log(`No trending post data for ${dateKey}, skipping.`);
     return;
@@ -61,8 +61,9 @@ const hydrateTrendingPost = async (dateKey) => {
     try {
       await pool.query(
         `INSERT INTO trending_post_history (date, post_id, score, ranking)
-         VALUES (?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE score = VALUES(score), ranking = VALUES(ranking)`,
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (date, post_id) 
+         DO UPDATE SET score = EXCLUDED.score, ranking = EXCLUDED.ranking`,
         [dateKey, postId, score, rankPosition]
       );
     } catch (err) {
@@ -115,7 +116,5 @@ cron.schedule("0 0 * * *", async () => {
     console.error("Trending Post worker failed:", err.message);
   }
 });
-
-
 
 module.exports = { hydrateHallOfFame, hydrateTrendingPost };

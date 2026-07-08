@@ -1,7 +1,6 @@
 const { ranking } = require("../../config/redisClient");
 const pool = require("../../config/db");
 
-
 // track login and add score
 const recordLogin = async (req, res) => {
   try {
@@ -23,13 +22,14 @@ const recordLogin = async (req, res) => {
       try {
         await pool.query(
           `INSERT INTO user_logins (user_id, login_date)
-           VALUES (?, ?)
-           ON DUPLICATE KEY UPDATE login_date = VALUES(login_date)`,
+           VALUES ($1, $2)
+           ON CONFLICT (user_id, login_date) 
+           DO UPDATE SET login_date = EXCLUDED.login_date`,
           [userId, today]
         );
         console.log(`DB insert success for user ${userId} on ${today}`);
       } catch (dbErr) {
-        console.error("DB insert failed:", dbErr.sqlMessage || dbErr.message);
+        console.error("DB insert failed:", dbErr.message);
       }
     }
 
@@ -39,7 +39,6 @@ const recordLogin = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
-
 
 const getHallOfFame = async (req, res) => {
   try {
@@ -69,13 +68,15 @@ const getHallOfFame = async (req, res) => {
     // Collect userIds
     const userIds = topUsers.map(u => parseInt(u.value, 10));
 
-    // Fetch user info from DB
-    const [rows] = await pool.query(
+    // Fetch user info from DB - PostgreSQL with ANY array
+    const result = await pool.query(
       `SELECT id, username, avatar_url, profession
        FROM users
-       WHERE id IN (?)`,
+       WHERE id = ANY($1::int[])`,
       [userIds]
     );
+
+    const rows = result.rows;
 
     // Map results back to Redis order (preserve ranking)
     const items = topUsers.map((u, idx) => {
@@ -97,6 +98,7 @@ const getHallOfFame = async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 };
+
 const getTrendingPost = async (req, res) => {
    try{
     
