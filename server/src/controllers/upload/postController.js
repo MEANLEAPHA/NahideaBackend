@@ -1175,7 +1175,7 @@ const likePost = async (req, res) => {
       const totalLikes = likeData.totallikes;
 
       // if no like left delete notification
-      if(totalLikes === 0){
+      if(Number(totalLikes) === 0){
         await connection.query(
           `
           DELETE FROM notifications
@@ -1205,13 +1205,13 @@ const likePost = async (req, res) => {
 
         let notificationContent;
 
-        if(totalLikes === 1){
+        if(Number(totalLikes) === 1){
           notificationContent = 
           `${latestLiker?.username} liked your post` ;
         }
         else{
           notificationContent =
-          `${latestLiker?.username} and ${totalLikes - 1} others liked your post`;
+          `${latestLiker?.username} and ${Number(totalLikes) - 1} others liked your post`;
         }
 
         // update notification
