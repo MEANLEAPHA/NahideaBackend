@@ -400,7 +400,7 @@ const getUnreadChatCount = async (req, res) => {
     );
 
     res.json({
-      unreadCounts: result.rows[0].unreadcount || 0,
+      unreadCounts: Number(result.rows[0].unreadcount) || 0,
     });
   } catch (err) {
     res.status(500).json({

@@ -708,10 +708,10 @@ const upvoteAnswer = async (req, res) => {
       
       if (notificationAction === 'create') {
         // New upvote
-        if (totalUpvotes === 1) {
+        if (Number(totalUpvotes) === 1) {
           notificationContent = `${username} upvoted your answer`;
         } else {
-          notificationContent = `${username} and ${totalUpvotes - 1} other${totalUpvotes - 1 > 1 ? 's' : ''} upvoted your answer`;
+          notificationContent = `${username} and ${Number(totalUpvotes) - 1} other${Number(totalUpvotes) - 1 > 1 ? 's' : ''} upvoted your answer`;
         }
         
         // Check if there's already an existing aggregate notification
@@ -757,10 +757,10 @@ const upvoteAnswer = async (req, res) => {
         
       } else if (notificationAction === 'update') {
         // Changed from downvote to upvote
-        if (totalUpvotes === 1) {
+        if (Number(totalUpvotes) === 1) {
           notificationContent = `${username} upvoted your answer`;
         } else {
-          notificationContent = `${username} and ${totalUpvotes - 1} other${totalUpvotes - 1 > 1 ? 's' : ''} upvoted your answer`;
+          notificationContent = `${username} and ${Number(totalUpvotes) - 1} other${Number(totalUpvotes) - 1 > 1 ? 's' : ''} upvoted your answer`;
         }
         
         // Update existing notification
@@ -804,7 +804,7 @@ const upvoteAnswer = async (req, res) => {
         
       } else if (notificationAction === 'delete') {
         // Remove upvote - check if there are any other upvotes
-        if (totalUpvotes === 0) {
+        if (Number(totalUpvotes) === 0) {
           // No upvotes left, delete notification
           await client.query(
             `DELETE FROM notifications WHERE aggregate_key = $1`,
@@ -827,10 +827,10 @@ const upvoteAnswer = async (req, res) => {
           const latestUpvoter = latestUpvoterResult.rows[0];
           
           if (latestUpvoter) {
-            if (totalUpvotes === 1) {
+            if (Number(totalUpvotes) === 1) {
               notificationContent = `${latestUpvoter.username} upvoted your answer`;
             } else {
-              notificationContent = `${latestUpvoter.username} and ${totalUpvotes - 1} other${totalUpvotes - 1 > 1 ? 's' : ''} upvoted your answer`;
+              notificationContent = `${latestUpvoter.username} and ${Number(totalUpvotes) - 1} other${Number(totalUpvotes) - 1 > 1 ? 's' : ''} upvoted your answer`;
             }
             
             await client.query(
@@ -859,9 +859,9 @@ const upvoteAnswer = async (req, res) => {
     res.json({
       success: true,
       data: {
-        upvotes: updatedAnswer.upvotes,
-        downvotes: updatedAnswer.downvotes,
-        vote_score: updatedAnswer.vote_score,
+        upvotes: Number(updatedAnswer.upvotes),
+        downvotes: Number(updatedAnswer.downvotes),
+        vote_score: Number(updatedAnswer.vote_score),
         user_vote_type: newVoteType
       },
       message: existingVote.length === 0 ? "Answer upvoted" : 
@@ -1065,9 +1065,9 @@ const downvoteAnswer = async (req, res) => {
     res.json({
       success: true,
       data: {
-        upvotes: updatedAnswer.upvotes,
-        downvotes: updatedAnswer.downvotes,
-        vote_score: updatedAnswer.vote_score,
+        upvotes: Number(updatedAnswer.upvotes),
+        downvotes: Number(updatedAnswer.downvotes),
+        vote_score: Number(updatedAnswer.vote_score),
         user_vote_type: newVoteType
       },
       message: existingVote.length === 0 ? "Answer downvoted" : 

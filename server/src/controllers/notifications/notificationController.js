@@ -24,7 +24,7 @@ const getNotifications = async (req, res) => {
         
         res.status(200).json({
             notifications: rows.rows,
-            unreadCount: unreadCount.rows[0].count
+            unreadCount: Number(unreadCount.rows[0].count) || 0
         });
     } catch (error) {
         console.error(error);
@@ -50,7 +50,7 @@ const markNotificationRead = async (req, res) => {
         
         res.status(200).json({ 
             message: "Notification marked as read",
-            unreadCount: unreadCount.rows[0].count
+            unreadCount: Number(unreadCount.rows[0].count) || 0
         });
     } catch (error) {
         console.error(error);
@@ -95,7 +95,7 @@ const deleteNotification = async (req, res) => {
         
         res.status(200).json({ 
             message: "Notification deleted",
-            unreadCount: unreadCount.rows[0].count
+            unreadCount: Number(unreadCount.rows[0].count) || 0
         });
     } catch (error) {
         console.error(error);
@@ -206,7 +206,7 @@ const getUnreadCount = async (req, res) => {
         );
         
         res.status(200).json({ 
-            unreadCount: result.rows[0].count 
+            unreadCount: Number(result.rows[0].count) || 0
         });
     } catch (error) {
         console.error(error);
@@ -223,3 +223,5 @@ module.exports = {
     createNotification,
     getUnreadCount
 };
+
+   

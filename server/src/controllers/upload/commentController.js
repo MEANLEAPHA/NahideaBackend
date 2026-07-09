@@ -712,14 +712,15 @@ const getCommentsByPostId = async (req, res) => {
 
     const total = countRows[0].total;
 
+    const totalN = Number(total);
     res.json({
       comments: Object.values(commentsMap),
       pagination: {
         page,
         limit,
-        total,
-        total_pages: Math.ceil(total / limit),
-        has_more: offset + limit < total
+        totalN,
+        total_pages: Math.ceil(totalN / limit),
+        has_more: offset + limit < totalN
       }
     });
 
@@ -949,7 +950,7 @@ const likeComment = async (req, res) => {
             // DELETE NOTIFICATION
             // -------------------------------------
 
-            if (totalLikes === 0) {
+            if (Number(totalLikes) === 0) {
 
                 await client.query(
                     `
@@ -986,7 +987,7 @@ const likeComment = async (req, res) => {
                 // build notification text
                 let notificationContent;
 
-                if (totalLikes === 1) {
+                if (Number(totalLikes) === 1) {
 
                     notificationContent =
                         `${latestLiker.username} liked your comment`;
@@ -994,7 +995,7 @@ const likeComment = async (req, res) => {
                 } else {
 
                     notificationContent =
-                        `${latestLiker.username} and ${totalLikes - 1} others liked your comment`;
+                        `${latestLiker.username} and ${Number(totalLikes) - 1} others liked your comment`;
                 }
 
                 // update notification
@@ -1100,7 +1101,7 @@ const likeComment = async (req, res) => {
 
             let notificationContent;
 
-            if (totalLikes === 1) {
+            if (Number(totalLikes)=== 1) {
 
                 notificationContent =
                     `${currentUser.username} liked your comment`;
@@ -1108,7 +1109,7 @@ const likeComment = async (req, res) => {
             } else {
 
                 notificationContent =
-                    `${currentUser.username} and ${totalLikes - 1} other${totalLikes - 1 > 1 ? 's' : ''} liked your comment`;
+                    `${currentUser.username} and ${Number(totalLikes) - 1} other${Number(totalLikes) - 1 > 1 ? 's' : ''} liked your comment`;
             }
 
             // -------------------------------------

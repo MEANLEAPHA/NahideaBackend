@@ -288,3 +288,4 @@ const unfollowUser = async (req, res) => {
     }
 };
 module.exports = { followUser, unfollowUser, getFollowStatus };
+   

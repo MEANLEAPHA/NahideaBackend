@@ -27,7 +27,7 @@ const getMutuals= async (req, res) => {
   }
 };
 
-
+   
 
 const getAllFriends = async (req, res) => {
   try {

@@ -287,7 +287,6 @@ const forgetPassword = async (req, res) => {
       }
     }
 
-    
 
     const pinCode = Math.floor(100000 + Math.random() * 900000).toString();
 

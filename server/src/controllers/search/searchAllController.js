@@ -264,9 +264,6 @@ async function hydratePostsFromDb(ids, basePosts = null) {
 
     const qIds = questions.rows.map((q) => q.id);
 
-    const closed = qIds.length
-      ? await pool.query(`SELECT * FROM closedend WHERE question_id = ANY($1::int[])`, [qIds])
-      : { rows: [] };
     const ranges = qIds.length
       ? await pool.query(`SELECT * FROM question_range WHERE question_id = ANY($1::int[])`, [qIds])
       : { rows: [] };
@@ -301,7 +298,6 @@ async function hydratePostsFromDb(ids, basePosts = null) {
     const contentMap = new Map(contents.rows.map((c) => [c.post_id, c]));
     const confessionMap = new Map(confessions.rows.map((c) => [c.post_id, c]));
     const questionMap = new Map(questions.rows.map((q) => [q.post_id, q]));
-    const closedMap = new Map(closed.rows.map((c) => [c.question_id, c]));
     const rangeMap = new Map(ranges.rows.map((r) => [r.question_id, r]));
     const ratingMap = new Map(ratings.rows.map((r) => [r.question_id, r]));
 
