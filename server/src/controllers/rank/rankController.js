@@ -73,7 +73,7 @@ const getHallOfFame = async (req, res) => {
       `SELECT id, username, avatar_url, profession
        FROM users
        WHERE id = ANY($1::int[])`,
-      [userIds]
+      [Number(userIds)]
     );
 
     const rows = result.rows;
