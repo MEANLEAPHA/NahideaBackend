@@ -1640,7 +1640,7 @@ const getPostsByLike = async (req, res) => {
         p.created_at, p.user_id,
         u.username, u.avatar_url,
         COALESCE(c.title, cf.title, q.title) as title,
-        COALESCE(c.media_url, cf.media_url, q.media_url) as mediaSrc
+        COALESCE(c.media_url, cf.media_url, q.media_url) as mediasrc
       FROM post_likes pl
       JOIN posts p ON pl.post_id = p.id
       JOIN users u ON p.user_id = u.id
@@ -1661,7 +1661,7 @@ const getPostsByLike = async (req, res) => {
       authurPf: r.is_anonymous ? null : r.avatar_url,
       isAnonymous: r.is_anonymous,
       anonymousBg: r.anonymous_bg_color,
-      mediaSrc: r.mediaSrc,
+      mediaSrc: r.mediasrc,
       createdAt: timeAgo(r.created_at)
     }));
 
@@ -1689,7 +1689,7 @@ const getPostsByFavorite = async (req, res) => {
         p.created_at, p.user_id,
         u.username, u.avatar_url,
         COALESCE(c.title, cf.title, q.title) as title,
-        COALESCE(c.media_url, cf.media_url, q.media_url) as mediaSrc
+        COALESCE(c.media_url, cf.media_url, q.media_url) as mediasrc
       FROM post_favorites pl
       JOIN posts p ON pl.post_id = p.id
       JOIN users u ON p.user_id = u.id
@@ -1710,7 +1710,7 @@ const getPostsByFavorite = async (req, res) => {
       authurPf: r.is_anonymous ? null : r.avatar_url,
       isAnonymous: r.is_anonymous,
       anonymousBg: r.anonymous_bg_color,
-      mediaSrc: r.mediaSrc,
+      mediaSrc: r.mediasrc,
       createdAt: timeAgo(r.created_at)
     }));
 
