@@ -1829,7 +1829,7 @@ const getPostByUserId = async (req, res) => {
       GROUP BY p.id, u.id
       ORDER BY p.created_at DESC
       LIMIT $2 OFFSET $3
-    `, [targetUserId || userId, limit, offset]);
+    `, [Number(targetUserId) || userId, limit, offset]);
     const posts = postsResult.rows;
 
     if (!posts.length) {
@@ -1860,6 +1860,7 @@ const getPostByUserId = async (req, res) => {
     });
   }
 };
+
 const markQuestionSolved = async (req, res) => {
   try {
     const userId = req.user.userId;
