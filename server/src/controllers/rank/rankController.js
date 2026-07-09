@@ -80,7 +80,7 @@ const getHallOfFame = async (req, res) => {
 
     // Map results back to Redis order (preserve ranking)
     const items = topUsers.map((u, idx) => {
-      const user = rows.find(r => r.id === parseInt(u.value, 10));
+      const user = rows.find(r => Number(r.id) === parseInt(u.value, 10));
       return {
         userId: parseInt(u.value, 10),
         username: user?.username || "Unknown",
