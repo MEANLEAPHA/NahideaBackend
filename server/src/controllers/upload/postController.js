@@ -1846,8 +1846,6 @@ const getPostByUserId = async (req, res) => {
     // Attach user states (liked/favorited)
     const personalized = await attachUserStates(hydratedPosts, userId);
 
-    console.log(`USER POSTS FETCHED for user ${targetUserId}`);
-
     return res.status(200).json({
       source: "db",
       data: personalized
@@ -1913,7 +1911,6 @@ const getPostByUserIds = async (req, res) => {
     // Attach user states (liked/favorited)
     const personalized = await attachUserStates(hydratedPosts, userId);
 
-    console.log(`USER POSTS FETCHED for user ${targetUserId}`);
 
     return res.status(200).json({
       source: "db",
