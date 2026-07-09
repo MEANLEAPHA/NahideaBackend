@@ -14,6 +14,7 @@ const {
   getPostsByLike,
   getPostsByFavorite,
   getPostByUserId,
+  getPostByUserIds,
   markQuestionSolved,
   getPostsByPostId
 
@@ -50,6 +51,8 @@ router.post("/create-posts", protect,
   router.get("/get-posts/:postId", protect, getPostsByPostId);
 
   router.get("/user/:userId/posts", protect, getPostByUserId);
+
+   router.get("/user/posts", protect, getPostByUserIds);
 
   router.put("/update-post-body-content/:contentId/:postId", protect, updatePostBodyContent);
   

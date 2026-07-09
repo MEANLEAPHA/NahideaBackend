@@ -1860,6 +1860,73 @@ const getPostByUserId = async (req, res) => {
     });
   }
 };
+const getPostByUserIds = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const page = Math.max(1, Math.min(parseInt(req.query.page) || 1, 1000));
+    const limit = 25;
+    const offset = (page - 1) * limit;
+
+    // ====================================
+    // FETCH FROM DATABASE
+    // ====================================
+    const postsResult = await pool.query(`
+      SELECT
+        p.id,
+        p.post_type,
+        p.is_anonymous,
+        p.anonymous_name,
+        p.anonymous_bg_color,
+        p.likes_count,
+        p.comments_count,
+        p.answers_count,
+        p.views_count,
+        p.created_at,
+        p.status,
+        u.username,
+        u.avatar_url,
+        u.id as user_id,
+        STRING_AGG(tg.label, ',') as tags
+      FROM posts p
+      JOIN users u ON p.user_id = u.id
+      LEFT JOIN post_tags pt ON pt.post_id = p.id
+      LEFT JOIN tags tg ON tg.id = pt.tag_id
+      WHERE p.user_id = $1
+        AND p.is_anonymous = 0
+      GROUP BY p.id, u.id
+      ORDER BY p.created_at DESC
+      LIMIT $2 OFFSET $3
+    `, [userId, limit, offset]);
+    const posts = postsResult.rows;
+
+    if (!posts.length) {
+      return res.status(200).json({
+        source: "db",
+        data: []
+      });
+    }
+
+    // Hydrate posts with their specific data
+    const ids = posts.map(p => p.id);
+    const hydratedPosts = await hydratePostsFromDb(ids, posts);
+
+    // Attach user states (liked/favorited)
+    const personalized = await attachUserStates(hydratedPosts, userId);
+
+    console.log(`USER POSTS FETCHED for user ${targetUserId}`);
+
+    return res.status(200).json({
+      source: "db",
+      data: personalized
+    });
+
+  } catch (err) {
+    console.error("getPostByUserId error:", err);
+    return res.status(500).json({
+      message: "Server error"
+    });
+  }
+};
 
 const markQuestionSolved = async (req, res) => {
   try {
@@ -1933,5 +2000,6 @@ module.exports = {
   getPostByUserId,
   markQuestionSolved,
   getAllTrending,
-  getPostsByPostId
+  getPostsByPostId,
+  getPostByUserIds
 };
