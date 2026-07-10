@@ -46,13 +46,15 @@ router.post("/create-posts", protect,
 
   router.get("/questions/unsolved", protect, getUnsolvedQuestions);
 
+    router.get("/user/yourposts", protect, getPostByUserIds);
+
   // router.get("/get-post/:id", protect, getPostsById);
 
   router.get("/get-posts/:postId", protect, getPostsByPostId);
 
   router.get("/user/:userId/posts", protect, getPostByUserIds);
 
-   router.get("/user/posts", protect, getPostByUserIds);
+ 
 
   router.put("/update-post-body-content/:contentId/:postId", protect, updatePostBodyContent);
   
