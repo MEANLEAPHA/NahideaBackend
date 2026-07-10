@@ -109,4 +109,86 @@ const getTrendingPost = async (req, res) => {
    }
 }
 
-module.exports = { recordLogin, getHallOfFame };
+
+
+const getCurrentMonthKey = () => {
+  const now = new Date();
+  return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
+};
+
+const getMyRanking = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const redisKey = `hof:month:${getCurrentMonthKey()}`;
+
+    const zeroBasedRank = await ranking.zRank(redisKey, userId.toString(), { REV: true });
+    const score = await ranking.zScore(redisKey, userId.toString());
+
+    if (zeroBasedRank === null || score === null) {
+      return res.status(200).json({
+        success: true,
+        rank: null,
+        score: 0,
+        badgeTier: null,
+      });
+    }
+
+    const rank = zeroBasedRank + 1;
+
+    return res.status(200).json({
+      success: true,
+      rank,
+      score: Number(score),
+      badgeTier: rank <= 10 ? rank : null,
+    });
+  } catch (err) {
+    console.error("Error fetching user ranking:", err.message);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+};
+
+
+const getLeaderboard = async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50); // cap at 50
+    const redisKey = `hof:month:${getCurrentMonthKey()}`;
+
+    const topUsers = await ranking.zRangeWithScores(redisKey, 0, limit - 1, { REV: true });
+
+    if (!topUsers.length) {
+      return res.status(200).json({ success: true, leaderboard: [] });
+    }
+
+    const userIds = topUsers.map((u) => parseInt(u.value, 10));
+
+    const result = await pool.query(
+      `SELECT id, username, avatar_url
+       FROM users
+       WHERE id = ANY($1::int[])`,
+      [userIds]
+    );
+    const rows = result.rows;
+
+    const leaderboard = topUsers.map((entry, i) => {
+      const userId = parseInt(entry.value, 10);
+      const user = rows.find((r) => Number(r.id) === userId);
+
+      return {
+        rank: i + 1,
+        userId,
+        username: user?.username || "Unknown",
+        avatarUrl: user?.avatar_url || null,
+        score: Number(entry.score),
+        badgeTier: i + 1 <= 10 ? i + 1 : null,
+      };
+    });
+
+    return res.status(200).json({ success: true, leaderboard });
+  } catch (err) {
+    console.error("Error fetching leaderboard:", err.message);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+};
+
+
+module.exports = { recordLogin, getHallOfFame, getMyRanking, getLeaderboard };

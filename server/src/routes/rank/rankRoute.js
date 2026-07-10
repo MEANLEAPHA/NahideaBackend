@@ -5,13 +5,14 @@ const { protect } = require("../../middleware/authMiddleware");
 const {
     recordLogin,
     getHallOfFame,
-    // getTrendingPost
+    getMyRanking,
+    getLeaderboard          
 } = require("../../controllers/rank/rankController");
 
-
+router.get("/ranking/me", protect, getMyRanking);
+router.get("/leaderboard", getLeaderboard);
 router.post("/record-login", protect, recordLogin);
-
 router.get("/hof", getHallOfFame);
-// router.get("/trending-post", getTrendingPost);
+
 
 module.exports = router;
