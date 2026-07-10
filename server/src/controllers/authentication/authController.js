@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const pool = require('../../config/db'); 
+const { ranking } = require("../../config/redisClient"); 
 require('dotenv').config();
 const { sendVerifyCodeEmail, sendResendPinEmail, sendVerifyCodeForgetPasswordEmail} = require('../../service/mail/email');
 const { createToken } = require('../../service/token/jwtHelp');
@@ -552,111 +553,6 @@ const getUserInfo = async (req, res) => {
   }
 };
 
-// const updateUser = async (req, res) => {
-//   try {
-//     const {
-//       profession,
-//       location,
-//       nickname,
-//       userId,
-//       email,
-//       bio,
-//       avatarType,
-//     } = req.body;
-
-//     let avatarUrl = null;
-//     let bannerUrl = null;
-
-
-//     if (req.files?.banner) {
-//       try {
-//         const uploadedUrl = await convertAndUpload(req.files.banner[0], "banner");
-//         bannerUrl = uploadedUrl.url;
-//       } catch (uploadError) {
-//         console.error("Banner upload error:", uploadError);
-//         return res.status(500).json({
-//           success: false,
-//           message: "Failed to upload banner image",
-//         });
-//       }
-//     } else if (req.body.banner) {
-//       // No new file — frontend sent back the existing banner URL as a plain string, keep it
-//       bannerUrl = req.body.banner;
-//     }
-
-//     // Handle avatar
-//     if (avatarType === 'file' && req.files?.avatar) {
-//       try {
-//         const uploadedUrl = await convertAndUpload(req.files?.avatar?.[0], "avatar");
-//         avatarUrl = uploadedUrl.url;
-//       } catch (uploadError) {
-//         console.error("Avatar upload error:", uploadError);
-//         return res.status(500).json({
-//           success: false,
-//           message: "Failed to upload avatar image",
-//         });
-//       }
-//     } else if (avatarType === 'url' && req.body.avatar) {
-//       avatarUrl = req.body.avatar;
-//     }
-
-//     // VALIDATION
-//     if (!profession || !location || !nickname || !userId || !email || !bio) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Missing required fields",
-//       });
-//     }
-
-//     // Check for duplicate nickname
-//     const nicknameResult = await pool.query(
-//       `
-//         SELECT id
-//         FROM users
-//         WHERE nickname = $1
-//         AND id != $2
-//         LIMIT 1
-//       `,
-//       [nickname, userId]
-//     );
-
-//     if (nicknameResult.rows.length > 0) {
-//       return res.status(409).json({
-//         success: false,
-//         message: "Nickname already taken",
-//       });
-//     }
-
-//     // UPDATE USER
-//     await pool.query(
-//       `
-//       UPDATE users
-//       SET
-//         avatar_url = $1,
-//         banner_url = $2,
-//         profession = $3,
-//         work_place = $4,
-//         nickname = $5,
-//         bio = $6,
-//         updated_at = NOW()
-//       WHERE id = $7
-//       AND email = $8
-//       `,
-//       [avatarUrl, bannerUrl, profession, location, nickname, bio, parseInt(userId), email]
-//     );
-
-//     console.log("Profile updated successfully");
-//     return res.status(200).json({
-//       message: "Profile updated successfully",
-//     });
-    
-//   } catch (err) {
-//     console.log(err.message);
-//     return res.status(500).json({
-//       message: "Internal server error",
-//     });
-//   }
-// };
 const updateUser = async (req, res) => {
   try {
     const {
@@ -767,6 +663,56 @@ const updateUser = async (req, res) => {
     });
   }
 };
+// const getUserInfoById = async (req, res) => {
+//   try {
+//     const userId = req.params.userId;
+
+//     const result = await pool.query(
+//       `
+//       SELECT 
+//         u.username,
+//         u.avatar_url,
+//         u.id,
+//         u.nickname,
+//         u.banner_url,
+//         u.profession,
+//         u.work_place,
+//         u.bio,
+//         u.created_at,
+//         u.followers_count,
+//         u.following_count,
+//         COUNT(p.id) as post_count
+//       FROM users u
+//       LEFT JOIN posts p ON u.id = p.user_id
+//       WHERE u.id = $1
+//       GROUP BY u.id
+//       `,
+//       [userId]
+//     );
+
+//     if (!result.rows.length) {
+//       return res.status(404).json({
+//         message: "User not found"
+//       });
+//     }
+
+//     return res.status(200).json({
+//       userData: result.rows[0]
+//     });
+
+//   } catch (err) {
+//     console.error("Error in getUserInfo:", err);
+//     return res.status(500).json({
+//       message: "Server error"
+//     });
+//   }
+// };
+
+const getCurrentMonthKey = () => {
+  const now = new Date();
+  return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
+};
+
 const getUserInfoById = async (req, res) => {
   try {
     const userId = req.params.userId;
@@ -800,8 +746,32 @@ const getUserInfoById = async (req, res) => {
       });
     }
 
+    // Fetch THIS profile's rank/score from the live Redis leaderboard —
+    // scoped to userId (the profile being viewed), not req.user.userId (the logged-in viewer)
+    const redisKey = `hof:month:${getCurrentMonthKey()}`;
+
+    const [totalMembers, ascendingRank, score] = await Promise.all([
+      ranking.zCard(redisKey),
+      ranking.zRank(redisKey, userId.toString()),
+      ranking.zScore(redisKey, userId.toString()),
+    ]);
+
+    let rank = null;
+    let badgeTier = null;
+
+    if (ascendingRank !== null && score !== null) {
+      const descendingRankZeroBased = totalMembers - 1 - ascendingRank;
+      rank = descendingRankZeroBased + 1;
+      badgeTier = rank <= 10 ? rank : null;
+    }
+
     return res.status(200).json({
-      userData: result.rows[0]
+      userData: {
+        ...result.rows[0],
+        rank,
+        score: score !== null ? Number(score) : 0,
+        badgeTier,
+      }
     });
 
   } catch (err) {
