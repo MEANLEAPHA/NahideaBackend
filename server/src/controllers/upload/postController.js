@@ -1113,7 +1113,16 @@ const likePost = async (req, res) => {
 
     await connection.query('BEGIN');
     const userId = req.user.userId;
-    const username = 'test';
+
+    const getUserName = await connection.query(
+      `
+      SELECT username
+      FROM users
+      WHERE id = $1
+      `,
+      [userId]
+    )
+    const username = getUserName.rows[0].username;
 
     const postId = req.params.postId;
     const ownerId = req.params.ownerId;

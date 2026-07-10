@@ -54,7 +54,6 @@ const login = async (req, res) => {
     return res.status(200).json({
       message: "Login Successfully",
       token,
-    //   timezone: user.timezone || "UTC"
     });
 
   } catch (error) {
