@@ -778,6 +778,7 @@ const getUserInfoById = async (req, res) => {
         u.avatar_url,
         u.id,
         u.nickname,
+        u.banner_url,
         u.profession,
         u.work_place,
         u.bio,

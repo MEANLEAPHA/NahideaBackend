@@ -121,10 +121,13 @@ const getMyRanking = async (req, res) => {
     const userId = req.user.userId;
     const redisKey = `hof:month:${getCurrentMonthKey()}`;
 
-    const zeroBasedRank = await ranking.zRank(redisKey, userId.toString(), { REV: true });
-    const score = await ranking.zScore(redisKey, userId.toString());
+    const [totalMembers, ascendingRank, score] = await Promise.all([
+      ranking.zCard(redisKey),
+      ranking.zRank(redisKey, userId.toString()), // no REV — plain ascending rank
+      ranking.zScore(redisKey, userId.toString()),
+    ]);
 
-    if (zeroBasedRank === null || score === null) {
+    if (ascendingRank === null || score === null) {
       return res.status(200).json({
         success: true,
         rank: null,
@@ -133,7 +136,8 @@ const getMyRanking = async (req, res) => {
       });
     }
 
-    const rank = zeroBasedRank + 1;
+    const descendingRankZeroBased = totalMembers - 1 - ascendingRank;
+    const rank = descendingRankZeroBased + 1; // human-readable, 1 = top
 
     return res.status(200).json({
       success: true,
