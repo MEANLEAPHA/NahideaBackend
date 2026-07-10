@@ -1890,7 +1890,6 @@ const getPostByUserIds = async (req, res) => {
       LEFT JOIN post_tags pt ON pt.post_id = p.id
       LEFT JOIN tags tg ON tg.id = pt.tag_id
       WHERE p.user_id = $1
-        AND p.is_anonymous = 0
       GROUP BY p.id, u.id
       ORDER BY p.created_at DESC
       LIMIT $2 OFFSET $3
