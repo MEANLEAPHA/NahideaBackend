@@ -1897,10 +1897,24 @@ const getPostByUserIds = async (req, res) => {
     `, [userId, limit, offset]);
     const posts = postsResult.rows;
 
+    // Get total count for pagination
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as total 
+       FROM posts p 
+       WHERE p.user_id = $1 AND p.is_anonymous = 0`,
+      [userId]
+    );
+    const totalPosts = parseInt(countResult.rows[0].total);
+    const totalPages = Math.ceil(totalPosts / limit);
+    const hasMore = page < totalPages;
+
     if (!posts.length) {
       return res.status(200).json({
         source: "db",
-        data: []
+        data: [],
+        hasMore: false,
+        totalPages: totalPages,
+        currentPage: page
       });
     }
 
@@ -1911,10 +1925,12 @@ const getPostByUserIds = async (req, res) => {
     // Attach user states (liked/favorited)
     const personalized = await attachUserStates(hydratedPosts, userId);
 
-
     return res.status(200).json({
-      source: "db",
-      data: personalized
+      data: personalized,
+      hasMore: hasMore,
+      totalPages: totalPages,
+      currentPage: page,
+      total: totalPosts
     });
 
   } catch (err) {
@@ -1924,7 +1940,6 @@ const getPostByUserIds = async (req, res) => {
     });
   }
 };
-
 const markQuestionSolved = async (req, res) => {
   try {
     const userId = req.user.userId;

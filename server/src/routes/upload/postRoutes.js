@@ -52,7 +52,7 @@ router.post("/create-posts", protect,
 
   router.get("/get-posts/:postId", protect, getPostsByPostId);
 
-  router.get("/user/:userId/posts", protect, getPostByUserIds);
+  router.get("/user/:userId/posts", protect, getPostByUserId);
 
  
 
