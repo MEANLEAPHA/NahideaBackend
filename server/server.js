@@ -79,12 +79,10 @@ io.on("connection", (socket) => {
   );
 
   socket.join(`user_${userId}`);
-  console.log(`User ${userId} joined room user_${userId}`);
 
   // Also need to join conversation rooms when user opens chat to receive edits/deletes
   socket.on('join_conversation', ({ conversationId }) => {
     socket.join(`conv_${conversationId}`);
-    console.log(`User ${userId} joined room conv_${conversationId}`);
   });
 
   socket.on('send_message', async (data) => {
@@ -113,7 +111,7 @@ io.on("connection", (socket) => {
       const result = await pool.query(
         `INSERT INTO messages (conversation_id, sender_id, content, gif_id, gif_url, reply_to_id, status, created_at) 
          VALUES ($1, $2, $3, $4, $5, $6, 'sent', NOW()) RETURNING id`,
-        [conversationId, senderId, content || null, gifId || null, gifUrl || null, Number(replyToId) || null]
+        [conversationId, senderId, content || null, gifId || null, gifUrl || null, replyToId || null]
       );
       const messageId = result.rows[0].id;
 
@@ -121,15 +119,23 @@ io.on("connection", (socket) => {
       let replyPreview = null;
       let replyGifPreview = null;
       if (replyToId) {
-        const replyResult = await pool.query(
-          'SELECT content, gif_url FROM messages WHERE id = $1',
-          [Number(replyToId)]
-        );
-        if (replyResult.rows.length) {
-          replyPreview = replyResult.rows[0].content || (replyResult.rows[0].gif_url ? '[GIF]' : null);
-          replyGifPreview = replyResult.rows[0].gif_url || null;
+          const replyResult = await pool.query(
+            `SELECT 
+              CASE WHEN deleted_by_sender = 1 THEN 'Original message deleted' ELSE content END AS content,
+              CASE WHEN deleted_by_sender = 1 THEN NULL ELSE gif_url END AS gif_url,
+              deleted_by_sender
+            FROM messages 
+            WHERE id = $1`,
+            [replyToId]
+          );
+          if (replyResult.rows.length) {
+            const replyRow = replyResult.rows[0];
+            replyPreview = replyRow.deleted_by_sender === 1
+              ? 'Original message deleted'
+              : (replyRow.content || (replyRow.gif_url ? '[GIF]' : null));
+            replyGifPreview = replyRow.deleted_by_sender === 1 ? null : replyRow.gif_url;
+          }
         }
-      }
 
       // Build message object
       const newMessage = {
@@ -146,7 +152,7 @@ io.on("connection", (socket) => {
         deleted_by_sender: 0,
         deleted_by_recipient: 0,
         is_edited: 0,
-        reply_to_id: Number(replyToId) || null,
+        reply_to_id: replyToId || null,
         reply_preview: replyPreview,
         reply_gif_preview: replyGifPreview,
       };
