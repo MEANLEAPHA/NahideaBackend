@@ -123,7 +123,7 @@ io.on("connection", (socket) => {
       if (replyToId) {
         const replyResult = await pool.query(
           'SELECT content, gif_url FROM messages WHERE id = $1',
-          [replyToId]
+          [Number(replyToId)]
         );
         if (replyResult.rows.length) {
           replyPreview = replyResult.rows[0].content || (replyResult.rows[0].gif_url ? '[GIF]' : null);
@@ -146,7 +146,7 @@ io.on("connection", (socket) => {
         deleted_by_sender: 0,
         deleted_by_recipient: 0,
         is_edited: 0,
-        reply_to_id: replyToId || null,
+        reply_to_id: Number(replyToId) || null,
         reply_preview: replyPreview,
         reply_gif_preview: replyGifPreview,
       };
