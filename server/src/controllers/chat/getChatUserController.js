@@ -242,7 +242,6 @@ const getMessage = async (req, res) => {
   }
 };
 
-const { sameId } = require("../../utils/id"); // adjust path to match your project
 
 const deleteConversation = async (req, res) => {
   const currentUserId = req.user.userId;
