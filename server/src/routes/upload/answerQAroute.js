@@ -18,10 +18,6 @@ router.post("/answers/answer-qa/:postId/:questionId/:questionType", protect, ans
 router.get("/answers/get-question/:questionId/:questionType", getQuestionById);
 router.get("/answers/check-answered/:questionId", protect, checkAlreadyAnswered);
 
-// router.post("/answers/answer-qa/:postId/:questionId/:questionType", protect, answerQA);
-// router.get("/answers/get-question/:questionId/:questionType", getQuestionById);
-
-// Public routes (with auth for vote tracking)
 router.get('/answers/question/:questionId', protect, getAllAnswersByQuestionId);
 router.get('/answers/question/:questionId/popular', protect, getMostPopularAnswer);
 router.get('/answers/:answerId', protect, getAnswerById);

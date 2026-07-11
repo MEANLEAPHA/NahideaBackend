@@ -6,11 +6,11 @@ const {
     recordLogin,
     getHallOfFame,
     getMyRanking,
-    getLeaderboard          
+    getRankingByUserId, 
 } = require("../../controllers/rank/rankController");
 
 router.get("/ranking/me", protect, getMyRanking);
-router.get("/leaderboard", getLeaderboard);
+router.get("/ranking/user/:userId", protect, getRankingByUserId);
 router.post("/record-login", protect, recordLogin);
 router.get("/hof", getHallOfFame);
 

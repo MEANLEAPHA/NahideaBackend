@@ -151,48 +151,46 @@ const getMyRanking = async (req, res) => {
   }
 };
 
-
-const getLeaderboard = async (req, res) => {
+const getRankingByUserId = async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50); // cap at 50
-    const redisKey = `hof:month:${getCurrentMonthKey()}`;
+    const { userId } = req.params;
 
-    const topUsers = await ranking.zRangeWithScores(redisKey, 0, limit - 1, { REV: true });
-
-    if (!topUsers.length) {
-      return res.status(200).json({ success: true, leaderboard: [] });
+    if (!userId) {
+      return res.status(400).json({ success: false, error: "userId is required" });
     }
 
-    const userIds = topUsers.map((u) => parseInt(u.value, 10));
+    const redisKey = `hof:month:${getCurrentMonthKey()}`;
 
-    const result = await pool.query(
-      `SELECT id, username, avatar_url
-       FROM users
-       WHERE id = ANY($1::int[])`,
-      [userIds]
-    );
-    const rows = result.rows;
+    const [totalMembers, ascendingRank, score] = await Promise.all([
+      ranking.zCard(redisKey),
+      ranking.zRank(redisKey, userId.toString()),
+      ranking.zScore(redisKey, userId.toString()),
+    ]);
 
-    const leaderboard = topUsers.map((entry, i) => {
-      const userId = parseInt(entry.value, 10);
-      const user = rows.find((r) => Number(r.id) === userId);
+    if (ascendingRank === null || score === null) {
+      return res.status(200).json({
+        success: true,
+        userId: parseInt(userId, 10),
+        rank: null,
+        score: 0,
+        badgeTier: null,
+      });
+    }
 
-      return {
-        rank: i + 1,
-        userId,
-        username: user?.username || "Unknown",
-        avatarUrl: user?.avatar_url || null,
-        score: Number(entry.score),
-        badgeTier: i + 1 <= 10 ? i + 1 : null,
-      };
+    const descendingRankZeroBased = totalMembers - 1 - ascendingRank;
+    const rank = descendingRankZeroBased + 1;
+
+    return res.status(200).json({
+      success: true,
+      userId: parseInt(userId, 10),
+      rank,
+      score: Number(score),
+      badgeTier: rank <= 10 ? rank : null,
     });
-
-    return res.status(200).json({ success: true, leaderboard });
   } catch (err) {
-    console.error("Error fetching leaderboard:", err.message);
+    console.error("Error fetching ranking by userId:", err.message);
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 };
 
-
-module.exports = { recordLogin, getHallOfFame, getMyRanking, getLeaderboard };
+module.exports = { recordLogin, getHallOfFame, getMyRanking, getRankingByUserId };
