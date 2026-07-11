@@ -4,7 +4,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
-const db = require("./src/config/db");
+const pool = require("./src/config/db");
 
 const { Server } = require("socket.io");
 
