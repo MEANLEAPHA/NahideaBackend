@@ -1,5 +1,5 @@
 const db = require("../../config/db"); // pg Pool instance
-
+const {sameId} = require("../../util/sameId");
 const getChatUser = async (req, res) => {
   const userId = req.user.userId;
   try {
@@ -133,7 +133,7 @@ const openConversation = async (req, res) => {
     if (convRows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
 
     const conv = convRows[0];
-    if (conv.user1_id === currentUserId) {
+    if (sameId(conv.user1_id === currentUserId)) {
       await db.query('UPDATE conversations SET user1_deleted_at = NULL WHERE id = $1', [conv.id]);
     } else {
       await db.query('UPDATE conversations SET user2_deleted_at = NULL WHERE id = $1', [conv.id]);
@@ -254,7 +254,7 @@ const deleteConversation = async (req,res) => {
         const convRows = convResult.rows;
         if (convRows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
         const conv = convRows[0];
-        if (conv.user1_id === currentUserId) {
+        if (sameId(conv.user1_id === currentUserId)) {
             await db.query('UPDATE conversations SET user1_deleted_at = NOW() WHERE id = $1', [conv.id]);
         } else {
             await db.query('UPDATE conversations SET user2_deleted_at = NOW() WHERE id = $1', [conv.id]);
@@ -280,7 +280,7 @@ const deleteMessage = async (req, res) => {
         const rows = result.rows;
         if (rows.length === 0) return res.status(404).json({ error: 'Message not found' });
         const msg = rows[0];
-        if (msg.sender_id === userId) {
+        if (sameId(msg.sender_id, userId)) {
             await db.query('UPDATE messages SET deleted_by_sender = 1 WHERE id = $1', [messageId]);
         } else {
             await db.query('UPDATE messages SET deleted_by_recipient = 1 WHERE id = $1', [messageId]);

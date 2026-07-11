@@ -7,6 +7,7 @@ const http = require("http");
 const pool = require("./src/config/db");
 
 const { Server } = require("socket.io");
+const {sameId} = require("./src/util/sameId");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -163,7 +164,7 @@ io.on("connection", (socket) => {
     try {
       const rows = await pool.query('SELECT sender_id, conversation_id FROM messages WHERE id = $1', [messageId]);
       if (rows.rows.length === 0) return socket.emit('error', 'Message not found');
-      if (rows.rows[0].sender_id !== parseInt(userId)) return socket.emit('error', 'Not your message');
+      if (!sameId(rows.rows[0].sender_id, userId)) return socket.emit('error', 'Not your message');
       
       await pool.query(
         `
@@ -247,7 +248,7 @@ io.on("connection", (socket) => {
       const rows = await pool.query('SELECT sender_id, conversation_id, deleted_by_sender, deleted_by_recipient FROM messages WHERE id = $1', [messageId]);
       if (rows.rows.length === 0) return;
       const msg = rows.rows[0];
-      const isSender = msg.sender_id === parseInt(userId);
+      const isSender = sameId(msg.sender_id, userId);
       if (isSender) {
         await pool.query('UPDATE messages SET deleted_by_sender = 1 WHERE id = $1', [messageId]);
         const replyRows = await pool.query(
@@ -328,7 +329,6 @@ io.on("connection", (socket) => {
 
   // Mark message as seen (triggered when user opens chat)
   socket.on('mark_seen', async ({ conversationId, messageIds }) => {
-    console.log('mark_seen received for conversation', conversationId);
     try {
       await pool.query(
         `UPDATE messages SET status = 'seen' 
@@ -350,7 +350,6 @@ io.on("connection", (socket) => {
 
   // Mark message as delivered
   socket.on('message_delivered', async ({ messageId }) => {
-    console.log('message_delivered received for', messageId);
     try {
       await pool.query(`UPDATE messages SET status = 'delivered' WHERE id = $1 AND status = 'sent'`, [messageId]);
       const rows = await pool.query('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
@@ -363,9 +362,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on('typing', ({ toUserId, isTyping }) => {
-    console.log(`🔵 Received typing: from ${userId} to ${toUserId}, isTyping=${isTyping}`);
     socket.to(`user_${toUserId}`).emit('user_typing', { userId, isTyping });
-    console.log(`🟢 Emitted user_typing to user_${toUserId}`);
   });
 
   /*Disconnect*/
