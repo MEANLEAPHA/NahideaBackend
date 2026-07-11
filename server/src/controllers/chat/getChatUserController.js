@@ -297,7 +297,7 @@ const deleteMessage = async (req, res) => {
 }
 
 const reportConversation = async (req, res) => {
-    const  conversationId = req.params;
+    const  {conversationId} = req.params;
     const userId = req.user.userId;
      const {reason, details } = req.body;
 

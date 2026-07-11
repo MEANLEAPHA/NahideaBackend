@@ -352,7 +352,7 @@ io.on("connection", (socket) => {
   socket.on('message_delivered', async ({ messageId }) => {
     console.log('message_delivered received for', messageId);
     try {
-      await pool.query('UPDATE messages SET status = "delivered" WHERE id = $1 AND status = "sent"', [messageId]);
+      await pool.query(`UPDATE messages SET status = 'delivered' WHERE id = $1 AND status = 'sent'`, [messageId]);
       const rows = await pool.query('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
       if (rows.rows.length) {
         io.to(`user_${rows.rows[0].sender_id}`).emit('message_status_updated', { messageId, status: 'delivered' });
