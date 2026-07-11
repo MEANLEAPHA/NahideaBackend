@@ -113,7 +113,7 @@ io.on("connection", (socket) => {
       const result = await pool.query(
         `INSERT INTO messages (conversation_id, sender_id, content, gif_id, gif_url, reply_to_id, status, created_at) 
          VALUES ($1, $2, $3, $4, $5, $6, 'sent', NOW()) RETURNING id`,
-        [conversationId, senderId, content || null, gifId || null, gifUrl || null, replyToId || null]
+        [conversationId, senderId, content || null, gifId || null, gifUrl || null, Number(replyToId) || null]
       );
       const messageId = result.rows[0].id;
 
