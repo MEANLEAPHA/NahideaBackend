@@ -242,34 +242,41 @@ const getMessage = async (req, res) => {
   }
 };
 
-const deleteConversation = async (req,res) => {
-    const currentUserId = req.user.userId;
-    const otherUserId = req.params.userId;
-    try {
-        const convResult = await db.query(
-            `SELECT id, user1_id, user2_id, user1_deleted_at, user2_deleted_at FROM conversations 
-             WHERE (user1_id = $1 AND user2_id = $2) OR (user1_id = $3 AND user2_id = $4)`,
-            [currentUserId, otherUserId, otherUserId, currentUserId]
-        );
-        const convRows = convResult.rows;
-        if (convRows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
-        const conv = convRows[0];
-        if (sameId(conv.user1_id === currentUserId)) {
-            await db.query('UPDATE conversations SET user1_deleted_at = NOW() WHERE id = $1', [conv.id]);
-        } else {
-            await db.query('UPDATE conversations SET user2_deleted_at = NOW() WHERE id = $1', [conv.id]);
-        }
-        const updatedResult = await db.query('SELECT * FROM conversations WHERE id = $1', [conv.id]);
-        const u = updatedResult.rows[0];
-        if (u.user1_deleted_at && u.user2_deleted_at) {
-            await db.query('DELETE FROM messages WHERE conversation_id = $1', [conv.id]);
-            // await db.query('DELETE FROM conversations WHERE id = $1', [conv.id]);
-        }
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+const { sameId } = require("../../utils/id"); // adjust path to match your project
+
+const deleteConversation = async (req, res) => {
+  const currentUserId = req.user.userId;
+  const otherUserId = req.params.userId;
+  try {
+    const convResult = await db.query(
+      `SELECT id, user1_id, user2_id, user1_deleted_at, user2_deleted_at FROM conversations 
+       WHERE (user1_id = $1 AND user2_id = $2) OR (user1_id = $3 AND user2_id = $4)`,
+      [currentUserId, otherUserId, otherUserId, currentUserId]
+    );
+    const convRows = convResult.rows;
+    if (convRows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+
+    const conv = convRows[0];
+
+    if (sameId(conv.user1_id, currentUserId)) {
+      await db.query('UPDATE conversations SET user1_deleted_at = NOW() WHERE id = $1', [conv.id]);
+    } else {
+      await db.query('UPDATE conversations SET user2_deleted_at = NOW() WHERE id = $1', [conv.id]);
     }
-}
+
+    const updatedResult = await db.query('SELECT * FROM conversations WHERE id = $1', [conv.id]);
+    const u = updatedResult.rows[0];
+
+    if (u.user1_deleted_at && u.user2_deleted_at) {
+      await db.query('DELETE FROM messages WHERE conversation_id = $1', [conv.id]);
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[deleteConversation] FAILED:', { error: err.message, code: err.code, detail: err.detail });
+    res.status(500).json({ error: err.message });
+  }
+};
 
 
 const deleteMessage = async (req, res) => {

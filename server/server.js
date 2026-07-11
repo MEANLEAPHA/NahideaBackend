@@ -90,8 +90,6 @@ io.on("connection", (socket) => {
   const senderId = parseInt(userId);
   const receiverId = parseInt(toUserId);
 
-  // Log the incoming payload immediately — if something crashes below,
-  // you'll at least know exactly what request triggered it.
   console.log('[send_message] incoming:', { senderId, receiverId, content, gifId, gifUrl, replyToId });
 
   try {
@@ -138,8 +136,6 @@ io.on("connection", (socket) => {
         );
 
         if (replyResult.rows.length === 0) {
-          // This is a real, silent case worth knowing about: the message
-          // being replied to doesn't exist (bad id from client, race condition, etc.)
           console.warn('[send_message] replyToId not found in DB:', replyToId);
         } else {
           const replyRow = replyResult.rows[0];
@@ -149,8 +145,6 @@ io.on("connection", (socket) => {
           replyGifPreview = replyRow.deleted_by_sender === 1 ? null : replyRow.gif_url;
         }
       } catch (replyErr) {
-        // Don't let a broken reply lookup kill the whole message send —
-        // but DO surface it loudly so you know it happened.
         console.error('[send_message] reply preview lookup failed:', replyErr);
       }
     }
@@ -179,14 +173,14 @@ io.on("connection", (socket) => {
     io.to(`user_${receiverId}`).emit('new_message', newMessage);
     socket.emit('message_sent', newMessage);
 
-    console.log('[send_message] success:', messageId);
+
   } catch (err) {
-    // Full error, not just err.message — this is what was hiding everything.
+  
     console.error('[send_message] FAILED:', {
       error: err.message,
       stack: err.stack,
-      code: err.code,       // pg error code, e.g. '23503' for FK violation, '22P02' for invalid input syntax
-      detail: err.detail,   // pg often includes a human-readable detail string
+      code: err.code,      
+      detail: err.detail,  
       payload: { senderId, receiverId, content, gifId, gifUrl, replyToId },
     });
 
