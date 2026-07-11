@@ -126,14 +126,14 @@ const openConversation = async (req, res) => {
       `SELECT id, user1_id, user2_id, user1_deleted_at, user2_deleted_at 
        FROM conversations 
        WHERE (user1_id = $1 AND user2_id = $2) OR (user1_id = $3 AND user2_id = $4)`,
-      [currentUserId, otherUserId, otherUserId, currentUserId]
+      [currentUserId, Number(otherUserId), Number(otherUserId), currentUserId]
     );
     const convRows = convResult.rows;
 
     if (convRows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
 
     const conv = convRows[0];
-    if (sameId(conv.user1_id === currentUserId)) {
+    if (sameId(conv.user1_id, currentUserId)) {
       await db.query('UPDATE conversations SET user1_deleted_at = NULL WHERE id = $1', [conv.id]);
     } else {
       await db.query('UPDATE conversations SET user2_deleted_at = NULL WHERE id = $1', [conv.id]);
@@ -302,26 +302,7 @@ const deleteMessage = async (req, res) => {
     }
 }
 
-const reportConversation = async (req, res) => {
-    const  {conversationId} = req.params;
-    const userId = req.user.userId;
-     const {reason, details } = req.body;
 
-  if (!conversationId || !reason) {
-    return res.status(400).json({ error: 'conversation_id and reason are required' });
-  }
-
-  try {
-    await db.query(
-      'INSERT INTO conversation_reports (reporter_id, conversation_id, reason) VALUES ($1, $2, $3)',
-      [userId, conversationId, reason, details || null]
-    );
-    res.status(201).json({ message: 'Report submitted successfully' });
-  } catch (err) {
-    console.error('Error saving report:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-}
 
 const reportMessage = async (req,res)=>{
      const { messageId, reason } = req.body;
@@ -444,4 +425,4 @@ const checkConversation = async (req, res) => {
   });
 };
 module.exports = { getChatUser, getMessage, deleteConversation, deleteMessage, reportMessage,checkConversation,
-   searchGif, reportConversation, getChatSpamUser, getChatArchivedUser, openConversation, getUnreadChatCount, searchGifFav };
+   searchGif, getChatSpamUser, getChatArchivedUser, openConversation, getUnreadChatCount, searchGifFav };
