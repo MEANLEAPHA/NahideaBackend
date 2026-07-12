@@ -948,16 +948,22 @@ async function hydratePostsFromDb(ids, basePosts = null) {
     questions.map(q => [q.post_id, q])
   );
 
-  // const closedMap = new Map(
-  //   closed.map(c => [c.question_id, c])
+
+  // const rangeMap = new Map(
+  //   ranges.map(r => [r.question_id, r])
   // );
 
+  // const ratingMap = new Map(
+  //   ratings.map(r => [r.question_id, r])
+  // );
+
+  // Use this:
   const rangeMap = new Map(
-    ranges.map(r => [r.question_id, r])
+    ranges.map(r => [r.id, r])  // Your query aliased question_id AS id
   );
 
   const ratingMap = new Map(
-    ratings.map(r => [r.question_id, r])
+    ratings.map(r => [r.id, r])  // Your query aliased question_id AS id
   );
 
   // ====================================
@@ -2011,4 +2017,5 @@ module.exports = {
   getAllTrending,
   getPostsByPostId,
   getPostByUserIds
+
 };
