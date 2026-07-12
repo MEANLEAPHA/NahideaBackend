@@ -362,25 +362,50 @@ io.on("connection", (socket) => {
   });
 
   // Mark message as seen (triggered when user opens chat)
+  // socket.on('mark_seen', async ({ conversationId, messageIds }) => {
+  //   try {
+  //     await pool.query(
+  //       `UPDATE messages SET status = 'seen' 
+  //        WHERE conversation_id = $1 AND sender_id != $2 AND status != 'seen'`,
+  //       [conversationId, userId]
+  //     );
+  //     // Notify sender that messages were seen
+  //     const senders = await pool.query(
+  //       `SELECT DISTINCT sender_id FROM messages WHERE conversation_id = $1 AND sender_id != $2`,
+  //       [conversationId, userId]
+  //     );
+  //     for (const row of senders.rows) {
+  //       io.to(`user_${row.sender_id}`).emit('messages_seen', { conversationId, seenBy: userId });
+  //     }
+  //   } catch (err) {
+  //     console.error(err);
+  //   }
+  // });
+
   socket.on('mark_seen', async ({ conversationId, messageIds }) => {
-    try {
-      await pool.query(
-        `UPDATE messages SET status = 'seen' 
-         WHERE conversation_id = $1 AND sender_id != $2 AND status != 'seen'`,
-        [conversationId, userId]
-      );
-      // Notify sender that messages were seen
-      const senders = await pool.query(
-        `SELECT DISTINCT sender_id FROM messages WHERE conversation_id = $1 AND sender_id != $2`,
-        [conversationId, userId]
-      );
-      for (const row of senders.rows) {
-        io.to(`user_${row.sender_id}`).emit('messages_seen', { conversationId, seenBy: userId });
-      }
-    } catch (err) {
-      console.error(err);
+  console.log('[CP-MS1 - backend] mark_seen received, conversationId:', conversationId, 'typeof:', typeof conversationId, 'from userId:', userId);
+
+  try {
+    const updateResult = await pool.query(
+      `UPDATE messages SET status = 'seen' 
+       WHERE conversation_id = $1 AND sender_id != $2 AND status != 'seen'`,
+      [conversationId, userId]
+    );
+    console.log('[CP-MS2 - backend] mark_seen rows affected:', updateResult.rowCount);
+
+    const senders = await pool.query(
+      `SELECT DISTINCT sender_id FROM messages WHERE conversation_id = $1 AND sender_id != $2`,
+      [conversationId, userId]
+    );
+    console.log('[CP-MS3 - backend] notifying senders:', senders.rows.map(r => r.sender_id));
+
+    for (const row of senders.rows) {
+      io.to(`user_${row.sender_id}`).emit('messages_seen', { conversationId, seenBy: userId });
     }
-  });
+  } catch (err) {
+    console.error('[mark_seen] FAILED:', err);
+  }
+});
 
   // Mark message as delivered
   socket.on('message_delivered', async ({ messageId }) => {
