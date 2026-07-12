@@ -356,14 +356,26 @@ const getQuestionById = async (req, res) => {
       case "rankingorder": {
         const rowsResult = await db.query(
           `SELECT ri.*, ro.question_id
-           FROM ranking_item ri
-           JOIN rankingorder ro ON ri.ranking_id = ro.id
-           WHERE ro.question_id = $1`,
+          FROM ranking_item ri
+          JOIN rankingorder ro ON ri.ranking_id = ro.id
+          WHERE ro.question_id = $1
+          ORDER BY ri.position ASC`,  // Add this line
           [questionId]
         );
         data = { ...data, items: rowsResult.rows };
         break;
       }
+      // case "rankingorder": {
+      //   const rowsResult = await db.query(
+      //     `SELECT ri.*, ro.question_id
+      //      FROM ranking_item ri
+      //      JOIN rankingorder ro ON ri.ranking_id = ro.id
+      //      WHERE ro.question_id = $1`,
+      //     [questionId]
+      //   );
+      //   data = { ...data, items: rowsResult.rows };
+      //   break;
+      // }
     }
 
     return res.status(200).json({ success: true, source: "pool", datas: data });

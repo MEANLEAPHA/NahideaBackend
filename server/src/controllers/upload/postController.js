@@ -878,13 +878,6 @@ async function hydratePostsFromDb(ids, basePosts = null) {
 
   const qIds = questions.map(q => q.id);
 
-  // const closed = qIds.length
-  //   ? (await pool.query(
-  //       `SELECT * FROM closedend WHERE question_id = ANY($1)`,
-  //       [qIds]
-  //     )).rows
-  //   : [];
-
   const ranges = qIds.length
     ? (await pool.query(
         `SELECT * FROM question_range WHERE question_id = ANY($1)`,
@@ -928,9 +921,7 @@ async function hydratePostsFromDb(ids, basePosts = null) {
       `, [qIds])).rows
     : [];
 
-  // ranking_item already stores an explicit `position` column, which is the
-  // authoritative order regardless of insert timing — sort by that instead
-  // of id, and add it explicitly since it was previously missing here too.
+
   const rankingItems = qIds.length
     ? (await pool.query(`
         SELECT ri.*, ro.question_id
@@ -1008,12 +999,12 @@ async function hydratePostsFromDb(ids, basePosts = null) {
 
       switch (q.question_type) {
 
-        // case "closedend":
-        //   extra = closedMap.get(q.id) || {};
-        //   break;
 
         case "range":
-          extra = rangeMap.get(q.id) || {};
+          // extra = rangeMap.get(q.id) || {};
+          extra = rangeMap.find(
+            r => r.question_id === q.id
+          );
           break;
 
         case "singlechoice":
@@ -1046,7 +1037,10 @@ async function hydratePostsFromDb(ids, basePosts = null) {
           break;
 
         case "rating":
-          extra = ratingMap.get(q.id) || {};
+          // extra = ratingMap.get(q.id) || {};
+          extra = ratingMap.find(
+            r => r.question_id === q.id
+          );
           break;
       }
 
