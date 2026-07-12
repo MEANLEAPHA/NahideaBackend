@@ -1796,6 +1796,7 @@ const getPostsByFavorite = async (req, res) => {
 // ================================
 // GET POSTS BY USER ID (EXCLUDES ANONYMOUS POSTS)
 // ================================
+
 const getPostByUserId = async (req, res) => {
   try {
     const userId = req.user.userId;

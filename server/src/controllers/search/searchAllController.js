@@ -19,10 +19,7 @@ const tokenize = (raw) => {
   return cleaned.split(" ").filter(Boolean).slice(0, 6); // cap at 6 words, sane limit
 };
 
-/* ===========================================================
-   MAIN SEARCH (global smart search - users + posts)
-   GET /api/search?q=hello&userLimit=5&postLimit=5
-   =========================================================== */
+
 const globalSearch = async (req, res) => {
   const rawQuery = req.query.q?.trim();
   if (!rawQuery) {
@@ -79,8 +76,7 @@ const globalSearch = async (req, res) => {
   }
 
   // ---------- POSTS ----------
-  // Build one searchable blob per post (title from whichever type table applies
-  // + tags + post_type) then require every typed word to appear in that blob.
+
   if (postLimit > 0) {
     try {
       const wordConditions = words
@@ -158,10 +154,6 @@ const globalSearch = async (req, res) => {
   });
 };
 
-/* ===========================================================
-   AUTOCOMPLETE (redis ranking - global "what others searched")
-   GET /api/search/autocomplete?q=he
-   =========================================================== */
 const getAutocomplete = async (req, res) => {
   try {
     const rawQuery = req.query.q?.trim().toLowerCase();
@@ -188,9 +180,7 @@ const getAutocomplete = async (req, res) => {
   }
 };
 
-/* ===========================================================
-   Track a search term into redis ranking sorted set
-   =========================================================== */
+
 const trackSearchTerm = async (term) => {
   const normalized = term.toLowerCase().trim();
   if (!normalized) return;
@@ -198,9 +188,7 @@ const trackSearchTerm = async (term) => {
   await ranking.zIncrBy(AUTOCOMPLETE_KEY, 1, normalized);
 };
 
-/* ===========================================================
-   Reuse the same hydration/personalization logic from post feed
-   =========================================================== */
+
 function timeAgo(date) {
   const getTimeNow = Date.now();
   const DiffMs = getTimeNow - new Date(date).getTime();
@@ -320,9 +308,6 @@ async function hydratePostsFromDb(ids, basePosts = null) {
 
         let extra = {};
         switch (q.question_type) {
-          case "closedend":
-            extra = closedMap.get(q.id) || {};
-            break;
           case "range":
             extra = rangeMap.get(q.id) || {};
             break;
