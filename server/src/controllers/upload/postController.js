@@ -880,14 +880,14 @@ async function hydratePostsFromDb(ids, basePosts = null) {
 
   const ranges = qIds.length
     ? (await pool.query(
-        `SELECT * FROM question_range WHERE question_id = ANY($1)`,
+        `SELECT question_id AS id, range_min, range_max, step, default_range_value FROM question_range WHERE question_id = ANY($1)`,
         [qIds]
       )).rows
     : [];
 
   const ratings = qIds.length
     ? (await pool.query(
-        `SELECT * FROM rating WHERE question_id = ANY($1)`,
+        `SELECT rating_icon_id, question_id AS id FROM rating WHERE question_id = ANY($1)`,
         [qIds]
       )).rows
     : [];
