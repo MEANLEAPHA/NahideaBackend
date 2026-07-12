@@ -1001,10 +1001,8 @@ async function hydratePostsFromDb(ids, basePosts = null) {
 
 
         case "range":
-          // extra = rangeMap.get(q.id) || {};
-          extra = rangeMap.find(
-            r => r.question_id === q.id
-          );
+          extra = rangeMap.get(q.id) || {};
+      
           break;
 
         case "singlechoice":
@@ -1037,10 +1035,7 @@ async function hydratePostsFromDb(ids, basePosts = null) {
           break;
 
         case "rating":
-          // extra = ratingMap.get(q.id) || {};
-          extra = ratingMap.find(
-            r => r.question_id === q.id
-          );
+          extra = ratingMap.get(q.id) || {};
           break;
       }
 
