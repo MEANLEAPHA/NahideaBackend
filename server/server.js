@@ -384,16 +384,33 @@ io.on("connection", (socket) => {
 
   // Mark message as delivered
   socket.on('message_delivered', async ({ messageId }) => {
-    try {
-      await pool.query(`UPDATE messages SET status = 'delivered' WHERE id = $1 AND status = 'sent'`, [messageId]);
-      const rows = await pool.query('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
-      if (rows.rows.length) {
-        io.to(`user_${rows.rows[0].sender_id}`).emit('message_status_updated', { messageId, status: 'delivered' });
-      }
-    } catch (err) {
-      console.error(err);
+  console.log('[CP2 - backend] received message_delivered:', messageId, 'typeof:', typeof messageId);
+  try {
+    const updateResult = await pool.query(`UPDATE messages SET status = 'delivered' WHERE id = $1 AND status = 'sent'`, [messageId]);
+    console.log('[CP3 - backend] rows affected by UPDATE:', updateResult.rowCount);
+
+    const rows = await pool.query('SELECT sender_id, status FROM messages WHERE id = $1', [messageId]);
+    console.log('[CP3b - backend] current row state after update:', rows.rows[0]);
+
+    if (rows.rows.length) {
+      console.log('[CP4 - backend] emitting message_status_updated to user_' + rows.rows[0].sender_id);
+      io.to(`user_${rows.rows[0].sender_id}`).emit('message_status_updated', { messageId, status: 'delivered' });
     }
-  });
+  } catch (err) {
+    console.error('[message_delivered] FAILED:', err);
+  }
+});
+  // socket.on('message_delivered', async ({ messageId }) => {
+  //   try {
+  //     await pool.query(`UPDATE messages SET status = 'delivered' WHERE id = $1 AND status = 'sent'`, [messageId]);
+  //     const rows = await pool.query('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
+  //     if (rows.rows.length) {
+  //       io.to(`user_${rows.rows[0].sender_id}`).emit('message_status_updated', { messageId, status: 'delivered' });
+  //     }
+  //   } catch (err) {
+  //     console.error(err);
+  //   }
+  // });
 
   socket.on('typing', ({ toUserId, isTyping }) => {
     socket.to(`user_${toUserId}`).emit('user_typing', { userId, isTyping });
