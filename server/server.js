@@ -16,8 +16,9 @@ const { connectRedis } = require("./src/config/redisClient");
 // const {globalLimiter} = require("./src/middleware/rateLimiter");
 
 // worker
-require("./src/workers/rankStoreToDB");
-require("./src/workers/hydrateViewsToDB");
+// require("./src/workers/rankStoreToDB");
+// require("./src/workers/hydrateViewsToDB");
+const { runStuckKeyTest } = require("./src/workers/rankStoreToDB");
 
 // cor
 app.use(cors({
@@ -677,6 +678,8 @@ async function startServer() {
 
   try {
     await connectRedis();
+     await runStuckKeyTest();
+
     server.listen(process.env.PORT, () => {
       console.log(
         "Server is running on port:" +

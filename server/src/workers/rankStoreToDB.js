@@ -253,6 +253,6 @@ const hydrateHallOfFameDebug = async (monthKey) => {
 };
 
 // Trigger it once
-runStuckKeyTest();
+module.exports = { runStuckKeyTest };
 
 // ---------- END TEMPORARY TEST BLOCK ----------
