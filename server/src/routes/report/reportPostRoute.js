@@ -5,7 +5,7 @@ const {protect} = require("../../middleware/authMiddleware");
 
 router.post("/report-post", protect, createReport);
 
-router.post("/reports/:id/:type", protect, report);
+router.post("/reports/:id/:type/:type_id", protect, report);
 
 router.get('/get-all-report-by-user-id', protect, getAllReportByUserId);
 

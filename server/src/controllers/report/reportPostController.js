@@ -120,6 +120,7 @@ const report = async (req, res) => {
         const userId = req.user.userId;
         const type = req.params.type;
         const id = req.params.id;
+        const type_id = req.params.type_id;
 
         const {
             report_type,
@@ -132,6 +133,7 @@ const report = async (req, res) => {
                 to_id,
                 reporter_id,
                 type,
+                type_id,
                 report_type,
                 reason
             )
@@ -140,6 +142,7 @@ const report = async (req, res) => {
                 id,
                 userId,
                 type,
+                type_id,
                 report_type,
                 reason || null
             ]
@@ -150,7 +153,6 @@ const report = async (req, res) => {
         });
 
     } catch (err) {
-        // PostgreSQL unique violation error code is '23505'
         if (err.code === '23505') {
             return res.status(400).json({
                 message: "Already reported"
