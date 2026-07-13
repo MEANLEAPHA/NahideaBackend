@@ -675,26 +675,19 @@ app.use((err, req, res, next) => {
 });
 
 async function startServer() {
+  // Start listening immediately — don't block on Redis/other async setup
+  server.listen(process.env.PORT, () => {
+    console.log("Server is running on port:" + process.env.PORT);
+  });
 
+  // Do async setup AFTER the port is open, so it can't block startup
   try {
     await connectRedis();
-     await runStuckKeyTest();
-
-    server.listen(process.env.PORT, () => {
-      console.log(
-        "Server is running on port:" +
-        process.env.PORT
-      );
-    });
-
+    await runStuckKeyTest();
+    console.log("✅ Redis connected and startup tasks complete");
   } catch (err) {
-
-    console.error(
-      "Failed to connect to Redis:",
-      err
-    );
-
-    process.exit(1);
+    console.error("⚠️ Redis/startup task failed (server still running):", err);
+   
   }
 }
 
