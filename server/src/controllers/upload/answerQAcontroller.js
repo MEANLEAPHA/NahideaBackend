@@ -219,7 +219,7 @@ const answerQA = async (req, res) => {
       );
       const answerData = answerDataResult.rows[0];
       const totalAnswers = Number(answerData.total_answers);
-      const displayName = isAnon ? "Someone" : username;
+      const displayName = isAnon ? "Anonymous" : username;
       const truncatedTitle = `${questionTitle.slice(0, 50)}${questionTitle.length > 50 ? "..." : ""}`;
 
       const notificationContent =
@@ -252,7 +252,6 @@ const answerQA = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Answer submitted successfully",
-      data: { answer_id: answerId },
     });
   } catch (err) {
     await client.query("ROLLBACK");
@@ -739,10 +738,11 @@ const upvoteAnswer = async (req, res) => {
             `UPDATE notifications 
              SET sender_id = $1,
                  content = $2,
+                 answer_id = $3,
                  is_viewed = 0,
                  created_at = NOW()
-             WHERE aggregate_key = $3`,
-            [userId, notificationContent, aggregateKey]
+             WHERE aggregate_key = $4`,
+            [userId, notificationContent, answerId, aggregateKey]
           );
         } else {
           // Create new notification
@@ -753,15 +753,17 @@ const upvoteAnswer = async (req, res) => {
               type, 
               content, 
               post_id,
+              answer_id,
               aggregate_key, 
               is_viewed
-            ) VALUES ($1, $2, $3, $4, $5, $6, 0)`,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, 0)`,
             [
               answerOwnerId,
               userId,
               notificationType,
               notificationContent,
               postId,
+              answerId,
               aggregateKey
             ]
           );
@@ -787,10 +789,11 @@ const upvoteAnswer = async (req, res) => {
             `UPDATE notifications 
              SET sender_id = $1,
                  content = $2,
+                 answer_id = $3,
                  is_viewed = 0,
                  created_at = NOW()
-             WHERE aggregate_key = $3`,
-            [userId, notificationContent, aggregateKey]
+             WHERE aggregate_key = $4`,
+            [userId, notificationContent, answerId, aggregateKey]
           );
         } else {
           await client.query(
@@ -800,15 +803,17 @@ const upvoteAnswer = async (req, res) => {
               type, 
               content, 
               post_id,
+              answer_id,
               aggregate_key, 
               is_viewed
-            ) VALUES ($1, $2, $3, $4, $5, $6, 0)`,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, 0)`,
             [
               answerOwnerId,
               userId,
               notificationType,
               notificationContent,
               postId,
+              answerId,
               aggregateKey
             ]
           );
@@ -849,10 +854,11 @@ const upvoteAnswer = async (req, res) => {
               `UPDATE notifications 
                SET sender_id = $1,
                    content = $2,
+                   answer_id = $3,
                    is_viewed = 0,
                    created_at = NOW()
-               WHERE aggregate_key = $3`,
-              [latestUpvoter.user_id, notificationContent, aggregateKey]
+               WHERE aggregate_key = $4`,
+              [latestUpvoter.user_id, notificationContent, answerId, aggregateKey]
             );
           }
         }
@@ -892,7 +898,6 @@ const upvoteAnswer = async (req, res) => {
     client.release();
   }
 };
-
 const downvoteAnswer = async (req, res) => {
   const client = await db.connect();
   try {
@@ -927,7 +932,9 @@ const downvoteAnswer = async (req, res) => {
     const answerOwnerId = answer[0].user_id;
     const questionId = answer[0].question_id;
     const postId = answer[0].post_id;
-    const aggregateKey = `answer_vote_${answerOwnerId}_${answerId}`;
+    // Distinct from upvote's aggregate key ('answer_upvote_...') so the two
+    // notification types never collide or overwrite each other on the same answer.
+    const aggregateKey = `answer_downvote_${answerOwnerId}_${answerId}`;
 
     // Check existing vote
     const existingVoteResult = await client.query(
@@ -1011,8 +1018,8 @@ const downvoteAnswer = async (req, res) => {
         [answerId]
       );
       const voteData = voteDataResult.rows[0];
-      const totalDownvotes = voteData.downvotes;
-      
+      const totalDownvotes = Number(voteData.downvotes); // pg returns bigint as string — must cast
+
       let notificationContent = '';
       let notificationType = 'answer_downvote';
       
@@ -1034,10 +1041,11 @@ const downvoteAnswer = async (req, res) => {
             `UPDATE notifications 
              SET sender_id = $1,
                  content = $2,
+                 answer_id = $3,
                  is_viewed = 0,
                  created_at = NOW()
-             WHERE aggregate_key = $3 AND type = 'answer_downvote'`,
-            [userId, notificationContent, aggregateKey]
+             WHERE aggregate_key = $4 AND type = 'answer_downvote'`,
+            [userId, notificationContent, answerId, aggregateKey]
           );
         } else {
           await client.query(
@@ -1048,7 +1056,42 @@ const downvoteAnswer = async (req, res) => {
           );
         }
         
+      } else if (notificationAction === 'update') {
+        // Changed from upvote to downvote — mirror upvoteAnswer's 'update' branch
+        if (totalDownvotes === 1) {
+          notificationContent = `${username} downvoted your answer`;
+        } else {
+          notificationContent = `${username} and ${totalDownvotes - 1} other${totalDownvotes - 1 > 1 ? 's' : ''} downvoted your answer`;
+        }
+
+        const existingNotificationResult = await client.query(
+          `SELECT id FROM notifications WHERE aggregate_key = $1 AND type = 'answer_downvote' LIMIT 1`,
+          [aggregateKey]
+        );
+        const existingNotification = existingNotificationResult.rows;
+
+        if (existingNotification.length > 0) {
+          await client.query(
+            `UPDATE notifications 
+             SET sender_id = $1,
+                 content = $2,
+                 answer_id = $3,
+                 is_viewed = 0,
+                 created_at = NOW()
+             WHERE aggregate_key = $4 AND type = 'answer_downvote'`,
+            [userId, notificationContent, answerId, aggregateKey]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO notifications (
+              receiver_id, sender_id, type, content, answer_id, post_id, aggregate_key, is_viewed
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, 0)`,
+            [answerOwnerId, userId, notificationType, notificationContent, answerId, postId, aggregateKey]
+          );
+        }
+
       } else if (notificationAction === 'delete') {
+        // Removed downvote — check if any OTHER downvotes still exist before deleting the notification
         const existingDownvoteResult = await client.query(
           `SELECT id FROM answer_votes WHERE answer_id = $1 AND vote_type = 'downvote' LIMIT 1`,
           [answerId]
@@ -1060,6 +1103,42 @@ const downvoteAnswer = async (req, res) => {
             `DELETE FROM notifications WHERE aggregate_key = $1 AND type = 'answer_downvote'`,
             [aggregateKey]
           );
+        } else {
+          // Still have downvotes — re-attribute to the latest remaining downvoter
+          // (mirrors upvoteAnswer's 'delete' branch logic)
+          const latestDownvoterResult = await client.query(
+            `SELECT 
+               av.user_id,
+               u.username
+             FROM answer_votes av
+             JOIN users u ON u.id = av.user_id
+             WHERE av.answer_id = $1 
+               AND av.vote_type = 'downvote'
+             ORDER BY av.id DESC
+             LIMIT 1`,
+            [answerId]
+          );
+          const latestDownvoter = latestDownvoterResult.rows[0];
+
+          if (latestDownvoter) {
+            const remainingCount = totalDownvotes; // already reflects post-removal count
+            if (remainingCount === 1) {
+              notificationContent = `${latestDownvoter.username} downvoted your answer`;
+            } else {
+              notificationContent = `${latestDownvoter.username} and ${remainingCount - 1} other${remainingCount - 1 > 1 ? 's' : ''} downvoted your answer`;
+            }
+
+            await client.query(
+              `UPDATE notifications 
+               SET sender_id = $1,
+                   content = $2,
+                   answer_id = $3,
+                   is_viewed = 0,
+                   created_at = NOW()
+               WHERE aggregate_key = $4 AND type = 'answer_downvote'`,
+              [latestDownvoter.user_id, notificationContent, answerId, aggregateKey]
+            );
+          }
         }
       }
     }
