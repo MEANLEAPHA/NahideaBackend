@@ -419,17 +419,7 @@ io.on("connection", (socket) => {
     console.error('[message_delivered] FAILED:', err);
   }
 });
-  // socket.on('message_delivered', async ({ messageId }) => {
-  //   try {
-  //     await pool.query(`UPDATE messages SET status = 'delivered' WHERE id = $1 AND status = 'sent'`, [messageId]);
-  //     const rows = await pool.query('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
-  //     if (rows.rows.length) {
-  //       io.to(`user_${rows.rows[0].sender_id}`).emit('message_status_updated', { messageId, status: 'delivered' });
-  //     }
-  //   } catch (err) {
-  //     console.error(err);
-  //   }
-  // });
+
 
   socket.on('typing', ({ toUserId, isTyping }) => {
     socket.to(`user_${toUserId}`).emit('user_typing', { userId, isTyping });
