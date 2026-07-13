@@ -137,7 +137,7 @@ const report = async (req, res) => {
                 report_type,
                 reason
             )
-            VALUES ($1, $2, $3, $4, $5)`,
+            VALUES ($1, $2, $3, $4, $5, $6)`,
             [
                 id,
                 userId,
