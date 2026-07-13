@@ -1,6 +1,6 @@
-// const cron = require("node-cron");
-// const { ranking } = require("../config/redisClient");
-// const pool = require("../config/db");
+const cron = require("node-cron");
+const { ranking } = require("../config/redisClient");
+const pool = require("../config/db");
 
 // // ---------- Core logic (shared by real cron + test cron) ----------
 
