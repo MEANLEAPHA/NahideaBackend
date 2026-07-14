@@ -41,7 +41,6 @@ router.post("/new-password", protect, changePasswordLimiter, newPassword);
 
 router.put(
   "/update-user",
-  protect,                
   updateAccLimiter,
   upload.fields([{ name: 'avatar', maxCount: 1 }, { name: 'banner', maxCount: 1 }]),
   updateUser
