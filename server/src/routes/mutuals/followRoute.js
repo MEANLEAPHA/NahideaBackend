@@ -5,7 +5,7 @@ const router = express.Router();
 const {protect} = require("../../middleware/authMiddleware");
 
 const {
-    followerLimiter
+    likeLimiter
 } = require("../../middleware/rateLimiter");
 
 const {
@@ -19,13 +19,14 @@ const {
 router.post(
     "/add-follow/:userId",
     protect,
-    followerLimiter,
+    likeLimiter,
     followUser
 );
 
 router.delete(
     "/unfollow/:userId",
     protect,
+    likeLimiter,
     unfollowUser
 );
 

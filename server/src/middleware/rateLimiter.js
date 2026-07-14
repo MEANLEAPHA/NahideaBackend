@@ -108,19 +108,14 @@
 
 
 const rateLimiter = require("express-rate-limit");
+const { ipKeyGenerator } = require("express-rate-limit");
 
-// Key by logged-in userId when available (req.user set by `protect` middleware),
-// fall back to IP for public/unauthenticated routes.
-// NOTE: `protect` must run BEFORE these limiters in the route chain for user-keying to work.
-const keyByUserOrIp = (req) => (req.user?.id ? `user:${req.user.id}` : `ip:${req.ip}`);
+const keyByUserOrIp = (req) => (req.user?.id ? `user:${req.user.id}` : ipKeyGenerator(req));
 
-// Key by the email in the request body — stops credential-stuffing / email-bombing
-// against ONE target account even if the attacker rotates IPs.
 const keyByEmailOrIp = (req) => {
   const email = req.body?.email?.toLowerCase()?.trim();
-  return email ? `email:${email}` : `ip:${req.ip}`;
+  return email ? `email:${email}` : ipKeyGenerator(req);
 };
-
 /* ------------------------- AUTH: PUBLIC ROUTES ------------------------- */
 
 const registerLimiter = rateLimiter({
