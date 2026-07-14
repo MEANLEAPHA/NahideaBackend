@@ -12,13 +12,48 @@ const {sameId} = require("./src/util/sameId");
 const app = express();
 app.set("trust proxy", 1);
 
+const helmet = require("helmet");
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", process.env.FTP_URL],
+        connectSrc: ["'self'", process.env.ORIGIN_URL],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
+
 const { connectRedis } = require("./src/config/redisClient");
 // const {globalLimiter} = require("./src/middleware/rateLimiter");
 
 // worker
-// require("./src/workers/rankStoreToDB");
-// require("./src/workers/hydrateViewsToDB");
-const { runStuckKeyTest } = require("./src/workers/rankStoreToDB");
+require("./src/workers/rankStoreToDB");
+require("./src/workers/hydrateViewsToDB");
+
+// Simple in-memory rate limiter per socket event
+const socketRateLimits = new Map();
+
+function isRateLimited(socketId, eventName, maxCalls = 10, windowMs = 10000) {
+  const key = `${socketId}:${eventName}`;
+  const now = Date.now();
+  const record = socketRateLimits.get(key) || { count: 0, resetAt: now + windowMs };
+
+  if (now > record.resetAt) {
+    record.count = 1;
+    record.resetAt = now + windowMs;
+  } else {
+    record.count++;
+  }
+  socketRateLimits.set(key, record);
+  return record.count > maxCalls;
+}
 
 // cor
 app.use(cors({
@@ -54,17 +89,10 @@ io.on("connection", (socket) => {
 
   console.log("User Connected:", userId);
 
-  /*
-  First connection for user
-  */
 
   if (!onlineUsers.has(userId)) {
     onlineUsers.set(userId, new Set());
   }
-
-  /*
-  Add socket id
-  */
 
   onlineUsers
     .get(userId)
@@ -87,11 +115,15 @@ io.on("connection", (socket) => {
   });
 
   socket.on('send_message', async (data) => {
+
+  if (isRateLimited(socket.id, 'send_message', 15, 10000)) {
+    // max 15 messages per 10 seconds per socket
+    return socket.emit('error', { message: 'You are sending messages too fast. Slow down.' });
+  }
+
   const { toUserId, content, gifId, gifUrl, replyToId } = data;
   const senderId = parseInt(userId);
   const receiverId = parseInt(toUserId);
-
-  console.log('[send_message] incoming:', { senderId, receiverId, content, gifId, gifUrl, replyToId });
 
   try {
     // Get or create conversation
@@ -107,7 +139,6 @@ io.on("connection", (socket) => {
         [senderId, receiverId]
       );
       conversationId = result.rows[0].id;
-      console.log('[send_message] created new conversation:', conversationId);
     } else {
       conversationId = convResult.rows[0].id;
     }
@@ -119,7 +150,7 @@ io.on("connection", (socket) => {
       [conversationId, senderId, content || null, gifId || null, gifUrl || null, replyToId || null]
     );
     const messageId = result.rows[0].id;
-    console.log('[send_message] inserted message:', messageId);
+ 
 
     // Fetch reply preview if replying to another message
     let replyPreview = null;
@@ -196,6 +227,9 @@ io.on("connection", (socket) => {
 
   // Edit message (with reply preview updates)
   socket.on('edit_message', async ({ messageId, newContent, newGifId, newGifUrl }) => {
+     if (isRateLimited(socket.id, 'edit_message', 10, 10000)) {
+        return socket.emit('error', 'Too many edits, slow down.');
+      }
     try {
       const rows = await pool.query('SELECT sender_id, conversation_id FROM messages WHERE id = $1', [messageId]);
       if (rows.rows.length === 0) return socket.emit('error', 'Message not found');
@@ -279,6 +313,9 @@ io.on("connection", (socket) => {
 
   // Delete message (with reply preview updates)
   socket.on('delete_message', async ({ messageId }) => {
+     if (isRateLimited(socket.id, 'delete_message', 10, 10000)) {
+        return socket.emit('error', 'Too many deletes, slow down.');
+      }
     try {
       const rows = await pool.query('SELECT sender_id, conversation_id, deleted_by_sender, deleted_by_recipient FROM messages WHERE id = $1', [messageId]);
       if (rows.rows.length === 0) return;
@@ -362,26 +399,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Mark message as seen (triggered when user opens chat)
-  // socket.on('mark_seen', async ({ conversationId, messageIds }) => {
-  //   try {
-  //     await pool.query(
-  //       `UPDATE messages SET status = 'seen' 
-  //        WHERE conversation_id = $1 AND sender_id != $2 AND status != 'seen'`,
-  //       [conversationId, userId]
-  //     );
-  //     // Notify sender that messages were seen
-  //     const senders = await pool.query(
-  //       `SELECT DISTINCT sender_id FROM messages WHERE conversation_id = $1 AND sender_id != $2`,
-  //       [conversationId, userId]
-  //     );
-  //     for (const row of senders.rows) {
-  //       io.to(`user_${row.sender_id}`).emit('messages_seen', { conversationId, seenBy: userId });
-  //     }
-  //   } catch (err) {
-  //     console.error(err);
-  //   }
-  // });
 
   socket.on('mark_seen', async ({ conversationId, messageIds }) => {
 
@@ -391,13 +408,13 @@ io.on("connection", (socket) => {
        WHERE conversation_id = $1 AND sender_id != $2 AND status != 'seen'`,
       [conversationId, userId]
     );
-    console.log('[CP-MS2 - backend] mark_seen rows affected:', updateResult.rowCount);
+
 
     const senders = await pool.query(
       `SELECT DISTINCT sender_id FROM messages WHERE conversation_id = $1 AND sender_id != $2`,
       [conversationId, userId]
     );
-    console.log('[CP-MS3 - backend] notifying senders:', senders.rows.map(r => r.sender_id));
+  
 
     for (const row of senders.rows) {
       io.to(`user_${row.sender_id}`).emit('messages_seen', { conversationId, seenBy: userId });
@@ -423,6 +440,7 @@ io.on("connection", (socket) => {
 
 
   socket.on('typing', ({ toUserId, isTyping }) => {
+    if (isRateLimited(socket.id, 'typing', 30, 10000)) return;
     socket.to(`user_${toUserId}`).emit('user_typing', { userId, isTyping });
   });
 
@@ -436,7 +454,7 @@ io.on("connection", (socket) => {
       userSockets.delete(socket.id);
 
       /* Remove user fully*/
-      if (userSockets.size === 0) {
+    if (userSockets.size === 0) {
         onlineUsers.delete(userId);
       }
 
@@ -447,6 +465,12 @@ io.on("connection", (socket) => {
       "online-users",
       Array.from(onlineUsers.keys())
     );
+
+    for (const key of socketRateLimits.keys()) {
+    if (key.startsWith(`${socket.id}:`)) {
+      socketRateLimits.delete(key);
+    }
+  }
 
   });
 
@@ -683,7 +707,6 @@ async function startServer() {
   // Do async setup AFTER the port is open, so it can't block startup
   try {
     await connectRedis();
-    await runStuckKeyTest();
     console.log("✅ Redis connected and startup tasks complete");
   } catch (err) {
     console.error("⚠️ Redis/startup task failed (server still running):", err);

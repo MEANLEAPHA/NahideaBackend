@@ -1,6 +1,6 @@
-const cron = require("node-cron");
-const { ranking } = require("../config/redisClient");
-const pool = require("../config/db");
+// const cron = require("node-cron");
+// const { ranking } = require("../config/redisClient");
+// const pool = require("../config/db");
 
 // // ---------- Core logic (shared by real cron + test cron) ----------
 
@@ -122,90 +122,13 @@ const pool = require("../config/db");
 // ---------- TEMPORARY TEST BLOCK — remove after confirming ----------
 // Run once manually (e.g. via a quick script, or trigger through a temp route)
 // to force-hydrate the stuck keys and see exactly what error comes back.
+const cron = require("node-cron");
+const { ranking } = require("../config/redisClient");
+const pool = require("../config/db");
 
-const runStuckKeyTest = async () => {
-  console.log('=== TEST HYDRATION START ===', new Date().toISOString());
+// ---------- Core logic ----------
 
-  // Stuck trending post days from your screenshot
-  const stuckDates = [
-    "2026-07-08",
-    "2026-07-09",
-    "2026-07-10",
-    "2026-07-11",
-    "2026-07-12",
-    "2026-07-13",
-  ];
-
-  for (const dateKey of stuckDates) {
-    console.log(`\n--- Testing trendingPost:day:${dateKey} ---`);
-    try {
-      await hydrateTrendingPostDebug(dateKey);
-    } catch (err) {
-      console.error(`Unexpected top-level failure for ${dateKey}:`, err.message);
-    }
-  }
-
-  // Stuck HoF month from your screenshot
-  console.log(`\n--- Testing hof:month:202607 ---`);
-  try {
-    await hydrateHallOfFameDebug("202607");
-  } catch (err) {
-    console.error(`Unexpected top-level failure for hof:month:202607:`, err.message);
-  }
-
-  console.log('\n=== TEST HYDRATION END ===');
-};
-
-// Debug versions with full error detail (code, detail, hint) so we can see
-// exactly why an insert fails instead of just the message
-const hydrateTrendingPostDebug = async (dateKey) => {
-  const redisKey = `trendingPost:day:${dateKey}`;
-  const topPosts = await ranking.zRangeWithScores(redisKey, 0, 9, { REV: true });
-
-  if (!topPosts.length) {
-    console.log(`No trending post data for ${dateKey}, skipping.`);
-    return;
-  }
-
-  console.log(`Found ${topPosts.length} posts for ${dateKey}:`, topPosts.map(p => ({ value: p.value, score: p.score })));
-
-  let allOk = true;
-  for (let i = 0; i < topPosts.length; i++) {
-    const postId = parseInt(topPosts[i].value, 10);
-    const score = topPosts[i].score;
-    const rankPosition = i + 1;
-
-    try {
-      await pool.query(
-        `INSERT INTO trending_post_history (date, post_id, score, ranking)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (date, post_id) 
-         DO UPDATE SET score = EXCLUDED.score, ranking = EXCLUDED.ranking`,
-        [dateKey, postId, score, rankPosition]
-      );
-      console.log(`  ✓ post ${postId} inserted/updated ok`);
-    } catch (err) {
-      allOk = false;
-      console.error(`  ✗ post ${postId} FAILED:`, {
-        message: err.message,
-        code: err.code,       // e.g. 23503 = foreign key violation, 23505 = unique violation
-        detail: err.detail,   // usually names the exact key/table involved
-        hint: err.hint,
-      });
-    }
-  }
-
-  console.log(`Result for ${dateKey}: allOk=${allOk}`);
-
-  if (allOk) {
-    await ranking.del(redisKey);
-    console.log(`Redis key ${redisKey} cleared.`);
-  } else {
-    console.log(`Redis key ${redisKey} KEPT — see errors above.`);
-  }
-};
-
-const hydrateHallOfFameDebug = async (monthKey) => {
+const hydrateHallOfFame = async (monthKey) => {
   const redisKey = `hof:month:${monthKey}`;
   const topUsers = await ranking.zRangeWithScores(redisKey, 0, 4, { REV: true });
 
@@ -213,8 +136,6 @@ const hydrateHallOfFameDebug = async (monthKey) => {
     console.log(`No Hall of Fame data for ${monthKey}, skipping.`);
     return;
   }
-
-  console.log(`Found ${topUsers.length} users for ${monthKey}:`, topUsers.map(u => ({ value: u.value, score: u.score })));
 
   let allOk = true;
   for (let i = 0; i < topUsers.length; i++) {
@@ -230,29 +151,94 @@ const hydrateHallOfFameDebug = async (monthKey) => {
          DO UPDATE SET score = EXCLUDED.score, ranking = EXCLUDED.ranking`,
         [monthKey, userId, score, rankPosition]
       );
-      console.log(`  ✓ user ${userId} inserted/updated ok`);
     } catch (err) {
       allOk = false;
-      console.error(`  ✗ user ${userId} FAILED:`, {
-        message: err.message,
-        code: err.code,
-        detail: err.detail,
-        hint: err.hint,
-      });
+      console.error(`Failed to insert HoF row (user ${userId}, month ${monthKey}):`, err.message);
     }
   }
 
-  console.log(`Result for ${monthKey}: allOk=${allOk}`);
+  console.log(`Hall of Fame for ${monthKey} processed (allOk=${allOk}).`);
 
   if (allOk) {
     await ranking.del(redisKey);
     console.log(`Redis key ${redisKey} cleared.`);
   } else {
-    console.log(`Redis key ${redisKey} KEPT — see errors above.`);
+    console.log(`Redis key ${redisKey} kept (some rows failed) — will retry next run.`);
   }
 };
 
-// Trigger it once
-module.exports = { runStuckKeyTest };
+const hydrateTrendingPost = async (dateKey) => {
+  const redisKey = `trendingPost:day:${dateKey}`;
+  const topPosts = await ranking.zRangeWithScores(redisKey, 0, 9, { REV: true });
 
-// ---------- END TEMPORARY TEST BLOCK ----------
+  if (!topPosts.length) {
+    console.log(`No trending post data for ${dateKey}, skipping.`);
+    return;
+  }
+
+  let allOk = true;
+  for (let i = 0; i < topPosts.length; i++) {
+    const postId = parseInt(topPosts[i].value, 10);
+    const score = topPosts[i].score;
+    const rankPosition = i + 1;
+
+    try {
+      await pool.query(
+        `INSERT INTO trending_post_history (date, post_id, score, ranking)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (date, post_id) 
+         DO UPDATE SET score = EXCLUDED.score, ranking = EXCLUDED.ranking`,
+        [dateKey, postId, score, rankPosition]
+      );
+    } catch (err) {
+      allOk = false;
+      console.error(`Failed to insert trending row (post ${postId}, date ${dateKey}):`, err.message);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+
+  console.log(`Trending Post for ${dateKey} processed (allOk=${allOk}).`);
+
+  if (allOk) {
+    await ranking.del(redisKey);
+    console.log(`Redis key ${redisKey} cleared.`);
+  } else {
+    console.log(`Redis key ${redisKey} kept (some rows failed) — will retry next run.`);
+  }
+};
+
+// ---------- Key helpers ----------
+
+const getLastMonthKey = () => {
+  const now = new Date();
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${lastMonth.getFullYear()}${String(lastMonth.getMonth() + 1).padStart(2, "0")}`;
+};
+
+const getYesterdayKey = () => {
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const yyyy = yesterday.getFullYear();
+  const mm = String(yesterday.getMonth() + 1).padStart(2, "0");
+  const dd = String(yesterday.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+// ---------- REAL schedules ----------
+
+cron.schedule("0 0 1 * *", async () => {
+  try {
+    await hydrateHallOfFame(getLastMonthKey());
+  } catch (err) {
+    console.error("Hall of Fame worker failed:", err.message);
+  }
+});
+
+cron.schedule("0 0 * * *", async () => {
+  try {
+    await hydrateTrendingPost(getYesterdayKey());
+  } catch (err) {
+    console.error("Trending Post worker failed:", err.message);
+  }
+});
+
+module.exports = { hydrateHallOfFame, hydrateTrendingPost };

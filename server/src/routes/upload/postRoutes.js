@@ -6,7 +6,6 @@ const {
   getAllPosts,
   getAllTrending,
   getUnsolvedQuestions,
-  // getPostsById,
   updatePostBodyContent,
   deletePost,
   likePost,
@@ -24,10 +23,11 @@ const {
   upload
 } = require("../../controllers/upload/contentController");
 
-const { likeLimiter } = require("../../middleware/rateLimiter");
+
+const { likeLimiter, readLimiter, heavyUploadLimiter, writeLimiter } = require("../../middleware/rateLimiter");
 
 // post with multiple media and signle media
-router.post("/create-posts", protect, 
+router.post("/create-posts", protect, heavyUploadLimiter,
    upload.fields([
     // content 
     { name: "contentFile", maxCount: 5 }, 
@@ -40,40 +40,22 @@ router.post("/create-posts", protect,
   ]),
   createPost);
 
-  router.get("/all-posts", protect, getAllPosts);
-
-  router.get("/all-trending", protect, getAllTrending);
-
-  router.get("/questions/unsolved", protect, getUnsolvedQuestions);
-
-    router.get("/user/yourposts", protect, getPostByUserIds);
-
-  // router.get("/get-post/:id", protect, getPostsById);
-
-  router.get("/get-posts/:postId", protect, getPostsByPostId);
-
-  router.get("/user/:userId/posts", protect, getPostByUserId);
-
- 
-
-  router.put("/update-post-body-content/:contentId/:postId", protect, updatePostBodyContent);
   
-  router.delete("/delete-post/:postId", protect, deletePost);
+router.get("/all-posts", protect, readLimiter, getAllPosts);
+router.get("/all-trending", protect, readLimiter, getAllTrending);
+router.get("/questions/unsolved", protect, readLimiter, getUnsolvedQuestions);
+router.get("/user/yourposts", protect, readLimiter, getPostByUserIds);
+router.get("/get-posts/:postId", protect, readLimiter, getPostsByPostId);
+router.get("/user/:userId/posts", protect, readLimiter, getPostByUserId);
 
-  router.post("/posts/:postId/:ownerId/like", protect, likeLimiter, likePost);
+router.put("/update-post-body-content/:contentId/:postId", protect, writeLimiter, updatePostBodyContent);
+router.delete("/delete-post/:postId", protect, writeLimiter, deletePost);
 
-  router.post(
-    "/posts/:postId/favorite",
-    protect,
-    favoritePost
-  );
+router.post("/posts/:postId/:ownerId/like", protect, likeLimiter, likePost);
+router.post("/posts/:postId/favorite", protect, likeLimiter, favoritePost);
 
-router.get("/posts/likes", protect, getPostsByLike);
-router.get("/posts/favorites", protect, getPostsByFavorite);
-router.patch(
-  "/posts/:postId/solve",
-  protect,
-  markQuestionSolved
-);
+router.get("/posts/likes", protect, readLimiter, getPostsByLike);
+router.get("/posts/favorites", protect, readLimiter, getPostsByFavorite);
+router.patch("/posts/:postId/solve", protect, writeLimiter, markQuestionSolved);
 
 module.exports = router;

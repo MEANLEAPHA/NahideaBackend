@@ -15,7 +15,6 @@ const transporter = nodemailer.createTransport({
 });
 
 
-// Template 1: Verification Email
 const getVerificationHTML = (pinCode) => `
 <!DOCTYPE html>
 <html>
@@ -269,7 +268,6 @@ const getVerificationHTML = (pinCode) => `
 </html>
 `;
 
-// Template 2: Resend Verification Email
 const getResendVerificationHTML = (pinCode) => `
 <!DOCTYPE html>
 <html>
@@ -539,7 +537,7 @@ const getResendVerificationHTML = (pinCode) => `
 </html>
 `;
 
-// Template 3: Password Reset Email
+
 const getPasswordResetHTML = (pinCode) => `
 <!DOCTYPE html>
 <html>
@@ -811,10 +809,6 @@ const getPasswordResetHTML = (pinCode) => `
 </body>
 </html>
 `;
-
-// =============================================
-// YOUR 3 FUNCTIONS - PRODUCTION READY
-// =============================================
 
 const sendVerifyCodeEmail = async (to, pinCode) => {
     const subject = 'Your Verification Code';

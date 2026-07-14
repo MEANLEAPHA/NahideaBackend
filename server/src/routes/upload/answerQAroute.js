@@ -14,15 +14,16 @@ const {
   getMostPopularAnswer
 } = require("../../controllers/upload/answerQAcontroller");
 
-router.post("/answers/answer-qa/:postId/:questionId/:questionType", protect, answerQA);
-router.get("/answers/get-question/:questionId/:questionType", getQuestionById);
-router.get("/answers/check-answered/:questionId", protect, checkAlreadyAnswered);
+const { readLimiter, writeLimiter, likeLimiter } = require("../../middleware/rateLimiter");
 
-router.get('/answers/question/:questionId', protect, getAllAnswersByQuestionId);
-router.get('/answers/question/:questionId/popular', protect, getMostPopularAnswer);
-router.get('/answers/:answerId', protect, getAnswerById);
+router.post("/answers/answer-qa/:postId/:questionId/:questionType", protect, writeLimiter, answerQA);
+router.get("/answers/get-question/:questionId/:questionType", readLimiter, getQuestionById); 
+router.get("/answers/check-answered/:questionId", protect, readLimiter, checkAlreadyAnswered);
 
-// Vote routes
-router.post('/answers/:answerId/upvote', protect, upvoteAnswer);
-router.post('/answers/:answerId/downvote', protect, downvoteAnswer);
+router.get('/answers/question/:questionId', protect, readLimiter, getAllAnswersByQuestionId);
+router.get('/answers/question/:questionId/popular', protect, readLimiter, getMostPopularAnswer);
+router.get('/answers/:answerId', protect, readLimiter, getAnswerById);
+
+router.post('/answers/:answerId/upvote', protect, likeLimiter, upvoteAnswer);
+router.post('/answers/:answerId/downvote', protect, likeLimiter, downvoteAnswer);
 module.exports = router;
