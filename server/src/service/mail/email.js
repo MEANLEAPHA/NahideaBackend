@@ -10,8 +10,6 @@ const transporter = nodemailer.createTransport({
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
     },
-    logger: true,
-    debug: true
 });
 
 
@@ -853,7 +851,6 @@ const sendVerifyCodeForgetPasswordEmail = async (to, pinCode) => {
     
     try {
         const info = await transporter.sendMail({
-            //   from: `"Nahidea-Security" <${process.env.EMAIL_USER}>`,
             from: `"Nahidea-Security" <${process.env.EMAIL_USER}>`,
             to,
             subject,
