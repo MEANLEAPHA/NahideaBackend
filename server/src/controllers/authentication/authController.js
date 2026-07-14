@@ -553,7 +553,120 @@ const getUserInfo = async (req, res) => {
   }
 };
 
+// const updateUser = async (req, res) => {
+//   try {
+//     const {
+//       profession,
+//       location,
+//       nickname,
+//       userId,
+//       email,
+//       bio,
+//       avatarType,
+//     } = req.body;
+
+//     if (!profession || !location || !nickname || !userId || !email || !bio) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Missing required fields",
+//       });
+//     }
+
+//     // Fetch current values first — these become the fallback if nothing new is uploaded
+//     const currentUserResult = await pool.query(
+//       `SELECT avatar_url, banner_url FROM users WHERE id = $1 AND email = $2 LIMIT 1`,
+//       [parseInt(userId), email]
+//     );
+
+//     if (currentUserResult.rows.length === 0) {
+//       return res.status(404).json({ success: false, message: "User not found" });
+//     }
+
+//     const currentUser = currentUserResult.rows[0];
+
+//     let avatarUrl = currentUser.avatar_url;
+//     let bannerUrl = currentUser.banner_url;
+
+//     // Handle banner upload (if a new file was sent)
+//     if (req.files?.banner) {
+//       try {
+//         const uploadedUrl = await convertAndUpload(req.files.banner[0], "banner");
+//         bannerUrl = uploadedUrl.url;
+//       } catch (uploadError) {
+//         console.error("Banner upload error:", uploadError);
+//         return res.status(500).json({
+//           success: false,
+//           message: "Failed to upload banner image",
+//         });
+//       }
+//     } else if (req.body.banner) {
+//       bannerUrl = req.body.banner; // unchanged, frontend echoed the existing URL
+//     }
+//     // else: neither a new file nor a URL was sent — keep currentUser.banner_url as-is
+
+//     // Handle avatar
+//     if (avatarType === 'file' && req.files?.avatar) {
+//       try {
+//         const uploadedUrl = await convertAndUpload(req.files.avatar[0], "avatar");
+//         avatarUrl = uploadedUrl.url;
+//       } catch (uploadError) {
+//         console.error("Avatar upload error:", uploadError);
+//         return res.status(500).json({
+//           success: false,
+//           message: "Failed to upload avatar image",
+//         });
+//       }
+//     } else if (avatarType === 'url' && req.body.avatar) {
+//       avatarUrl = req.body.avatar;
+//     }
+//     // else: keep currentUser.avatar_url as-is
+
+//     // Check for duplicate nickname
+//     const nicknameResult = await pool.query(
+//       `SELECT id FROM users WHERE nickname = $1 AND id != $2 LIMIT 1`,
+//       [nickname, userId]
+//     );
+
+//     if (nicknameResult.rows.length > 0) {
+//       return res.status(409).json({
+//         success: false,
+//         message: "Nickname already taken",
+//       });
+//     }
+
+//     // UPDATE USER
+//     await pool.query(
+//       `
+//       UPDATE users
+//       SET
+//         avatar_url = $1,
+//         banner_url = $2,
+//         profession = $3,
+//         work_place = $4,
+//         nickname = $5,
+//         bio = $6,
+//         updated_at = NOW()
+//       WHERE id = $7
+//       AND email = $8
+//       `,
+//       [avatarUrl, bannerUrl, profession, location, nickname, bio, parseInt(userId), email]
+//     );
+
+//     console.log("Profile updated successfully");
+//     return res.status(200).json({
+//       message: "Profile updated successfully",
+//     });
+//   } catch (err) {
+//     console.log(err.message);
+//     return res.status(500).json({
+//       message: "Internal server error",
+//     });
+//   }
+// };
 const updateUser = async (req, res) => {
+  console.log("[updateUser] Incoming body:", req.body);
+  console.log("[updateUser] Incoming files:", req.files ? Object.keys(req.files) : "none");
+
   try {
     const {
       profession,
@@ -566,75 +679,91 @@ const updateUser = async (req, res) => {
     } = req.body;
 
     if (!profession || !location || !nickname || !userId || !email || !bio) {
+      console.warn("[updateUser] Missing required field(s):", {
+        profession: !!profession, location: !!location, nickname: !!nickname,
+        userId: !!userId, email: !!email, bio: !!bio,
+      });
       return res.status(400).json({
         success: false,
         message: "Missing required fields",
       });
     }
 
-    // Fetch current values first — these become the fallback if nothing new is uploaded
     const currentUserResult = await pool.query(
       `SELECT avatar_url, banner_url FROM users WHERE id = $1 AND email = $2 LIMIT 1`,
       [parseInt(userId), email]
     );
 
     if (currentUserResult.rows.length === 0) {
+      console.warn("[updateUser] No user found for id/email:", { userId, email });
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
     const currentUser = currentUserResult.rows[0];
-
     let avatarUrl = currentUser.avatar_url;
     let bannerUrl = currentUser.banner_url;
 
-    // Handle banner upload (if a new file was sent)
+    console.log("[updateUser] Current DB values:", { avatarUrl, bannerUrl });
+
+    // Banner
     if (req.files?.banner) {
+      console.log("[updateUser] Banner file present, uploading...");
       try {
         const uploadedUrl = await convertAndUpload(req.files.banner[0], "banner");
         bannerUrl = uploadedUrl.url;
+        console.log("[updateUser] Banner upload success:", bannerUrl);
       } catch (uploadError) {
-        console.error("Banner upload error:", uploadError);
+        console.error("[updateUser] Banner upload FAILED:", uploadError.message);
         return res.status(500).json({
           success: false,
           message: "Failed to upload banner image",
         });
       }
     } else if (req.body.banner) {
-      bannerUrl = req.body.banner; // unchanged, frontend echoed the existing URL
+      console.log("[updateUser] No banner file, using existing URL from body:", req.body.banner);
+      bannerUrl = req.body.banner;
+    } else {
+      console.log("[updateUser] No banner file or URL sent, keeping current:", bannerUrl);
     }
-    // else: neither a new file nor a URL was sent — keep currentUser.banner_url as-is
 
-    // Handle avatar
+    // Avatar
     if (avatarType === 'file' && req.files?.avatar) {
+      console.log("[updateUser] Avatar file present, uploading...");
       try {
         const uploadedUrl = await convertAndUpload(req.files.avatar[0], "avatar");
         avatarUrl = uploadedUrl.url;
+        console.log("[updateUser] Avatar upload success:", avatarUrl);
       } catch (uploadError) {
-        console.error("Avatar upload error:", uploadError);
+        console.error("[updateUser] Avatar upload FAILED:", uploadError.message);
         return res.status(500).json({
           success: false,
           message: "Failed to upload avatar image",
         });
       }
     } else if (avatarType === 'url' && req.body.avatar) {
+      console.log("[updateUser] Using avatar URL from body:", req.body.avatar);
       avatarUrl = req.body.avatar;
+    } else {
+      console.log("[updateUser] No avatar file or URL sent, keeping current:", avatarUrl);
     }
-    // else: keep currentUser.avatar_url as-is
 
-    // Check for duplicate nickname
     const nicknameResult = await pool.query(
       `SELECT id FROM users WHERE nickname = $1 AND id != $2 LIMIT 1`,
       [nickname, userId]
     );
 
     if (nicknameResult.rows.length > 0) {
+      console.warn("[updateUser] Nickname taken:", nickname);
       return res.status(409).json({
         success: false,
         message: "Nickname already taken",
       });
     }
 
-    // UPDATE USER
+    console.log("[updateUser] Final values before UPDATE:", {
+      avatarUrl, bannerUrl, profession, location, nickname, bio, userId, email,
+    });
+
     await pool.query(
       `
       UPDATE users
@@ -652,61 +781,22 @@ const updateUser = async (req, res) => {
       [avatarUrl, bannerUrl, profession, location, nickname, bio, parseInt(userId), email]
     );
 
-    console.log("Profile updated successfully");
+    console.log("[updateUser] SUCCESS — profile updated for userId:", userId);
     return res.status(200).json({
       message: "Profile updated successfully",
     });
   } catch (err) {
-    console.log(err.message);
+    console.error("[updateUser] UNCAUGHT ERROR:", {
+      message: err.message,
+      code: err.code,
+      detail: err.detail,
+      stack: err.stack,
+    });
     return res.status(500).json({
       message: "Internal server error",
     });
   }
 };
-// const getUserInfoById = async (req, res) => {
-//   try {
-//     const userId = req.params.userId;
-
-//     const result = await pool.query(
-//       `
-//       SELECT 
-//         u.username,
-//         u.avatar_url,
-//         u.id,
-//         u.nickname,
-//         u.banner_url,
-//         u.profession,
-//         u.work_place,
-//         u.bio,
-//         u.created_at,
-//         u.followers_count,
-//         u.following_count,
-//         COUNT(p.id) as post_count
-//       FROM users u
-//       LEFT JOIN posts p ON u.id = p.user_id
-//       WHERE u.id = $1
-//       GROUP BY u.id
-//       `,
-//       [userId]
-//     );
-
-//     if (!result.rows.length) {
-//       return res.status(404).json({
-//         message: "User not found"
-//       });
-//     }
-
-//     return res.status(200).json({
-//       userData: result.rows[0]
-//     });
-
-//   } catch (err) {
-//     console.error("Error in getUserInfo:", err);
-//     return res.status(500).json({
-//       message: "Server error"
-//     });
-//   }
-// };
 
 const getCurrentMonthKey = () => {
   const now = new Date();

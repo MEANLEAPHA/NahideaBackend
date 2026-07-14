@@ -108,8 +108,11 @@ function getSafeFileName(file) {
 }
 
 async function uploadToHostinger(localFile, remoteFile) {
+  console.log("[FTP] Connecting to:", process.env.FTP_HOST, "as", process.env.FTP_USER, "secure:", process.env.FTP_SECURE);
+
   const client = new ftp.Client(30000);
-  client.ftp.verbose = false;
+  client.ftp.verbose = true; // turn ON while debugging — flip back to false once confirmed working
+
   try {
     await client.access({
       host: process.env.FTP_HOST,
@@ -117,54 +120,86 @@ async function uploadToHostinger(localFile, remoteFile) {
       password: process.env.FTP_PASSWORD,
       secure: process.env.FTP_SECURE === "true",
     });
+    console.log("[FTP] Connected successfully");
+
+    console.log("[FTP] Uploading:", localFile, "->", remoteFile);
     await client.uploadFrom(localFile, remoteFile);
+    console.log("[FTP] Upload complete:", remoteFile);
   } catch (err) {
-    console.error("FTP error:", err);
+    console.error("[FTP] FAILED:", {
+      message: err.message,
+      code: err.code,       // basic-ftp errors often have a numeric FTP response code here
+      name: err.name,
+      stack: err.stack,
+    });
     throw new Error("FTP upload failed: " + err.message);
   } finally {
     client.close();
+    console.log("[FTP] Connection closed");
   }
 }
 
 async function cleanupTempFile(filePath) {
   try {
     await fs.promises.unlink(filePath);
+    console.log("[cleanup] Removed temp file:", filePath);
   } catch (err) {
-    if (err.code !== "ENOENT") console.error("Temp cleanup failed:", err);
+    if (err.code !== "ENOENT") console.error("[cleanup] Temp cleanup failed:", filePath, err.message);
   }
 }
 
 async function convertAndUpload(file, folder) {
+  console.log("[convertAndUpload] START", {
+    originalname: file?.originalname,
+    mimetype: file?.mimetype,
+    size: file?.size,
+    tempPath: file?.path,
+    folder,
+  });
+
+  if (!file || !file.path) {
+    console.error("[convertAndUpload] No file or file.path provided — multer may not have processed this field");
+    throw new Error("No file received for upload");
+  }
+
   if (!fs.existsSync("temp")) {
     fs.mkdirSync("temp");
+    console.log("[convertAndUpload] Created temp/ directory");
   }
 
   const safeName = getSafeFileName(file);
+  console.log("[convertAndUpload] Safe filename:", safeName);
 
   try {
-    // Images only for now — video/other file types aren't a supported feature yet,
-    // so we reject them outright rather than silently accepting whatever is sent.
     if (!file.mimetype.startsWith("image")) {
+      console.error("[convertAndUpload] Rejected non-image mimetype:", file.mimetype);
       throw new Error("Only image uploads are currently supported.");
     }
 
     const webpName = `${Date.now()}-${safeName.replace(/\.[^.]+$/, "")}.webp`;
     const tempPath = path.join("temp", webpName);
+    console.log("[convertAndUpload] Target webp path:", tempPath);
 
     try {
-      // sharp will throw if the actual bytes aren't valid image data —
-      // this is what protects us from a renamed/fake file, not the mimetype string.
+      console.log("[convertAndUpload] Starting sharp conversion...");
       await sharp(file.path).webp({ quality: 80 }).toFile(tempPath);
+      console.log("[convertAndUpload] Sharp conversion done, file exists:", fs.existsSync(tempPath));
+
       await uploadToHostinger(tempPath, `${folder}/${webpName}`);
       await cleanupTempFile(tempPath);
-      return { url: `${FTP_URL}/img/${folder}/${webpName}`, type: "image" };
+
+      const finalUrl = `${FTP_URL}/img/${folder}/${webpName}`;
+      console.log("[convertAndUpload] SUCCESS, final URL:", finalUrl);
+
+      return { url: finalUrl, type: "image" };
     } catch (err) {
-      console.error("Conversion/Upload error:", err);
+      console.error("[convertAndUpload] Conversion/Upload error:", {
+        message: err.message,
+        stack: err.stack,
+      });
       throw new Error("Image conversion/upload failed: " + err.message);
     }
   } finally {
-    // Always clean up the original temp file — success or failure —
-    // so disk usage doesn't quietly grow over time.
     await cleanupTempFile(file.path);
   }
 }

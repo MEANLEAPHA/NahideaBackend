@@ -31,7 +31,7 @@ app.use(
 );
 
 const { connectRedis } = require("./src/config/redisClient");
-// const {globalLimiter} = require("./src/middleware/rateLimiter");
+
 
 // worker
 require("./src/workers/rankStoreToDB");
