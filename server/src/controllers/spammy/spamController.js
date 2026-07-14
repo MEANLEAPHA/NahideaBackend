@@ -227,10 +227,6 @@ const getSentSpam = async (req, res) => {
   }
 };
 
-// Soft-delete a single spam for whichever side (sender or receiver) is
-// making the request. The caller's role is detected from the row itself —
-// not trusted from the client — so it can't be spoofed. Once both sides
-// have deleted their copy, the row is hard-deleted for good.
 const deleteOneSpam = async (req, res) => {
   const client = await pool.connect();
 
@@ -298,9 +294,6 @@ const deleteOneSpam = async (req, res) => {
   }
 };
 
-// Bulk soft-delete. `?type=inbox` (default) clears everything the user has
-// received; `?type=sent` clears everything they've sent. Rows that end up
-// deleted on both sides get swept away permanently.
 const deleteAllSpam = async (req, res) => {
   const client = await pool.connect();
 

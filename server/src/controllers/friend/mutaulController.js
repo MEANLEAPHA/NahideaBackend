@@ -1,4 +1,4 @@
-const pool = require("../../config/db"); // pg Pool instance
+const pool = require("../../config/db"); 
 
 const getMutuals= async (req, res) => {
   try {

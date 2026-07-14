@@ -1,7 +1,6 @@
 const { ranking } = require("../../config/redisClient");
 const pool = require("../../config/db");
 
-// track login and add score
 const recordLogin = async (req, res) => {
   try {
     const userId = req.user.userId;

@@ -11,7 +11,6 @@ const {
 const {
     followUser,
     unfollowUser,
-    // acceptFollowRequest,
     getFollowStatus
 } = require("../../controllers/mutuals/followController");
 

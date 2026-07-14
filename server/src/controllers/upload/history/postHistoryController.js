@@ -6,8 +6,6 @@ const savePostHistory = async (req, res) => {
     const userId = req.user.userId;
     const { postId } = req.params;
 
-    // PostgreSQL uses ON CONFLICT instead of ON DUPLICATE KEY
-    // Ensure post_history has a UNIQUE constraint on (user_id, post_id)
     await pool.query(
       `INSERT INTO post_history (user_id, post_id, created_at, updated_at)
        VALUES ($1, $2, NOW(), NOW())

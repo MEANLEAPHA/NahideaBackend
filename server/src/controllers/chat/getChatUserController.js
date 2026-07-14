@@ -90,34 +90,6 @@ const getChatSpamUser = async (req, res) => {
   }
 };
 
-// const getChatArchivedUser = async (req, res) => {
-//   const userId = req.user.userId;
-//   try {
-//     const result = await db.query(`
-//       SELECT u.id, u.username, u.avatar_url,
-//              c.id AS conversation_id,
-//              (SELECT m.content 
-//               FROM messages m
-//               WHERE m.conversation_id = c.id 
-//                 AND NOT (m.deleted_by_sender = 1 AND m.sender_id = $1)
-//                 AND NOT (m.deleted_by_recipient = 1 AND m.sender_id != $2)
-//               ORDER BY m.created_at DESC 
-//               LIMIT 1) AS last_message
-//       FROM users u
-//       JOIN conversations c 
-//         ON (c.user1_id = $3 AND c.user2_id = u.id) 
-//         OR (c.user1_id = u.id AND c.user2_id = $4)
-//       WHERE (
-//         (c.user1_id = $5 AND c.user1_deleted_at IS NOT NULL AND c.user2_deleted_at IS NULL)
-//         OR (c.user2_id = $6 AND c.user2_deleted_at IS NOT NULL AND c.user1_deleted_at IS NULL)
-//       )
-//     `, [userId, userId, userId, userId, userId, userId]);
-
-//     res.json(result.rows);
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// };
 const getChatArchivedUser = async (req, res) => {
   const userId = req.user.userId;
   try {

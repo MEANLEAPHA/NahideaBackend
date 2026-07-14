@@ -19,7 +19,6 @@ const {
 
 } = require("../../controllers/upload/postController");
 const {
-  content,
   upload
 } = require("../../controllers/upload/contentController");
 

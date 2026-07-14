@@ -477,12 +477,6 @@ io.on("connection", (socket) => {
 });
 
 
-/*
-|--------------------------------------------------------------------------
-| ROUTES
-|--------------------------------------------------------------------------
-*/
-
 // chat 
 try {
   const userChatRoute = require("./src/routes/chat/getChatUserRoute");
@@ -603,7 +597,6 @@ try {
   console.error(err.stack);
 }
 
-
 // ban
 try {
   const banRoutes = require("./src/routes/report/banRoute");
@@ -644,8 +637,6 @@ try {
   console.error(err.stack);
 }
 
-      // search logic // 
-      
 // search All
 try{
   const searchAllRoute = require("./src/routes/search/searchAllRoute");
@@ -656,7 +647,6 @@ catch(err){
   console.error("❌ Error loading searchAllRoutes:", err.message);
   console.error(err.stack);
 } 
-
 
 // searchUser
 try{
@@ -669,28 +659,10 @@ catch(err){
   console.error(err.stack);
 } 
 
-
-
 app.get("/", (req, res) => {
   res.send("API Server Running");
 });
 
-
-
-
-
-
-
-
-
-
-
-
-/*
-|--------------------------------------------------------------------------
-| START SERVER
-|--------------------------------------------------------------------------
-*/
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({
@@ -699,6 +671,7 @@ app.use((err, req, res, next) => {
 });
 
 async function startServer() {
+
   // Start listening immediately — don't block on Redis/other async setup
   server.listen(process.env.PORT, () => {
     console.log("Server is running on port:" + process.env.PORT);

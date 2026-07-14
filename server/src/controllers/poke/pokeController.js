@@ -1,6 +1,5 @@
 const db = require("../../config/db");
 
-// Check if user already sent signal today
 async function hasSentToday(senderId, receiverId, signalType) {
   const result = await db.query(
     `SELECT id FROM user_poke 
