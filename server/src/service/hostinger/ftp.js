@@ -65,7 +65,7 @@ async function convertAndUpload(file, folder) {
         .toFile(tempPath);
 
       // Upload WebP
-      await uploadToHostinger(tempPath, `${folder}/${webpName}`);
+      await uploadToHostinger(tempPath, `/img/${folder}/${webpName}`);
 
       // Cleanup
       await fs.promises.unlink(tempPath);
