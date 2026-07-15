@@ -83,6 +83,12 @@ const addComment = async (req, res) => {
       });
     }
 
+    const postOwnerResult = await client.query(
+      `SELECT user_id FROM posts WHERE id = $1`,
+      [postId]
+    );
+    const postOwnerId = postOwnerResult.rows[0]?.user_id;
+
     // =========================
     // NOTIFICATION TEXT
     // =========================
@@ -435,6 +441,9 @@ const addComment = async (req, res) => {
     )
     await ranking.zIncrBy(`trendingPost:day:${currentDate}`, 5, postId.toString());
     await ranking.zIncrBy(`hof:month:${currentMonth}`, 3, userId.toString());
+    if (postOwnerId && String(postOwnerId) !== String(userId)) {
+      await ranking.zIncrBy(`hof:month:${currentMonth}`, 2, postOwnerId.toString());
+    }
 
     await client.query("COMMIT");
 
@@ -524,6 +533,12 @@ const deleteComment = async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ message: "Comment not found" });
     }
+    
+    const postOwnerResult = await db.query(
+      `SELECT user_id FROM posts WHERE id = $1`,
+      [postId]
+    );
+    const postOwnerId = postOwnerResult.rows[0]?.user_id;
 
 
     await db.query(
@@ -540,6 +555,9 @@ const deleteComment = async (req, res) => {
       await ranking.zIncrBy(todayTrendingKey, -5, postId.toString());
     }
     await ranking.zIncrBy(`hof:month:${currentMonth}`, -3, userId.toString());
+        if (postOwnerId && String(postOwnerId) !== String(userId)) {
+      await ranking.zIncrBy(`hof:month:${currentMonth}`, -2, postOwnerId.toString());
+    }
 
 
     res.status(200).json({ message: "Comment deleted" });
@@ -842,7 +860,9 @@ const reportComment = async (req, res) => {
 const likeComment = async (req, res) => {
 
     const client = await db.connect();
-
+    const today = new Date().toISOString().split("T")[0]; //  YYYY-MM-DD
+    const currentDate = today; // keep full YYYY-MM-DD
+    const currentMonth = today.slice(0, 7).replace("-", "");
     try {
 
         await client.query("BEGIN");
@@ -1022,7 +1042,10 @@ const likeComment = async (req, res) => {
             // -------------------------------------
             // SUCCESS
             // -------------------------------------
-
+            await ranking.zIncrBy(`hof:month:${currentMonth}`, -0.5, userId.toString());
+            if (String(commentOwnerId) !== String(userId)) {
+              await ranking.zIncrBy(`hof:month:${currentMonth}`, -1, commentOwnerId.toString());
+            }
             await client.query("COMMIT");
 
             return res.json({
@@ -1192,7 +1215,10 @@ const likeComment = async (req, res) => {
         // =========================================
         // SUCCESS
         // =========================================
-
+        await ranking.zIncrBy(`hof:month:${currentMonth}`, 0.5, userId.toString());
+        if (String(commentOwnerId) !== String(userId)) {
+            await ranking.zIncrBy(`hof:month:${currentMonth}`, 1, commentOwnerId.toString());
+        }
         await client.query("COMMIT");
 
         return res.json({
@@ -1218,10 +1244,16 @@ const likeComment = async (req, res) => {
 
 module.exports = {
      addComment, 
+
      updateComment, 
+
      deleteComment, 
-     getCommentsByPostId, 
+
+     getCommentsByPostId,
+
      getAnonIdentity,
+
      reportComment,
+
      likeComment
 };

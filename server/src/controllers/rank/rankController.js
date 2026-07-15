@@ -4,8 +4,8 @@ const pool = require("../../config/db");
 const recordLogin = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-    const currentMonth = today.slice(0, 7).replace("-", ""); // YYYYMM
+    const today = new Date().toISOString().split("T")[0]; 
+    const currentMonth = today.slice(0, 7).replace("-", ""); 
     const redisLoginKey = `login:day:${userId}:${today}`;
 
     // Check if already logged today
@@ -13,11 +13,7 @@ const recordLogin = async (req, res) => {
     if (!alreadyLogged) {
       // Mark login for today (value must be string)
       await ranking.set(redisLoginKey, "1", { EX: 86400 });
-
-      // Increment Hall of Fame score
       await ranking.zIncrBy(`hof:month:${currentMonth}`, 2, userId.toString());
-
-      // Persist to DB with its own try/catch
       try {
         await pool.query(
           `INSERT INTO user_logins (user_id, login_date)

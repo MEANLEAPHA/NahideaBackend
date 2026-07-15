@@ -192,7 +192,7 @@ io.on("connection", (socket) => {
       status: 'sent',
       created_at: 'Just now',
       username: username || 'Guest',
-      avatar_url: avatar_url || 'https://via.placeholder.com/40',
+      avatar_url: avatar_url || 'https://img.nahidea.com/img/content/1784081044474-nahidea.webp',
       deleted_by_sender: 0,
       deleted_by_recipient: 0,
       is_edited: 0,

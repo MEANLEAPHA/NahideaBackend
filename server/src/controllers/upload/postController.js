@@ -106,9 +106,9 @@ const createPost = async (req, res) => {
             mediaType = results.map(r => r.type);
 
             await pool.query(
-              `INSERT INTO content(user_id, post_id, type, cate_icon, title, text_body, media_type, media_url)
-                    VALUES($1, $2, $3, $4, $5, $6, $7, $8)`,
-                    [userId, postId, content_type, content_type_icon, content_title, text_body,JSON.stringify(mediaType), JSON.stringify(mediaUrl)]
+              `INSERT INTO content(user_id, post_id, type, title, text_body, media_type, media_url)
+                    VALUES($1, $2, $3, $4, $5, $6, $7)`,
+                    [userId, postId, content_type, content_title, text_body,JSON.stringify(mediaType), JSON.stringify(mediaUrl)]
             );
         },
         confession: async() => {
@@ -125,9 +125,9 @@ const createPost = async (req, res) => {
             const media_type = mediaType || null;
 
             await pool.query(
-                `INSERT INTO confession(user_id, post_id, type, cate_icon, title, media_type, media_url) 
-                VALUES($1, $2, $3, $4, $5, $6, $7)`,
-                [userId, postId, confession_type, confession_type_icon, confession_title, media_type, media_url]
+                `INSERT INTO confession(user_id, post_id, type, title, media_type, media_url) 
+                VALUES($1, $2, $3, $4, $5, $6)`,
+                [userId, postId, confession_type, confession_title, media_type, media_url]
             );
         },
         question: async() => {
@@ -140,8 +140,8 @@ const createPost = async (req, res) => {
             const media_url = questionMediaUrl || null;
             
             const questionResult = await pool.query(
-                "INSERT INTO question(post_id, question_type, title, media_url, type, cate_icon) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-                [postId, question_type, question_title, media_url, question_related_to, question_related_to_icon]
+                "INSERT INTO question(post_id, question_type, title, media_url, type) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+                [postId, question_type, question_title, media_url, question_related_to]
             );
 
               const questionId = questionResult.rows[0].id;
@@ -948,16 +948,6 @@ async function hydratePostsFromDb(ids, basePosts = null) {
     questions.map(q => [q.post_id, q])
   );
 
-
-  // const rangeMap = new Map(
-  //   ranges.map(r => [r.question_id, r])
-  // );
-
-  // const ratingMap = new Map(
-  //   ratings.map(r => [r.question_id, r])
-  // );
-
-  // Use this:
   const rangeMap = new Map(
     ranges.map(r => [r.id, r])  // Your query aliased question_id AS id
   );
@@ -973,23 +963,14 @@ async function hydratePostsFromDb(ids, basePosts = null) {
 
     let data = null;
 
-    // ====================================
-    // CONTENT
-    // ====================================
     if (post.post_type === "content") {
       data = contentMap.get(post.id) || null;
     }
 
-    // ====================================
-    // CONFESSION
-    // ====================================
     if (post.post_type === "confession") {
       data = confessionMap.get(post.id) || null;
     }
 
-    // ====================================
-    // QUESTION
-    // ====================================
     if (post.post_type === "question") {
 
       const q = questionMap.get(post.id);
@@ -1053,6 +1034,10 @@ async function hydratePostsFromDb(ids, basePosts = null) {
 
     return {
       ...post,
+      likes_count: Number(post.likes_count) || 0,
+      comments_count: Number(post.comments_count) || 0,
+      answers_count: Number(post.answers_count) || 0,
+      views_count: Number(post.views_count) || 0,
       created_at: timeAgo(post.created_at),
       data
     };
@@ -1074,16 +1059,17 @@ async function updateCachedPostLike(postId, isLike) {
 
     if (!parsed) return;
 
-    // update count
+    // Normalize to a real number first — likes_count may have been cached
+    // as a string (e.g. from a Postgres row), which would silently turn
+    // "+1" into string concatenation instead of numeric addition.
+    const currentCount = Number(parsed.likes_count) || 0;
+
     parsed.likes_count = isLike
-      ? parsed.likes_count + 1
-      : Math.max(parsed.likes_count - 1, 0);
+      ? currentCount + 1
+      : Math.max(currentCount - 1, 0);
 
     // get current ttl
     const ttl = await cachePost.ttl(key);
-
-    console.log("TTL:", ttl);
-    console.log("Updated likes_count:", parsed.likes_count);
 
     // preserve remaining ttl
     const result = await cachePost.set(
@@ -1094,14 +1080,13 @@ async function updateCachedPostLike(postId, isLike) {
         : {}
     );
 
-    console.log("Redis SET result:", result);
-
   } catch (err) {
 
     console.error("updateCachedPostLike error:", err);
 
   }
 }
+
 const likePost = async (req, res) => {
   const connection = await pool.connect();
   try{
@@ -1120,7 +1105,16 @@ const likePost = async (req, res) => {
     const username = getUserName.rows[0].username;
 
     const postId = req.params.postId;
-    const ownerId = req.params.ownerId;
+     
+    const postOwnerResult = await connection.query(
+      `SELECT user_id FROM posts WHERE id = $1`,
+      [postId]
+    );
+    const ownerId = postOwnerResult.rows[0]?.user_id;
+    if (!ownerId) {
+      await connection.query('ROLLBACK');
+      return res.status(404).json({ message: "Post not found" });
+    }
 
     const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
     const currentDay = today;
@@ -1143,8 +1137,6 @@ const likePost = async (req, res) => {
 
     // unlike cuz post alr like
     if(existingLike.length > 0){
-
-
       // remove like
       await connection.query(
         `
@@ -1237,7 +1229,7 @@ const likePost = async (req, res) => {
         );
       }
 
-      // success baby
+
 
       await updateCachedPostLike(postId, false);
 
@@ -1251,6 +1243,9 @@ const likePost = async (req, res) => {
         await ranking.zIncrBy(todayTrendingKey, -2, postId.toString());
       }
       await ranking.zIncrBy(`hof:month:${currentMonth}`, -1, userId.toString());
+      if (String(ownerId) !== String(userId)) {
+        await ranking.zIncrBy(`hof:month:${currentMonth}`, -2, ownerId.toString());
+      }
       await connection.query('COMMIT');
 
    
@@ -1284,14 +1279,6 @@ const likePost = async (req, res) => {
 
     // no self noti logic
     if(Number(ownerId) !== Number(userId)){
-      // const [[likeData]] = await connection.query(
-      //   `
-      //   SELECT COUNT(*) AS totalLikes
-      //   FROM post_likes
-      //   WHERE post_id = ?
-      //   `,
-      //   [postId]
-      // );
        const likeDataResult2 = await connection.query(
         `
         SELECT likes_count
@@ -1305,13 +1292,13 @@ const likePost = async (req, res) => {
       const totalLikes = likeData.likes_count;
 
       let notificationContent;
-      if(totalLikes === 1){
+      if(Number(totalLikes) === 1){
         notificationContent =
               `${username} liked your post`;
       }
       else{
          notificationContent =
-              `${username} and ${totalLikes - 1} other${totalLikes - 1 > 1 ? 's' : ''} liked your post`;
+              `${username} and ${Number(totalLikes) - 1} other${Number(totalLikes) - 1 > 1 ? 's' : ''} liked your post`;
       }
 
       // find exist aggregated noti
@@ -1374,10 +1361,13 @@ const likePost = async (req, res) => {
                 );
       }
     }
-    // success baby
+
     await updateCachedPostLike(postId, true);
     await ranking.zIncrBy(`trendingPost:day:${currentDay}`, 2, postId.toString());
-    await ranking.zIncrBy(`hof:month:${currentMonth}`, 0.5, userId.toString());
+    await ranking.zIncrBy(`hof:month:${currentMonth}`, 1, userId.toString());
+    if (String(ownerId) !== String(userId)) {
+      await ranking.zIncrBy(`hof:month:${currentMonth}`, 2, ownerId.toString());
+    }
     await connection.query('COMMIT');
 
 
@@ -1938,19 +1928,33 @@ const markQuestionSolved = async (req, res) => {
 module.exports = {
 
   createPost,
+
   upload,
+
   getAllPosts,
+
   getUnsolvedQuestions,
+
   updatePostBodyContent,
+
   deletePost,
+
   likePost,
+
   favoritePost,
+
   getPostsByLike,
+
   getPostsByFavorite,
+
   getPostByUserId,
+  
   markQuestionSolved,
+
   getAllTrending,
+
   getPostsByPostId,
+
   getPostByUserIds
 
 };

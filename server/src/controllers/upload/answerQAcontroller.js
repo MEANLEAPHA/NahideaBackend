@@ -1,5 +1,5 @@
 const db = require("../../config/db");
-
+const { ranking } = require("../../config/redisClient");
 const ALREADY_ANSWERED_MESSAGE = "You have already answered this question";
 
 const QUESTION_TYPES = [
@@ -211,6 +211,13 @@ const answerQA = async (req, res) => {
     }
 
     await client.query(`UPDATE posts SET answers_count = answers_count + 1 WHERE id = $1`, [postId]);
+    const today = new Date().toISOString().split("T")[0];
+    const currentMonth = today.slice(0, 7).replace("-", "");
+
+    await ranking.zIncrBy(`hof:month:${currentMonth}`, 4, userId.toString());
+    if (String(postOwnerId) !== String(userId)) {
+      await ranking.zIncrBy(`hof:month:${currentMonth}`, 2, postOwnerId.toString());
+    }
 
     if (Number(postOwnerId) !== Number(userId)) {
       const answerDataResult = await client.query(
@@ -463,10 +470,8 @@ const getAllAnswersByQuestionId = async (req, res) => {
           ELSE NULL
         END AS author_bg_color,
         
-        -- Check if current user voted
         $1 AS user_vote_type,
         
-        -- Get total answers count
         COUNT(*) OVER() AS total_count
         
       FROM answers a
@@ -481,6 +486,9 @@ const getAllAnswersByQuestionId = async (req, res) => {
     // Add user_vote_type to each answer
     const answersWithVotes = answers.map(answer => ({
       ...answer,
+      upvotes: Number(answer.upvotes) || 0,
+      downvotes: Number(answer.downvotes) || 0,
+      vote_score: Number(answer.vote_score) || 0,
       user_vote_type: voteMap.get(answer.id) || null
     }));
 
@@ -503,97 +511,6 @@ const getAllAnswersByQuestionId = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching answers"
-    });
-  }
-};
-const getMostPopularAnswer = async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const { questionId } = req.params;
-
-    // Get user's votes
-    const userVotesResult = await db.query(
-      `SELECT answer_id, vote_type FROM answer_votes WHERE user_id = $1`,
-      [userId]
-    );
-    const userVotes = userVotesResult.rows;
-
-    const voteMap = new Map();
-    userVotes.forEach(vote => {
-      voteMap.set(vote.answer_id, vote.vote_type);
-    });
-
-    const answerResult = await db.query(
-      `SELECT 
-        a.id,
-        a.question_id,
-        a.user_id,
-        a.is_anonymous,
-        a.anonymous_name,
-        a.anonymous_bg_color,
-        a.post_id,
-        a.question_type,
-        a.text_answer,
-        a.yes_no,
-        a.rating_value,
-        a.singlechoice_option_id,
-        a.singlechoice_option_value,
-        a.multiplechoice_option_ids,
-        a.multiplechoice_option_value,
-        a.ranking_positions,
-        a.ranking_position_value,
-        a.range_value,
-        a.upvotes,
-        a.downvotes,
-        a.vote_score,
-        a.created_at,
-        a.updated_at,
-        
-        CASE
-          WHEN a.is_anonymous = 1 THEN a.anonymous_name
-          ELSE u.username
-        END AS author_name,
-        
-        CASE
-          WHEN a.is_anonymous = 1 THEN NULL
-          ELSE u.avatar_url
-        END AS author_avatar,
-        
-        CASE
-          WHEN a.is_anonymous = 1 THEN a.anonymous_bg_color
-          ELSE NULL
-        END AS author_bg_color
-        
-      FROM answers a
-      LEFT JOIN users u ON a.user_id = u.id
-      WHERE a.question_id = $1
-      ORDER BY a.vote_score DESC, a.upvotes DESC
-      LIMIT 1`,
-      [questionId]
-    );
-    const answer = answerResult.rows;
-
-    if (!answer.length) {
-      return res.json({
-        success: true,
-        data: null,
-        message: "No answers yet"
-      });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        ...answer[0],
-        user_vote_type: voteMap.get(answer[0].id) || null
-      }
-    });
-
-  } catch (err) {
-    console.error("getMostPopularAnswer error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Error fetching popular answer"
     });
   }
 };
@@ -865,12 +782,27 @@ const upvoteAnswer = async (req, res) => {
       }
     }
 
-    // ============================================
-    // TRENDING/RANKING (TODO - implement later)
-    // ============================================
-    // const currentDay = new Date().toISOString().split("T")[0];
-    // await ranking.zIncrBy(`trendingAnswer:day:${currentDay}`, 1, answerId.toString());
-    // await ranking.zIncrBy(`hof:month:${currentDay.slice(0, 7).replace("-", "")}`, 0.5, userId.toString());
+    const today = new Date().toISOString().split("T")[0];
+      const currentMonth = today.slice(0, 7).replace("-", "");
+
+      if (notificationAction === 'create') {
+        await ranking.zIncrBy(`hof:month:${currentMonth}`, 1, userId.toString());
+        if (String(answerOwnerId) !== String(userId)) {
+          await ranking.zIncrBy(`hof:month:${currentMonth}`, 2, answerOwnerId.toString());
+        }
+      } else if (notificationAction === 'delete') {
+        await ranking.zIncrBy(`hof:month:${currentMonth}`, -1, userId.toString());
+        if (String(answerOwnerId) !== String(userId)) {
+          await ranking.zIncrBy(`hof:month:${currentMonth}`, -2, answerOwnerId.toString());
+        }
+      } else if (notificationAction === 'update') {
+        // was a downvote, now an upvote — undo the downvote penalty, then apply upvote reward
+        if (String(answerOwnerId) !== String(userId)) {
+          await ranking.zIncrBy(`hof:month:${currentMonth}`, 1, answerOwnerId.toString()); // -1 downvote penalty undone, +2 upvote reward = net effect handled in two steps
+          await ranking.zIncrBy(`hof:month:${currentMonth}`, 2, answerOwnerId.toString());
+        }
+        await ranking.zIncrBy(`hof:month:${currentMonth}`, 1, userId.toString());
+    }
 
     await client.query("COMMIT");
 
@@ -1151,6 +1083,23 @@ const downvoteAnswer = async (req, res) => {
     // For downvotes, you might want to decrement trending score
     // await ranking.zIncrBy(`trendingAnswer:day:${currentDay}`, -1, answerId.toString());
 
+    const today = new Date().toISOString().split("T")[0];
+    const currentMonth = today.slice(0, 7).replace("-", "");
+
+    if (notificationAction === 'create' && String(answerOwnerId) !== String(userId)) {
+      await ranking.zIncrBy(`hof:month:${currentMonth}`, -1, answerOwnerId.toString());
+    } else if (notificationAction === 'delete' && String(answerOwnerId) !== String(userId)) {
+      await ranking.zIncrBy(`hof:month:${currentMonth}`, 1, answerOwnerId.toString());
+    } else if (notificationAction === 'update') {
+      // Voter had earned +1 for the original upvote — remove it, since downvoting earns 0
+      await ranking.zIncrBy(`hof:month:${currentMonth}`, -1, userId.toString());
+
+      if (String(answerOwnerId) !== String(userId)) {
+        // was an upvote (+2 reward), now a downvote (-1 penalty) — net -3 to the answer owner
+        await ranking.zIncrBy(`hof:month:${currentMonth}`, -3, answerOwnerId.toString());
+      }
+    }
+    // deliberately no zIncrBy for `userId` (the downvoter) — downvoting itself earns nothing
     await client.query("COMMIT");
 
     res.json({
@@ -1248,6 +1197,9 @@ const getAnswerById = async (req, res) => {
       success: true,
       data: {
         ...answer[0],
+        upvotes: Number(answer[0].upvotes) || 0,
+        downvotes: Number(answer[0].downvotes) || 0,
+        vote_score: Number(answer[0].vote_score) || 0,
         user_vote_type: userVote[0]?.vote_type || null
       }
     });
@@ -1262,12 +1214,19 @@ const getAnswerById = async (req, res) => {
 };
 
 module.exports = {
+
   answerQA,
+
   getQuestionById,
+
   getAllAnswersByQuestionId,
+
   upvoteAnswer,
+
   downvoteAnswer,
+
   checkAlreadyAnswered,
+
   getAnswerById,
-  getMostPopularAnswer,
+
 };
