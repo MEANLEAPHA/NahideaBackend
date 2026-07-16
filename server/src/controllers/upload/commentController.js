@@ -43,6 +43,441 @@ const generateAnonymousBgColor = () => {
     return colors[randomIndex];
 };
 
+// const addComment = async (req, res) => {
+//   const client = await db.connect();
+
+//   try {
+
+//     await client.query("BEGIN");
+
+//     const userId = req.user.userId;
+//     const today = new Date().toISOString().split("T")[0]; //  YYYY-MM-DD
+//     const currentDate = today; // keep full YYYY-MM-DD
+//     const currentMonth = today.slice(0, 7).replace("-", "");
+//     const { postId } = req.params;
+
+//     const {
+//       username,
+//       comment_id,
+//       content,
+//       gif_url,
+//       user_id_mention,
+//       username_mention,
+//       is_anonymous
+//     } = req.body;
+
+
+//     // =========================
+//     // VALIDATION
+//     // =========================
+
+//   if (!postId) {
+//     throw Object.assign(new Error("Missing postId"), { status: 400 });
+//   }
+
+//   if (!content && !gif_url) {
+//     throw Object.assign(new Error("Content or GIF required"), { status: 400 });
+//   }
+  
+
+//     const postOwnerResult = await client.query(
+//       `SELECT user_id FROM posts WHERE id = $1`,
+//       [postId]
+//     );
+//     const postOwnerId = postOwnerResult.rows[0]?.user_id;
+
+//     // =========================
+//     // NOTIFICATION TEXT
+//     // =========================
+
+//     const notificationText = content
+//       ? content.slice(0, 100) +
+//         (content.length > 100 ? "..." : "")
+//       : "GIF";
+
+//     // =========================
+//     // ANONYMOUS IDENTITY
+//     // =========================
+
+//     let finalAnonymousName = null;
+//     let finalAnonymousBgColor = null;
+
+//     if (Number(is_anonymous) === 1) {
+
+//       const existingIdentityResult = await client.query(
+//         `
+//         SELECT anonymous_name, anonymous_bg_color
+//         FROM comments
+//         WHERE post_id = $1
+//         AND user_id = $2
+//         AND is_anonymous = 1
+//         AND is_deleted = 0
+//         LIMIT 1
+//         `,
+//         [postId, userId]
+//       );
+//       const existingIdentity = existingIdentityResult.rows;
+
+//       if (existingIdentity.length > 0) {
+
+//         finalAnonymousName =
+//           existingIdentity[0].anonymous_name;
+
+//         finalAnonymousBgColor =
+//           existingIdentity[0].anonymous_bg_color;
+
+//       } else {
+
+//         finalAnonymousName =
+//           generateAnonymousName();
+
+//         finalAnonymousBgColor =
+//           generateAnonymousBgColor();
+//       }
+//     }
+
+//     // =========================
+//     // REPLY LOGIC
+//     // =========================
+
+//     let finalParentId = null;
+
+//     if (comment_id) {
+
+//       const parentRowsResult = await client.query(
+//         `
+//         SELECT id, parent_id
+//         FROM comments
+//         WHERE id = $1
+//         `,
+//         [comment_id]
+//       );
+//       const parentRows = parentRowsResult.rows;
+
+//     if (!parentRows.length) {
+//       throw Object.assign(new Error("Parent comment not found"), { status: 404 });
+//     }
+
+//       const parentComment = parentRows[0];
+
+//       // always store top-level parent
+//       finalParentId =
+//         parentComment.parent_id || parentComment.id;
+//     }
+
+//     // =========================
+//     // CREATE COMMENT
+//     // =========================
+
+//     const result = await client.query(
+//       `
+//       INSERT INTO comments
+//       (
+//         post_id,
+//         parent_id,
+//         user_id,
+//         username,
+//         content,
+//         gif_url,
+//         user_id_mention,
+//         username_mention,
+//         is_anonymous,
+//         anonymous_name,
+//         anonymous_bg_color
+//       )
+//       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+//       RETURNING id
+//       `,
+//       [
+//         postId,
+//         finalParentId,
+//         userId,
+//         username,
+//         content || null,
+//         gif_url || null,
+//         user_id_mention || null,
+//         username_mention || null,
+//         is_anonymous || 0,
+//         finalAnonymousName,
+//         finalAnonymousBgColor
+//       ]
+//     );
+//     const insertedCommentId = result.rows[0].id;
+
+//     // =========================
+//     // UPDATE REPLY COUNT
+//     // =========================
+
+//     if (finalParentId) {
+
+//       await client.query(
+//         `
+//         UPDATE comments
+//         SET reply_count = reply_count + 1
+//         WHERE id = $1
+//         `,
+//         [finalParentId]
+//       );
+//     }
+
+//     // =========================
+//     // NOTIFICATION LOGIC
+//     // =========================
+
+//     if (comment_id) {
+
+//       // comment being replied to
+//       const replyRowsResult = await client.query(
+//         `
+//         SELECT id, user_id, username, parent_id, is_anonymous, anonymous_name
+//         FROM comments
+//         WHERE id = $1
+//         `,
+//         [comment_id]
+//       );
+//       const replyRows = replyRowsResult.rows;
+
+//       const replyComment = replyRows[0];
+
+//       if (replyComment) {
+
+//         const replyOwnerId =
+//           replyComment.user_id;
+
+//           const replyOwnerUsername = replyComment.username;
+
+//           const replyOwnerDisplayName =
+//             Number(replyComment.is_anonymous) === 1
+//               ? replyComment.anonymous_name
+//               : replyComment.username;
+
+//         // top-level parent comment
+//         const topRowsResult = await client.query(
+//           `
+//           SELECT id, user_id, username
+//           FROM comments
+//           WHERE id = $1
+//           `,
+//           [finalParentId]
+//         );
+//         const topRows = topRowsResult.rows;
+
+//         const topComment = topRows[0];
+
+//         const parentOwnerId =
+//           topComment?.user_id;
+
+//         // =====================================
+//         // CASE 1
+//         // DIRECT REPLY TO PARENT COMMENT
+//         // =====================================
+//         // Fixed: comment_id (from req.body, type unknown) vs finalParentId
+//         // (always a string from Postgres bigint) — compare as strings so
+//         // this branch is chosen correctly regardless of incoming type.
+
+//         const displayName = Number(is_anonymous) === 1 ? finalAnonymousName : username;
+//         if (String(comment_id) === String(finalParentId)) {
+
+//           if (
+//             parentOwnerId &&
+//             String(parentOwnerId) !== String(userId)
+//           ) {
+
+//           await client.query(
+//               `
+//               INSERT INTO notifications
+//               (
+//                 receiver_id, sender_id, type, content, post_id, comment_id,
+//                 is_viewed, is_anonymous, anonymous_name, anonymous_bg_color
+//               )
+//               VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0, $6, $7, $8)
+//               `,
+//               [
+//                 parentOwnerId,
+//                 userId,
+//                 `${displayName} replied to your comment: ${notificationText}`,
+//                 postId,
+//                 insertedCommentId,
+//                 is_anonymous || 0,
+//                 finalAnonymousName,
+//                 finalAnonymousBgColor
+//               ]
+//             );
+//           }
+//         }
+
+//         // =====================================
+//         // CASE 2
+//         // REPLY TO REPLY
+//         // =====================================
+
+//         else {
+
+//           // -----------------------------------
+//           // SAME USER:
+//           // parent owner == reply owner
+//           // -----------------------------------
+//           // Both sides are DB-sourced strings here, safe to compare directly.
+//           if (String(parentOwnerId) === String(replyOwnerId)) {
+
+//             // Example:
+//             //
+//             // User1 parent
+//             // User2 reply
+//             // User1 reply back
+//             // User4 reply to User1
+//             //
+//             // User1 should ONLY get:
+//             // "User4 replied to you"
+
+//             if (String(replyOwnerId) !== String(userId)) {
+
+//               await client.query(
+//                 `
+//                 INSERT INTO notifications
+//                 (
+//                   receiver_id,
+//                   sender_id,
+//                   type,
+//                   content,
+//                   post_id,
+//                   comment_id,
+//                   is_viewed,
+//                   is_anonymous,
+//                   anonymous_name,
+//                   anonymous_bg_color
+//                 )
+//                 VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0, $6, $7, $8)
+//                 `,
+//                 [
+//                   replyOwnerId,
+//                   userId,
+//                   `${displayName} replied to you: ${notificationText}`,
+//                   postId,
+//                   insertedCommentId,
+//                   is_anonymous || 0,
+//                   finalAnonymousName,
+//                   finalAnonymousBgColor
+//                 ]
+//               );
+//             }
+//           }
+
+//           // -----------------------------------
+//           // DIFFERENT USERS
+//           // -----------------------------------
+
+//           else {
+
+//             // notify parent owner
+
+//             if (
+//               parentOwnerId &&
+//               String(parentOwnerId) !== String(userId)
+//             ) {
+
+//               await client.query(
+//                 `
+//                 INSERT INTO notifications
+//                 (
+//                   receiver_id,
+//                   sender_id,
+//                   type,
+//                   content,
+//                   post_id,
+//                   comment_id,
+//                   is_viewed,
+//                   is_anonymous,
+//                   anonymous_name,
+//                   anonymous_bg_color
+//                 )
+//                 VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0, $6, $7, $8)
+//                 `,
+//                 [
+//                   parentOwnerId,
+//                   userId,
+//                   `${displayName} replied to ${replyOwnerDisplayName} on your comment: ${notificationText}`,
+//                   postId,
+//                   insertedCommentId,
+//                   is_anonymous || 0,
+//                   finalAnonymousName,
+//                   finalAnonymousBgColor
+//                 ]
+//               );
+//             }
+
+//             // notify reply owner
+
+//             if (
+//               replyOwnerId &&
+//               String(replyOwnerId) !== String(userId)
+//             ) {
+
+//               await client.query(
+//                 `
+//                 INSERT INTO notifications
+//                 (
+//                   receiver_id,
+//                   sender_id,
+//                   type,
+//                   content,
+//                   post_id,
+//                   comment_id,
+//                   is_viewed,
+//                   is_anonymous,
+//                   anonymous_name,
+//                   anonymous_bg_color
+//                 )
+//                 VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0, $6, $7, $8)
+//                 `,
+//                 [
+//                   replyOwnerId,
+//                   userId,
+//                   `${displayName} replied to you: ${notificationText}`,
+//                   postId,
+//                   insertedCommentId,
+//                   is_anonymous || 0,
+//                   finalAnonymousName,
+//                   finalAnonymousBgColor
+//                 ]
+//               );
+//             }
+//           }
+//         }
+//       }
+//     }
+
+//     // =========================
+//     // SUCCESS
+//     // =========================
+
+//     await client.query(
+//         `UPDATE posts SET comments_count = comments_count + 1 WHERE id = $1`,
+//         [postId]
+//     )
+//     await ranking.zIncrBy(`trendingPost:day:${currentDate}`, 5, postId.toString());
+//     await ranking.zIncrBy(`hof:month:${currentMonth}`, 3, userId.toString());
+//     if (postOwnerId && String(postOwnerId) !== String(userId)) {
+//       await ranking.zIncrBy(`hof:month:${currentMonth}`, 2, postOwnerId.toString());
+//     }
+
+//     await client.query("COMMIT");
+
+//     return res.status(201).json({
+//       message: "Comment created",
+//       comment_id: insertedCommentId
+//     });
+    
+//   } catch (err) {
+//     await client.query("ROLLBACK");
+//     console.error(err);
+//     return res.status(err.status || 500).json({
+//       message: err.status ? err.message : "Server error"
+//     });
+//   } finally {
+//     client.release();
+//   }
+// };
 const addComment = async (req, res) => {
   const client = await db.connect();
 
@@ -66,25 +501,26 @@ const addComment = async (req, res) => {
       is_anonymous
     } = req.body;
 
+    console.log("[addComment] START", { postId, userId, comment_id, is_anonymous });
 
     // =========================
     // VALIDATION
     // =========================
 
-  if (!postId) {
-    throw Object.assign(new Error("Missing postId"), { status: 400 });
-  }
+    if (!postId) {
+      throw Object.assign(new Error("Missing postId"), { status: 400 });
+    }
 
-  if (!content && !gif_url) {
-    throw Object.assign(new Error("Content or GIF required"), { status: 400 });
-  }
-  
+    if (!content && !gif_url) {
+      throw Object.assign(new Error("Content or GIF required"), { status: 400 });
+    }
 
     const postOwnerResult = await client.query(
       `SELECT user_id FROM posts WHERE id = $1`,
       [postId]
     );
     const postOwnerId = postOwnerResult.rows[0]?.user_id;
+    console.log("[addComment] postOwnerId =", postOwnerId);
 
     // =========================
     // NOTIFICATION TEXT
@@ -126,6 +562,8 @@ const addComment = async (req, res) => {
         finalAnonymousBgColor =
           existingIdentity[0].anonymous_bg_color;
 
+        console.log("[addComment] reused existing anon identity:", finalAnonymousName);
+
       } else {
 
         finalAnonymousName =
@@ -133,6 +571,8 @@ const addComment = async (req, res) => {
 
         finalAnonymousBgColor =
           generateAnonymousBgColor();
+
+        console.log("[addComment] generated NEW anon identity:", finalAnonymousName);
       }
     }
 
@@ -144,6 +584,8 @@ const addComment = async (req, res) => {
 
     if (comment_id) {
 
+      console.log("[addComment] this is a REPLY, comment_id =", comment_id);
+
       const parentRowsResult = await client.query(
         `
         SELECT id, parent_id
@@ -154,15 +596,20 @@ const addComment = async (req, res) => {
       );
       const parentRows = parentRowsResult.rows;
 
-    if (!parentRows.length) {
-      throw Object.assign(new Error("Parent comment not found"), { status: 404 });
-    }
+      if (!parentRows.length) {
+        throw Object.assign(new Error("Parent comment not found"), { status: 404 });
+      }
 
       const parentComment = parentRows[0];
 
       // always store top-level parent
       finalParentId =
         parentComment.parent_id || parentComment.id;
+
+      console.log("[addComment] finalParentId resolved to", finalParentId);
+
+    } else {
+      console.log("[addComment] this is a TOP-LEVEL comment on the post (no comment_id) — notification block below will be SKIPPED entirely");
     }
 
     // =========================
@@ -203,6 +650,7 @@ const addComment = async (req, res) => {
       ]
     );
     const insertedCommentId = result.rows[0].id;
+    console.log("[addComment] comment INSERTED, id =", insertedCommentId);
 
     // =========================
     // UPDATE REPLY COUNT
@@ -218,6 +666,7 @@ const addComment = async (req, res) => {
         `,
         [finalParentId]
       );
+      console.log("[addComment] reply_count incremented on", finalParentId);
     }
 
     // =========================
@@ -239,17 +688,21 @@ const addComment = async (req, res) => {
 
       const replyComment = replyRows[0];
 
+      if (!replyComment) {
+        console.log("[addComment] WARNING: comment_id was provided but no matching comment row found — notification SKIPPED silently, no error thrown");
+      }
+
       if (replyComment) {
 
         const replyOwnerId =
           replyComment.user_id;
 
-          const replyOwnerUsername = replyComment.username;
+        const replyOwnerUsername = replyComment.username;
 
-          const replyOwnerDisplayName =
-            Number(replyComment.is_anonymous) === 1
-              ? replyComment.anonymous_name
-              : replyComment.username;
+        const replyOwnerDisplayName =
+          Number(replyComment.is_anonymous) === 1
+            ? replyComment.anonymous_name
+            : replyComment.username;
 
         // top-level parent comment
         const topRowsResult = await client.query(
@@ -267,6 +720,13 @@ const addComment = async (req, res) => {
         const parentOwnerId =
           topComment?.user_id;
 
+        console.log("[addComment] notification context:", {
+          replyOwnerId,
+          parentOwnerId,
+          userId,
+          isDirectReply: String(comment_id) === String(finalParentId)
+        });
+
         // =====================================
         // CASE 1
         // DIRECT REPLY TO PARENT COMMENT
@@ -278,12 +738,14 @@ const addComment = async (req, res) => {
         const displayName = Number(is_anonymous) === 1 ? finalAnonymousName : username;
         if (String(comment_id) === String(finalParentId)) {
 
+          console.log("[addComment] branch = CASE 1 (direct reply to parent)");
+
           if (
             parentOwnerId &&
             String(parentOwnerId) !== String(userId)
           ) {
 
-          await client.query(
+            const notifResult = await client.query(
               `
               INSERT INTO notifications
               (
@@ -291,6 +753,7 @@ const addComment = async (req, res) => {
                 is_viewed, is_anonymous, anonymous_name, anonymous_bg_color
               )
               VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0, $6, $7, $8)
+              RETURNING id
               `,
               [
                 parentOwnerId,
@@ -303,6 +766,10 @@ const addComment = async (req, res) => {
                 finalAnonymousBgColor
               ]
             );
+            console.log("[addComment] notification INSERTED (case 1), id =", notifResult.rows[0]?.id);
+
+          } else {
+            console.log("[addComment] CASE 1 notification SKIPPED — either no parentOwnerId, or parentOwnerId === userId (replying to your own comment)");
           }
         }
 
@@ -313,26 +780,19 @@ const addComment = async (req, res) => {
 
         else {
 
+          console.log("[addComment] branch = CASE 2 (reply to a reply)");
+
           // -----------------------------------
           // SAME USER:
           // parent owner == reply owner
           // -----------------------------------
-          // Both sides are DB-sourced strings here, safe to compare directly.
           if (String(parentOwnerId) === String(replyOwnerId)) {
 
-            // Example:
-            //
-            // User1 parent
-            // User2 reply
-            // User1 reply back
-            // User4 reply to User1
-            //
-            // User1 should ONLY get:
-            // "User4 replied to you"
+            console.log("[addComment] CASE 2a — parentOwner === replyOwner (same person)");
 
             if (String(replyOwnerId) !== String(userId)) {
 
-              await client.query(
+              const notifResult = await client.query(
                 `
                 INSERT INTO notifications
                 (
@@ -348,6 +808,7 @@ const addComment = async (req, res) => {
                   anonymous_bg_color
                 )
                 VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0, $6, $7, $8)
+                RETURNING id
                 `,
                 [
                   replyOwnerId,
@@ -360,6 +821,10 @@ const addComment = async (req, res) => {
                   finalAnonymousBgColor
                 ]
               );
+              console.log("[addComment] notification INSERTED (case 2a), id =", notifResult.rows[0]?.id);
+
+            } else {
+              console.log("[addComment] CASE 2a notification SKIPPED — replyOwnerId === userId (replying to yourself)");
             }
           }
 
@@ -369,6 +834,8 @@ const addComment = async (req, res) => {
 
           else {
 
+            console.log("[addComment] CASE 2b — parentOwner and replyOwner are different people");
+
             // notify parent owner
 
             if (
@@ -376,7 +843,7 @@ const addComment = async (req, res) => {
               String(parentOwnerId) !== String(userId)
             ) {
 
-              await client.query(
+              const notifResult1 = await client.query(
                 `
                 INSERT INTO notifications
                 (
@@ -392,6 +859,7 @@ const addComment = async (req, res) => {
                   anonymous_bg_color
                 )
                 VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0, $6, $7, $8)
+                RETURNING id
                 `,
                 [
                   parentOwnerId,
@@ -404,6 +872,10 @@ const addComment = async (req, res) => {
                   finalAnonymousBgColor
                 ]
               );
+              console.log("[addComment] notification INSERTED (case 2b, parent owner), id =", notifResult1.rows[0]?.id);
+
+            } else {
+              console.log("[addComment] CASE 2b parent-owner notification SKIPPED — no parentOwnerId or parentOwnerId === userId");
             }
 
             // notify reply owner
@@ -413,7 +885,7 @@ const addComment = async (req, res) => {
               String(replyOwnerId) !== String(userId)
             ) {
 
-              await client.query(
+              const notifResult2 = await client.query(
                 `
                 INSERT INTO notifications
                 (
@@ -429,6 +901,7 @@ const addComment = async (req, res) => {
                   anonymous_bg_color
                 )
                 VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0, $6, $7, $8)
+                RETURNING id
                 `,
                 [
                   replyOwnerId,
@@ -441,10 +914,16 @@ const addComment = async (req, res) => {
                   finalAnonymousBgColor
                 ]
               );
+              console.log("[addComment] notification INSERTED (case 2b, reply owner), id =", notifResult2.rows[0]?.id);
+
+            } else {
+              console.log("[addComment] CASE 2b reply-owner notification SKIPPED — no replyOwnerId or replyOwnerId === userId");
             }
           }
         }
       }
+    } else {
+      console.log("[addComment] NOTIFICATION BLOCK ENTIRELY SKIPPED — no comment_id means this was a top-level comment on the post. Post owner was NOT notified.");
     }
 
     // =========================
@@ -462,19 +941,24 @@ const addComment = async (req, res) => {
     }
 
     await client.query("COMMIT");
+    console.log("[addComment] COMMIT successful, insertedCommentId =", insertedCommentId);
 
     return res.status(201).json({
       message: "Comment created",
       comment_id: insertedCommentId
     });
-    
+
   } catch (err) {
+
     await client.query("ROLLBACK");
-    console.error(err);
+    console.error("[addComment] ROLLBACK — error:", err);
+
     return res.status(err.status || 500).json({
       message: err.status ? err.message : "Server error"
     });
+
   } finally {
+
     client.release();
   }
 };
