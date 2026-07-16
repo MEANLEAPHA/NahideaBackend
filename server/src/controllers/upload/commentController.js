@@ -923,7 +923,44 @@ const addComment = async (req, res) => {
         }
       }
     } else {
-      console.log("[addComment] NOTIFICATION BLOCK ENTIRELY SKIPPED — no comment_id means this was a top-level comment on the post. Post owner was NOT notified.");
+
+      // =====================================
+      // TOP-LEVEL COMMENT ON A POST
+      // =====================================
+      // No comment_id means this comment isn't a reply — it's a fresh
+      // comment directly on the post. Notify the post owner, same
+      // anon-aware displayName pattern as the reply branches above.
+
+      const displayName = Number(is_anonymous) === 1 ? finalAnonymousName : username;
+
+      if (postOwnerId && String(postOwnerId) !== String(userId)) {
+
+        const notifResult = await client.query(
+          `
+          INSERT INTO notifications
+          (
+            receiver_id, sender_id, type, content, post_id, comment_id,
+            is_viewed, is_anonymous, anonymous_name, anonymous_bg_color
+          )
+          VALUES ($1, $2, 'comment', $3, $4, $5, 0, $6, $7, $8)
+          RETURNING id
+          `,
+          [
+            postOwnerId,
+            userId,
+            `${displayName} commented on your post: ${notificationText}`,
+            postId,
+            insertedCommentId,
+            is_anonymous || 0,
+            finalAnonymousName,
+            finalAnonymousBgColor
+          ]
+        );
+        console.log("[addComment] notification INSERTED (top-level comment on post), id =", notifResult.rows[0]?.id);
+
+      } else {
+        console.log("[addComment] top-level notification SKIPPED — no postOwnerId, or postOwnerId === userId (commenting on your own post)");
+      }
     }
 
     // =========================
@@ -962,6 +999,8 @@ const addComment = async (req, res) => {
     client.release();
   }
 };
+
+
 
 const updateComment = async (req, res) => {
 
