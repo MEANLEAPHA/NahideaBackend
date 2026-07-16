@@ -117,7 +117,6 @@ io.on("connection", (socket) => {
   socket.on('send_message', async (data) => {
 
   if (isRateLimited(socket.id, 'send_message', 15, 10000)) {
-    // max 15 messages per 10 seconds per socket
     return socket.emit('error', { message: 'You are sending messages too fast. Slow down.' });
   }
 
@@ -126,7 +125,7 @@ io.on("connection", (socket) => {
   const receiverId = parseInt(toUserId);
 
   try {
-    // Get or create conversation
+
     const convResult = await pool.query(
       `SELECT id FROM conversations 
        WHERE (user1_id = $1 AND user2_id = $2) OR (user1_id = $3 AND user2_id = $4)`,

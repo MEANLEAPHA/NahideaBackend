@@ -219,14 +219,14 @@ const answerQA = async (req, res) => {
       await ranking.zIncrBy(`hof:month:${currentMonth}`, 2, postOwnerId.toString());
     }
 
-    if (Number(postOwnerId) !== Number(userId)) {
+    if (String(postOwnerId) !== String(userId)) {
       const answerDataResult = await client.query(
         `SELECT COUNT(*) as total_answers FROM answers WHERE question_id = $1`,
         [questionId]
       );
       const answerData = answerDataResult.rows[0];
       const totalAnswers = Number(answerData.total_answers);
-      const displayName = isAnon ? "Anonymous" : username;
+      const displayName = isAnon ? anonymousName : username;
       const truncatedTitle = `${questionTitle.slice(0, 50)}${questionTitle.length > 50 ? "..." : ""}`;
 
       const notificationContent =
@@ -240,16 +240,18 @@ const answerQA = async (req, res) => {
       );
 
       if (existingNotificationResult.rowCount > 0) {
+      await client.query(
+        `UPDATE notifications 
+        SET sender_id = $1, content = $2, is_viewed = 0, created_at = NOW(),
+            answer_id = $3, is_anonymous = $4, anonymous_name = $5, anonymous_bg_color = $6
+        WHERE aggregate_key = $7 AND type = 'answer'`,
+        [userId, notificationContent, answerId, isAnon, anonymousName, anonymousBgColor, aggregateKey]
+      );
+    } else {
         await client.query(
-          `UPDATE notifications SET sender_id = $1, content = $2, is_viewed = 0, created_at = NOW()
-           WHERE aggregate_key = $3 AND type = 'answer'`,
-          [userId, notificationContent, aggregateKey]
-        );
-      } else {
-        await client.query(
-          `INSERT INTO notifications (receiver_id, sender_id, type, content, post_id, answer_id, aggregate_key, is_viewed)
-           VALUES ($1, $2, 'answer', $3, $4, $5, $6, 0)`,
-          [postOwnerId, userId, notificationContent, postId, answerId, aggregateKey]
+          `INSERT INTO notifications (receiver_id, sender_id, type, content, post_id, answer_id, aggregate_key, is_viewed, is_anonymous, anonymous_name, anonymous_bg_color)
+           VALUES ($1, $2, 'answer', $3, $4, $5, $6, 0, $7, $8, $9)`,
+          [postOwnerId, userId, notificationContent, postId, answerId, aggregateKey, isAnon, anonymousName, anonymousBgColor]
         );
       }
     }

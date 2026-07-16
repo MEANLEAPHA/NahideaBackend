@@ -71,17 +71,14 @@ const addComment = async (req, res) => {
     // VALIDATION
     // =========================
 
-    if (!postId) {
-      return res.status(400).json({
-        message: "Missing postId"
-      });
-    }
+  if (!postId) {
+    throw Object.assign(new Error("Missing postId"), { status: 400 });
+  }
 
-    if (!content && !gif_url) {
-      return res.status(400).json({
-        message: "Content or GIF required"
-      });
-    }
+  if (!content && !gif_url) {
+    throw Object.assign(new Error("Content or GIF required"), { status: 400 });
+  }
+  
 
     const postOwnerResult = await client.query(
       `SELECT user_id FROM posts WHERE id = $1`,
@@ -157,12 +154,9 @@ const addComment = async (req, res) => {
       );
       const parentRows = parentRowsResult.rows;
 
-      if (!parentRows.length) {
-
-        return res.status(404).json({
-          message: "Parent comment not found"
-        });
-      }
+    if (!parentRows.length) {
+      throw Object.assign(new Error("Parent comment not found"), { status: 404 });
+    }
 
       const parentComment = parentRows[0];
 
@@ -235,7 +229,7 @@ const addComment = async (req, res) => {
       // comment being replied to
       const replyRowsResult = await client.query(
         `
-        SELECT id, user_id, username, parent_id
+        SELECT id, user_id, username, parent_id, is_anonymous, anonymous_name
         FROM comments
         WHERE id = $1
         `,
@@ -250,8 +244,12 @@ const addComment = async (req, res) => {
         const replyOwnerId =
           replyComment.user_id;
 
-        const replyOwnerUsername =
-          replyComment.username;
+          const replyOwnerUsername = replyComment.username;
+
+          const replyOwnerDisplayName =
+            Number(replyComment.is_anonymous) === 1
+              ? replyComment.anonymous_name
+              : replyComment.username;
 
         // top-level parent comment
         const topRowsResult = await client.query(
@@ -276,6 +274,8 @@ const addComment = async (req, res) => {
         // Fixed: comment_id (from req.body, type unknown) vs finalParentId
         // (always a string from Postgres bigint) — compare as strings so
         // this branch is chosen correctly regardless of incoming type.
+
+        const displayName = Number(is_anonymous) === 1 ? finalAnonymousName : username;
         if (String(comment_id) === String(finalParentId)) {
 
           if (
@@ -283,26 +283,24 @@ const addComment = async (req, res) => {
             String(parentOwnerId) !== String(userId)
           ) {
 
-            await client.query(
+          await client.query(
               `
               INSERT INTO notifications
               (
-                receiver_id,
-                sender_id,
-                type,
-                content,
-                post_id,
-                comment_id,
-                is_viewed
+                receiver_id, sender_id, type, content, post_id, comment_id,
+                is_viewed, is_anonymous, anonymous_name, anonymous_bg_color
               )
-              VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0)
+              VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0, $6, $7, $8)
               `,
               [
                 parentOwnerId,
                 userId,
-                `${username} replied to your comment: ${notificationText}`,
+                `${displayName} replied to your comment: ${notificationText}`,
                 postId,
-                insertedCommentId
+                insertedCommentId,
+                is_anonymous || 0,
+                finalAnonymousName,
+                finalAnonymousBgColor
               ]
             );
           }
@@ -320,7 +318,7 @@ const addComment = async (req, res) => {
           // parent owner == reply owner
           // -----------------------------------
           // Both sides are DB-sourced strings here, safe to compare directly.
-          if (parentOwnerId === replyOwnerId) {
+          if (String(parentOwnerId) === String(replyOwnerId)) {
 
             // Example:
             //
@@ -344,16 +342,22 @@ const addComment = async (req, res) => {
                   content,
                   post_id,
                   comment_id,
-                  is_viewed
+                  is_viewed,
+                  is_anonymous,
+                  anonymous_name,
+                  anonymous_bg_color
                 )
-                VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0)
+                VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0, $6, $7, $8)
                 `,
                 [
                   replyOwnerId,
                   userId,
-                  `${username} replied to you: ${notificationText}`,
+                  `${displayName} replied to you: ${notificationText}`,
                   postId,
-                  insertedCommentId
+                  insertedCommentId,
+                  is_anonymous || 0,
+                  finalAnonymousName,
+                  finalAnonymousBgColor
                 ]
               );
             }
@@ -382,16 +386,22 @@ const addComment = async (req, res) => {
                   content,
                   post_id,
                   comment_id,
-                  is_viewed
+                  is_viewed,
+                  is_anonymous,
+                  anonymous_name,
+                  anonymous_bg_color
                 )
-                VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0)
+                VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0, $6, $7, $8)
                 `,
                 [
                   parentOwnerId,
                   userId,
-                  `${username} replied to ${replyOwnerUsername} on your comment: ${notificationText}`,
+                  `${displayName} replied to ${replyOwnerDisplayName} on your comment: ${notificationText}`,
                   postId,
-                  insertedCommentId
+                  insertedCommentId,
+                  is_anonymous || 0,
+                  finalAnonymousName,
+                  finalAnonymousBgColor
                 ]
               );
             }
@@ -413,16 +423,22 @@ const addComment = async (req, res) => {
                   content,
                   post_id,
                   comment_id,
-                  is_viewed
+                  is_viewed,
+                  is_anonymous,
+                  anonymous_name,
+                  anonymous_bg_color
                 )
-                VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0)
+                VALUES ($1, $2, 'comment_reply', $3, $4, $5, 0, $6, $7, $8)
                 `,
                 [
                   replyOwnerId,
                   userId,
-                  `${username} replied to you: ${notificationText}`,
+                  `${displayName} replied to you: ${notificationText}`,
                   postId,
-                  insertedCommentId
+                  insertedCommentId,
+                  is_anonymous || 0,
+                  finalAnonymousName,
+                  finalAnonymousBgColor
                 ]
               );
             }
@@ -451,19 +467,14 @@ const addComment = async (req, res) => {
       message: "Comment created",
       comment_id: insertedCommentId
     });
-
+    
   } catch (err) {
-
     await client.query("ROLLBACK");
-
     console.error(err);
-
-    return res.status(500).json({
-      message: "Server error"
+    return res.status(err.status || 500).json({
+      message: err.status ? err.message : "Server error"
     });
-
   } finally {
-
     client.release();
   }
 };

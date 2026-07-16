@@ -1,14 +1,44 @@
 const pool = require("../../config/db");
 
+// const getNotifications = async (req, res) => {
+//     try {
+//         const userId = req.user.userId;
+        
+//         // Get notifications with unread count
+//         const rows = await pool.query(
+//             `SELECT n.*, 
+//                     u.username as sender_username,
+//                     u.avatar_url as sender_avatar
+//              FROM notifications n
+//              LEFT JOIN users u ON n.sender_id = u.id
+//              WHERE n.receiver_id = $1 
+//              ORDER BY n.created_at DESC`,
+//             [userId]
+//         );
+        
+//         // Get unread count
+//         const unreadCount = await pool.query(
+//             "SELECT COUNT(*) as count FROM notifications WHERE receiver_id = $1 AND is_viewed = 0",
+//             [userId]
+//         );
+        
+//         res.status(200).json({
+//             notifications: rows.rows,
+//             unreadCount: Number(unreadCount.rows[0].count) || 0
+//         });
+//     } catch (error) {
+//         console.error(error);
+//         res.status(500).json({ error: "Failed to get notifications" });
+//     }
+// }
 const getNotifications = async (req, res) => {
     try {
         const userId = req.user.userId;
         
-        // Get notifications with unread count
         const rows = await pool.query(
             `SELECT n.*, 
-                    u.username as sender_username,
-                    u.avatar_url as sender_avatar
+                    CASE WHEN n.is_anonymous = 1 THEN NULL ELSE u.username END as sender_username,
+                    CASE WHEN n.is_anonymous = 1 THEN NULL ELSE u.avatar_url END as sender_avatar
              FROM notifications n
              LEFT JOIN users u ON n.sender_id = u.id
              WHERE n.receiver_id = $1 
@@ -16,7 +46,6 @@ const getNotifications = async (req, res) => {
             [userId]
         );
         
-        // Get unread count
         const unreadCount = await pool.query(
             "SELECT COUNT(*) as count FROM notifications WHERE receiver_id = $1 AND is_viewed = 0",
             [userId]
