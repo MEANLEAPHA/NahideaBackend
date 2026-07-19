@@ -263,6 +263,124 @@ const facebookLogin = async (req, res) => {
   }
 };
 
+// GitHub OAuth — step 1: redirect user to GitHub's authorize page
+const githubRedirect = (req, res) => {
+  const params = new URLSearchParams({
+    client_id: process.env.GITHUB_CLIENT_ID,
+    redirect_uri: process.env.GITHUB_CALLBACK_URL,
+    scope: "read:user user:email",
+  });
+  res.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`);
+};
+
+// GitHub OAuth — step 2: handle the callback GitHub redirects to
+const githubCallback = async (req, res) => {
+  try {
+    const { code } = req.query;
+
+    if (!code) {
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=github_no_code`);
+    }
+
+    // Exchange code for access token
+    const tokenRes = await axios.post(
+      "https://github.com/login/oauth/access_token",
+      {
+        client_id: process.env.GITHUB_CLIENT_ID,
+        client_secret: process.env.GITHUB_CLIENT_SECRET,
+        code,
+        redirect_uri: process.env.GITHUB_CALLBACK_URL,
+      },
+      { headers: { Accept: "application/json" } }
+    );
+
+    const { access_token } = tokenRes.data;
+
+    if (!access_token) {
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=github_token_failed`);
+    }
+
+    // Fetch profile
+    const profileRes = await axios.get("https://api.github.com/user", {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+    const profile = profileRes.data;
+
+    let email = profile.email;
+
+    // GitHub often hides email on the profile — fetch it separately if missing
+    if (!email) {
+      const emailsRes = await axios.get("https://api.github.com/user/emails", {
+        headers: { Authorization: `Bearer ${access_token}` },
+      });
+      const primary = emailsRes.data.find(e => e.primary && e.verified);
+      email = primary?.email || null;
+    }
+
+    if (!email) {
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=github_no_email`);
+    }
+
+    const providerId = profile.id.toString();
+    const picture = profile.avatar_url;
+
+    const existing = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    let user;
+    let isNewUser = false;
+
+    if (existing.rows.length > 0) {
+      user = existing.rows[0];
+
+      if (user.auth_provider === 'local' || !user.auth_provider) {
+        return res.redirect(`${process.env.FRONTEND_URL}/login?error=email_registered_local`);
+      }
+
+      if (user.auth_provider !== 'github') {
+        return res.redirect(`${process.env.FRONTEND_URL}/login?error=email_registered_other&provider=${user.auth_provider}`);
+      }
+
+    } else {
+      isNewUser = true;
+
+      const generatePlaceholderUsername = () => `user_${crypto.randomBytes(4).toString('hex')}`;
+      let usernameBase = generatePlaceholderUsername();
+
+      let attempts = 0;
+      while (attempts < 5) {
+        const check = await pool.query("SELECT id FROM users WHERE username = $1", [usernameBase]);
+        if (check.rows.length === 0) break;
+        usernameBase = generatePlaceholderUsername();
+        attempts++;
+      }
+
+      const insertResult = await pool.query(
+        `INSERT INTO users
+          (username, email, password_hash, is_verified, auth_provider, provider_id, avatar_url)
+         VALUES ($1, $2, NULL, 1, 'github', $3, $4)
+         RETURNING *`,
+        [usernameBase, email, providerId, picture || null]
+      );
+      user = insertResult.rows[0];
+    }
+
+    const token = createToken({ userId: user.id });
+
+    // Redirect back to frontend with token in query — frontend picks it up and stores it
+    const redirectParams = new URLSearchParams({
+      token,
+      isNewUser: isNewUser.toString(),
+      userId: user.id.toString(),
+      email: user.email,
+    });
+
+    return res.redirect(`${process.env.FRONTEND_URL}/oauth-callback?${redirectParams.toString()}`);
+
+  } catch (error) {
+    console.error("githubCallback error:", error);
+    return res.redirect(`${process.env.FRONTEND_URL}/login?error=server_error`);
+  }
+};
+
 //Register Or Signup
 const register = async (req, res) => {
   try {
@@ -1095,6 +1213,14 @@ module.exports = {
     getUserInfoById,
 
     // OAuth
+
+    // Google OAuth
     googleLogin,
-    facebookLogin
+
+    // Facebook OAuth
+    facebookLogin,
+
+    // GitHub OAuth
+    githubRedirect,
+    githubCallback
 }

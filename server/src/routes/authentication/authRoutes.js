@@ -13,7 +13,11 @@ const { register, login,
         getUserInfo,
         getUserInfoById,
         googleLogin,
-        facebookLogin
+        facebookLogin,
+
+        githubRedirect,
+        githubCallback
+        
       } = require("../../controllers/authentication/authController");
 
 const { protect } = require("../../middleware/authMiddleware");
@@ -32,6 +36,10 @@ router.post("/resend-verify-email-pin", resendLimiter, resendverifyEmailPin);
 
 // login now runs BOTH limiters — IP layer + account layer
 router.post("/login", loginIpLimiter, loginAccountLimiter, login);
+router.post("/auth/google", loginIpLimiter, googleLogin);
+router.post("/auth/facebook", loginIpLimiter, facebookLogin);
+router.get("/auth/github", loginIpLimiter, githubRedirect);
+router.get("/auth/github/callback", githubCallback);
 
 router.post("/forget-password", forgetPasswordLimiter, forgetPassword);
 router.post("/verify-forget-password-pin", verifyLimiter, verifyforgetPasswordPin);
@@ -41,8 +49,7 @@ router.post("/set-new-password", changePasswordLimiter, setNewPassword);
 router.post("/change-password", protect, changePasswordLimiter, changePassword);
 router.post("/new-password", protect, changePasswordLimiter, newPassword);
 
-router.post("/auth/google", loginIpLimiter, googleLogin);
-router.post("/auth/facebook", loginIpLimiter, facebookLogin);
+
 
 router.put(
   "/update-user",
