@@ -279,7 +279,7 @@ const githubCallback = async (req, res) => {
     const { code } = req.query;
 
     if (!code) {
-      return res.redirect(`${process.env.FRONTEND_URL}/login?error=github_no_code`);
+      return res.redirect(`${process.env.API_URL}/login?error=github_no_code`);
     }
 
     // Exchange code for access token
@@ -297,7 +297,7 @@ const githubCallback = async (req, res) => {
     const { access_token } = tokenRes.data;
 
     if (!access_token) {
-      return res.redirect(`${process.env.FRONTEND_URL}/login?error=github_token_failed`);
+      return res.redirect(`${process.env.API_URL}/login?error=github_token_failed`);
     }
 
     // Fetch profile
@@ -318,7 +318,7 @@ const githubCallback = async (req, res) => {
     }
 
     if (!email) {
-      return res.redirect(`${process.env.FRONTEND_URL}/login?error=github_no_email`);
+      return res.redirect(`${process.env.API_URL}/login?error=github_no_email`);
     }
 
     const providerId = profile.id.toString();
@@ -332,11 +332,11 @@ const githubCallback = async (req, res) => {
       user = existing.rows[0];
 
       if (user.auth_provider === 'local' || !user.auth_provider) {
-        return res.redirect(`${process.env.FRONTEND_URL}/login?error=email_registered_local`);
+        return res.redirect(`${process.env.API_URL}/login?error=email_registered_local`);
       }
 
       if (user.auth_provider !== 'github') {
-        return res.redirect(`${process.env.FRONTEND_URL}/login?error=email_registered_other&provider=${user.auth_provider}`);
+        return res.redirect(`${process.env.API_URL}/login?error=email_registered_other&provider=${user.auth_provider}`);
       }
 
     } else {
@@ -373,11 +373,11 @@ const githubCallback = async (req, res) => {
       email: user.email,
     });
 
-    return res.redirect(`${process.env.FRONTEND_URL}/oauth-callback?${redirectParams.toString()}`);
+    return res.redirect(`${process.env.API_URL}/oauth-callback?${redirectParams.toString()}`);
 
   } catch (error) {
     console.error("githubCallback error:", error);
-    return res.redirect(`${process.env.FRONTEND_URL}/login?error=server_error`);
+    return res.redirect(`${process.env.API_URL}/login?error=server_error`);
   }
 };
 
