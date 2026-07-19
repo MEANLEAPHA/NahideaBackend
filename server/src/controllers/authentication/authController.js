@@ -580,11 +580,10 @@ const forgetPassword = async (req, res) => {
     const trimmedEmail = email.trim();
 
     const result = await pool.query(
-      "SELECT id, pin_created_at FROM users WHERE email = $1",
+      "SELECT id, pin_created_at, auth_provider FROM users WHERE email = $1",
       [trimmedEmail]
     );
     const user = result.rows[0];
-
 
     if (!user) {
       return res.status(404).json({
@@ -592,6 +591,19 @@ const forgetPassword = async (req, res) => {
       });
     }
 
+    // OAuth-only account — no password exists to reset
+    if (user.auth_provider && user.auth_provider !== 'local') {
+      const providerLabel = {
+        google: "Google",
+        facebook: "Facebook",
+        github: "GitHub",
+        microsoft: "Microsoft",
+      }[user.auth_provider] || user.auth_provider;
+
+      return res.status(409).json({
+        message: `This email is registered via ${providerLabel}. Please use "Continue with ${providerLabel}" to log in instead.`
+      });
+    }
 
     if (user?.pin_created_at) {
       const diff =
@@ -603,7 +615,6 @@ const forgetPassword = async (req, res) => {
         });
       }
     }
-
 
     const pinCode = Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -629,6 +640,7 @@ const forgetPassword = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
+
 // step 2
 const verifyforgetPasswordPin = async (req, res) => {
   try {
