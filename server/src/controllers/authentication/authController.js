@@ -254,7 +254,8 @@ const facebookLogin = async (req, res) => {
       token,
       isNewUser,
       userId: user.id,
-      email: user.email
+      email: user.email,
+      username: user.username
     });
 
   } catch (error) {
@@ -371,6 +372,7 @@ const githubCallback = async (req, res) => {
       isNewUser: isNewUser.toString(),
       userId: user.id.toString(),
       email: user.email,
+      username: user.username
     });
 
     return res.redirect(`${process.env.API_URL}/oauth-callback?${redirectParams.toString()}`);
@@ -502,7 +504,8 @@ const verifyEmail = async (req, res) => {
     return res.status(200).json(
       { message: "Email verified Successfully",
         userId: user.id,
-        email: user.email
+        email: user.email,
+        username: user.username
        }
     );
 
