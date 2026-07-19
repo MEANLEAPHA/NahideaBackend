@@ -11,7 +11,9 @@ const { register, login,
         newPassword,
         updateUser,
         getUserInfo,
-        getUserInfoById
+        getUserInfoById,
+        googleLogin,
+        facebookLogin
       } = require("../../controllers/authentication/authController");
 
 const { protect } = require("../../middleware/authMiddleware");
@@ -38,6 +40,9 @@ router.post("/set-new-password", changePasswordLimiter, setNewPassword);
 
 router.post("/change-password", protect, changePasswordLimiter, changePassword);
 router.post("/new-password", protect, changePasswordLimiter, newPassword);
+
+router.post("/auth/google", loginIpLimiter, googleLogin);
+router.post("/auth/facebook", loginIpLimiter, facebookLogin);
 
 router.put(
   "/update-user",

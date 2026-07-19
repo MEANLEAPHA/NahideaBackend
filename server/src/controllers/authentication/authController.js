@@ -2,10 +2,16 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const pool = require('../../config/db'); 
 const { ranking } = require("../../config/redisClient"); 
+const crypto = require('crypto');
 require('dotenv').config();
 const { sendVerifyCodeEmail, sendResendPinEmail, sendVerifyCodeForgetPasswordEmail} = require('../../service/mail/email');
 const { createToken } = require('../../service/token/jwtHelp');
 const { convertAndUpload } = require("../../service/hostinger/ftp");
+
+const { OAuth2Client } = require('google-auth-library');
+const axios = require('axios');
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // login logical 
 const login = async (req, res) => {
@@ -64,6 +70,196 @@ const login = async (req, res) => {
     return res.status(500).json({
       message: "Server Error, Please try again later",
     });
+  }
+};
+
+// Google OAuth login/register
+const googleLogin = async (req, res) => {
+  try {
+    const { credential } = req.body; // ID token from Google Identity Services
+
+    if (!credential) {
+      return res.status(400).json({ message: "Missing Google credential" });
+    }
+
+    let payload;
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      payload = ticket.getPayload();
+    } catch (verifyErr) {
+      console.error("Google token verification failed:", verifyErr);
+      return res.status(401).json({ message: "Invalid Google token" });
+    }
+
+    const { email, name, sub: providerId, picture } = payload;
+
+    if (!email) {
+      return res.status(400).json({ message: "Google account has no email" });
+    }
+
+    const existing = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    let user;
+    let isNewUser = false;
+
+    if (existing.rows.length > 0) {
+      user = existing.rows[0];
+
+      if (user.auth_provider === 'local' || !user.auth_provider) {
+        return res.status(409).json({
+          message: "This email is already registered. Please log in with your password instead."
+        });
+      }
+
+      if (user.auth_provider !== 'google') { 
+        return res.status(409).json({
+          message: `This email is already registered via ${user.auth_provider}. Please use that method to log in.`
+        });
+      }
+
+    } else {
+      isNewUser = true;
+
+      const generatePlaceholderUsername = () => `user_${crypto.randomBytes(4).toString('hex')}`;
+      let usernameBase = generatePlaceholderUsername();
+
+      let attempts = 0;
+      while (attempts < 5) {
+        const check = await pool.query("SELECT id FROM users WHERE username = $1", [usernameBase]);
+        if (check.rows.length === 0) break;
+        usernameBase = generatePlaceholderUsername();
+        attempts++;
+      }
+
+      const insertResult = await pool.query(
+        `INSERT INTO users
+          (username, email, password_hash, is_verified, auth_provider, provider_id, avatar_url)
+        VALUES ($1, $2, NULL, 1, 'google', $3, $4)
+        RETURNING *`,
+        [usernameBase, email, providerId, picture || null]
+      );
+      user = insertResult.rows[0];
+    }
+
+    const token = createToken({ userId: user.id });
+
+    return res.status(200).json({
+      message: "Login Successfully",
+      token,
+      isNewUser,
+      userId: user.id,
+      email: user.email
+    });
+
+  } catch (error) {
+    console.error("googleLogin error:", error);
+    return res.status(500).json({ message: "Server Error, Please try again later" });
+  }
+};
+
+// Facebook OAuth login/register
+const facebookLogin = async (req, res) => {
+  try {
+    const { accessToken } = req.body;
+
+    if (!accessToken) {
+      return res.status(400).json({ message: "Missing Facebook access token" });
+    }
+
+    let fbUser;
+    try {
+    
+      const verifyRes = await axios.get("https://graph.facebook.com/debug_token", {
+        params: {
+          input_token: accessToken,
+          access_token: `${process.env.FACEBOOK_APP_ID}|${process.env.FACEBOOK_APP_SECRET}`,
+        },
+      });
+
+      const tokenData = verifyRes.data.data;
+      if (!tokenData.is_valid || tokenData.app_id !== process.env.FACEBOOK_APP_ID) {
+        return res.status(401).json({ message: "Invalid Facebook token" });
+      }
+
+      const profileRes = await axios.get("https://graph.facebook.com/me", {
+        params: {
+          fields: "id,name,email,picture",
+          access_token: accessToken,
+        },
+      });
+      fbUser = profileRes.data;
+
+    } catch (verifyErr) {
+      console.error("Facebook verification failed:", verifyErr.response?.data || verifyErr.message);
+      return res.status(401).json({ message: "Invalid Facebook token" });
+    }
+
+    const { email, name, id: providerId, picture } = fbUser;
+
+    if (!email) {
+      return res.status(400).json({
+        message: "Your Facebook account has no email attached. Please register with email instead."
+      });
+    }
+
+    const existing = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    let user;
+    let isNewUser = false;
+
+    if (existing.rows.length > 0) {
+      user = existing.rows[0];
+
+      if (user.auth_provider === 'local' || !user.auth_provider) {
+        return res.status(409).json({
+          message: "This email is already registered. Please log in with your password instead."
+        });
+      }
+
+      if (user.auth_provider !== 'facebook') { 
+        return res.status(409).json({
+          message: `This email is already registered via ${user.auth_provider}. Please use that method to log in.`
+        });
+      }
+
+    } else {
+      isNewUser = true;
+
+      const generatePlaceholderUsername = () => `user_${crypto.randomBytes(4).toString('hex')}`;
+      let usernameBase = generatePlaceholderUsername();
+
+      let attempts = 0;
+      while (attempts < 5) {
+        const check = await pool.query("SELECT id FROM users WHERE username = $1", [usernameBase]);
+        if (check.rows.length === 0) break;
+        usernameBase = generatePlaceholderUsername();
+        attempts++;
+      }
+
+      const insertResult = await pool.query(
+        `INSERT INTO users
+          (username, email, password_hash, is_verified, auth_provider, provider_id, avatar_url)
+        VALUES ($1, $2, NULL, 1, 'google', $3, $4)
+        RETURNING *`,
+        [usernameBase, email, providerId, picture || null]
+      );
+      user = insertResult.rows[0];
+    }
+
+    const token = createToken({ userId: user.id });
+
+    return res.status(200).json({
+      message: "Login Successfully",
+      token,
+      isNewUser,
+      userId: user.id,
+      email: user.email
+    });
+
+  } catch (error) {
+    console.error("facebookLogin error:", error);
+    return res.status(500).json({ message: "Server Error, Please try again later" });
   }
 };
 
@@ -896,5 +1092,9 @@ module.exports = {
 
     // get user info
     getUserInfo,
-    getUserInfoById
+    getUserInfoById,
+
+    // OAuth
+    googleLogin,
+    facebookLogin
 }
