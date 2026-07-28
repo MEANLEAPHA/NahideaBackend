@@ -9,10 +9,10 @@ const { uploadGif, getGifs, searchGif,searchByCategory,
 const router = express.Router();
 
 
-router.post("/upload", uploadGif);
-router.get("/getGifs", getGifs);
-router.get("/search", searchGif);
-router.get("/category", searchByCategory);
+router.post("/upload", protect, uploadGif);
+router.get("/getGifs", protect, getGifs);
+router.get("/search", protect, searchGif);
+router.get("/category", protect, searchByCategory);
 
 router.post("/favorites/add", protect, addFavorite);
 router.post("/favorites/remove", protect, removeFavorite);
